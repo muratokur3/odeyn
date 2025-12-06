@@ -1,0 +1,592 @@
+import {
+    collection,
+    addDoc,
+    serverTimestamp,
+    doc,
+    runTransaction,
+    onSnapshot,
+    query,
+    where,
+    orderBy,
+    Timestamp,
+    getDocs,
+    limit,
+    deleteDoc,
+    getDoc,
+    setDoc,
+    updateDoc
+} from 'firebase/firestore';
+import { db } from './firebase';
+import type { Debt, DebtStatus, PaymentLog, User, Contact, Installment } from '../types';
+import { cleanPhoneNumber } from '../utils/phone';
+
+export const createDebt = async (
+    currentUserId: string,
+    currentUserName: string,
+    targetUserId: string, // This can be a UID or a Phone Number
+    targetUserName: string,
+    amount: number,
+    type: 'LENDING' | 'BORROWING',
+    currency: string = 'TRY',
+    note?: string,
+    dueDate?: Date,
+    installments?: Installment[],
+    canBorrowerAddPayment?: boolean
+) => {
+    try {
+        const isLending = type === 'LENDING';
+
+        // Determine if targetUserId is a phone number or UID
+        // If it's a phone number (length <= 15 and digits), try to find a user
+        let finalTargetId = targetUserId;
+        const cleanTarget = cleanPhoneNumber(targetUserId);
+
+        // If targetUserId looks like a phone number (not a long UID)
+        if (targetUserId.length <= 15) {
+            const existingUser = await searchUserByPhone(cleanTarget);
+            if (existingUser) {
+                finalTargetId = existingUser.uid;
+            } else {
+                finalTargetId = cleanTarget; // Use cleaned phone as ID if no user found
+            }
+        }
+
+        const lenderId = isLending ? currentUserId : finalTargetId;
+        const lenderName = isLending ? currentUserName : targetUserName;
+        const borrowerId = isLending ? finalTargetId : currentUserId;
+        const borrowerName = isLending ? targetUserName : currentUserName;
+
+        const debtData = {
+            lenderId,
+            lenderName,
+            borrowerId,
+            borrowerName,
+            originalAmount: amount,
+            remainingAmount: amount,
+            currency,
+            status: 'PENDING' as DebtStatus,
+            participants: [lenderId, borrowerId],
+            createdAt: serverTimestamp(),
+            createdBy: currentUserId,
+            ...(dueDate && { dueDate: Timestamp.fromDate(dueDate) }),
+            ...(note && { note }),
+            ...(installments && { installments }),
+            ...(canBorrowerAddPayment && { canBorrowerAddPayment }),
+        };
+
+        const docRef = await addDoc(collection(db, 'debts'), debtData);
+
+        // Create initial log
+        await addDoc(collection(db, `debts/${docRef.id}/logs`), {
+            type: 'INITIAL_CREATION',
+            previousRemaining: amount,
+            newRemaining: amount,
+            performedBy: currentUserId,
+            timestamp: serverTimestamp(),
+            note: 'Borç oluşturuldu',
+        });
+
+        return docRef.id;
+    } catch (error) {
+        throw error;
+    }
+};
+
+export const makePayment = async (debtId: string, amount: number, performedBy: string, note?: string) => {
+    try {
+        await runTransaction(db, async (transaction) => {
+            const debtRef = doc(db, 'debts', debtId);
+            const debtDoc = await transaction.get(debtRef);
+
+            if (!debtDoc.exists()) {
+                throw new Error("Debt document does not exist!");
+            }
+
+            const debtData = debtDoc.data() as Debt;
+            const newRemaining = debtData.remainingAmount - amount;
+
+            if (newRemaining < 0) {
+                throw new Error("Payment amount exceeds remaining debt!");
+            }
+
+            let newStatus: DebtStatus = debtData.status;
+            if (newRemaining === 0) {
+                newStatus = 'PAID';
+            } else {
+                newStatus = 'PARTIALLY_PAID';
+            }
+
+            // Update debt document
+            transaction.update(debtRef, {
+                remainingAmount: newRemaining,
+                status: newStatus
+            });
+
+            // Add payment log
+            const logRef = doc(collection(db, `debts/${debtId}/logs`));
+            transaction.set(logRef, {
+                type: 'PAYMENT',
+                amountPaid: amount,
+                previousRemaining: debtData.remainingAmount,
+                newRemaining: newRemaining,
+                performedBy,
+                timestamp: serverTimestamp(),
+                note: note || 'Ödeme yapıldı'
+            });
+        });
+    } catch (error) {
+        throw error;
+    }
+};
+
+export const subscribeToUserDebts = (userId: string, callback: (debts: Debt[]) => void) => {
+    const q = query(
+        collection(db, 'debts'),
+        where('participants', 'array-contains', userId),
+        orderBy('createdAt', 'desc')
+    );
+
+    return onSnapshot(q, (snapshot) => {
+        const debts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Debt));
+        callback(debts);
+    });
+};
+
+export const subscribeToDebtDetails = (debtId: string, callback: (debt: Debt) => void) => {
+    return onSnapshot(doc(db, 'debts', debtId), (doc) => {
+        if (doc.exists()) {
+            callback({ id: doc.id, ...doc.data() } as Debt);
+        }
+    });
+};
+
+export const subscribeToPaymentLogs = (debtId: string, callback: (logs: PaymentLog[]) => void) => {
+    const q = query(collection(db, `debts/${debtId}/logs`), orderBy('timestamp', 'desc'));
+    return onSnapshot(q, (snapshot) => {
+        const logs = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as PaymentLog));
+        callback(logs);
+    });
+};
+
+export const respondToDebtRequest = async (debtId: string, status: 'ACTIVE' | 'REJECTED', performedBy: string) => {
+    try {
+        await runTransaction(db, async (transaction) => {
+            const debtRef = doc(db, 'debts', debtId);
+            const debtDoc = await transaction.get(debtRef);
+
+            if (!debtDoc.exists()) {
+                throw new Error("Debt document does not exist!");
+            }
+
+            // Update debt status
+            transaction.update(debtRef, { status });
+
+            // Add log
+            const logRef = doc(collection(db, `debts/${debtId}/logs`));
+            transaction.set(logRef, {
+                type: 'NOTE_ADDED', // Using NOTE_ADDED as a generic type for status change for now, or could add STATUS_CHANGE type
+                previousRemaining: debtDoc.data().remainingAmount,
+                newRemaining: debtDoc.data().remainingAmount,
+                performedBy,
+                timestamp: serverTimestamp(),
+                note: status === 'ACTIVE' ? 'Borç isteği onaylandı' : 'Borç isteği reddedildi'
+            });
+        });
+    } catch (error) {
+        throw error;
+    }
+};
+
+export const searchUserByPhone = async (phoneNumber: string): Promise<User | null> => {
+    const cleanPhone = cleanPhoneNumber(phoneNumber);
+
+    const q = query(
+        collection(db, 'users'),
+        where('phoneNumber', '==', cleanPhone),
+        limit(1)
+    );
+
+    const querySnapshot = await getDocs(q);
+    if (querySnapshot.empty) {
+        return null;
+    }
+
+    const doc = querySnapshot.docs[0];
+    return { uid: doc.id, ...doc.data() } as User;
+};
+// --- Contacts Services ---
+
+export const addContact = async (currentUserId: string, name: string, phoneNumber: string, linkedUserId?: string) => {
+    try {
+        const cleanPhone = cleanPhoneNumber(phoneNumber);
+        const contactsRef = collection(db, 'users', currentUserId, 'contacts');
+
+        // Check if phone number already exists
+        const q = query(contactsRef, where('phoneNumber', '==', cleanPhone));
+        const querySnapshot = await getDocs(q);
+
+        if (!querySnapshot.empty) {
+            // Update existing contact if name changed, or just return ID
+            const existingDoc = querySnapshot.docs[0];
+            if (existingDoc.data().name !== name) {
+                await updateDoc(doc(contactsRef, existingDoc.id), { name });
+            }
+            return existingDoc.id;
+        }
+
+        // Check if this phone corresponds to a system user
+        let finalLinkedUserId = linkedUserId || null;
+        if (!finalLinkedUserId) {
+            const systemUser = await searchUserByPhone(cleanPhone);
+            if (systemUser) {
+                finalLinkedUserId = systemUser.uid;
+            }
+        }
+
+        const docRef = await addDoc(contactsRef, {
+            name,
+            phoneNumber: cleanPhone,
+            linkedUserId: finalLinkedUserId,
+            createdAt: serverTimestamp()
+        });
+        return docRef.id;
+    } catch (error) {
+        console.error("Error adding contact:", error);
+        throw error;
+    }
+};
+
+export const getContacts = async (userId: string) => {
+    try {
+        const contactsRef = collection(db, 'users', userId, 'contacts');
+        const q = query(contactsRef, orderBy('name'));
+        const querySnapshot = await getDocs(q);
+        return querySnapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        })) as Contact[];
+    } catch (error) {
+        console.error("Error getting contacts:", error);
+        return [];
+    }
+};
+
+export const deleteContact = async (userId: string, contactId: string) => {
+    try {
+        await deleteDoc(doc(db, 'users', userId, 'contacts', contactId));
+    } catch (error) {
+        console.error("Error deleting contact:", error);
+        throw error;
+    }
+};
+
+export const updateContact = async (userId: string, contactId: string, data: Partial<Contact>) => {
+    try {
+        const contactRef = doc(db, 'users', userId, 'contacts', contactId);
+        await updateDoc(contactRef, data);
+    } catch (error) {
+        console.error("Error updating contact:", error);
+        throw error;
+    }
+};
+
+export const searchContacts = async (userId: string, searchQuery: string) => {
+    try {
+        const contacts = await getContacts(userId);
+        const lowerQuery = searchQuery.toLowerCase();
+        return contacts.filter(c =>
+            c.name.toLowerCase().includes(lowerQuery) ||
+            c.phoneNumber.includes(searchQuery)
+        );
+    } catch (error) {
+        console.error("Error searching contacts:", error);
+        return [];
+    }
+};
+
+export const claimDebts = async (userId: string, phoneNumber: string) => {
+    try {
+        const cleanPhone = cleanPhoneNumber(phoneNumber);
+        // Find debts where lenderId or borrowerId matches the phone number (and is not yet a UID)
+
+        // 1. As Lender
+        const qLender = query(collection(db, 'debts'), where('lenderId', '==', cleanPhone));
+        const lenderSnapshot = await getDocs(qLender);
+
+        const lenderUpdates = lenderSnapshot.docs.map(doc => {
+            return runTransaction(db, async (transaction) => {
+                const debtRef = doc.ref;
+                const debtDoc = await transaction.get(debtRef);
+                if (!debtDoc.exists()) return;
+
+                const data = debtDoc.data();
+                const participants = data.participants || [];
+                if (!participants.includes(userId)) {
+                    participants.push(userId);
+                }
+
+                // Remove old phone number from participants if present
+                const phoneIndex = participants.indexOf(cleanPhone);
+                if (phoneIndex > -1) {
+                    participants.splice(phoneIndex, 1);
+                }
+
+                transaction.update(debtRef, {
+                    lenderId: userId,
+                    participants
+                });
+            });
+        });
+
+        // 2. As Borrower
+        const qBorrower = query(collection(db, 'debts'), where('borrowerId', '==', cleanPhone));
+        const borrowerSnapshot = await getDocs(qBorrower);
+
+        const borrowerUpdates = borrowerSnapshot.docs.map(doc => {
+            return runTransaction(db, async (transaction) => {
+                const debtRef = doc.ref;
+                const debtDoc = await transaction.get(debtRef);
+                if (!debtDoc.exists()) return;
+
+                const data = debtDoc.data();
+                const participants = data.participants || [];
+                if (!participants.includes(userId)) {
+                    participants.push(userId);
+                }
+
+                // Remove old phone number from participants
+                const phoneIndex = participants.indexOf(cleanPhone);
+                if (phoneIndex > -1) {
+                    participants.splice(phoneIndex, 1);
+                }
+
+                transaction.update(debtRef, {
+                    borrowerId: userId,
+                    participants
+                });
+            });
+        });
+
+        await Promise.all([...lenderUpdates, ...borrowerUpdates]);
+        console.log(`Claimed ${lenderUpdates.length + borrowerUpdates.length} debts for user ${userId}`);
+
+    } catch (error) {
+        console.error("Error claiming debts:", error);
+        throw error;
+    }
+};
+
+export const getUsersStatus = async (userIds: string[]) => {
+    if (userIds.length === 0) return {};
+    try {
+        // Firestore 'in' query supports up to 10 items. For more, we need to batch or fetch individually.
+        // For simplicity, we'll fetch individually for now or use batches if needed.
+        // Let's use Promise.all with individual gets for simplicity as lists are small.
+
+        const promises = userIds.map(uid => getDocs(query(collection(db, 'users'), where('uid', '==', uid))));
+        const snapshots = await Promise.all(promises);
+
+        const statusMap: Record<string, { isOnline?: boolean; lastSeen?: Timestamp; displayName?: string }> = {};
+        snapshots.forEach(snap => {
+            if (!snap.empty) {
+                const doc = snap.docs[0];
+                const data = doc.data();
+                statusMap[doc.id] = {
+                    isOnline: data.isOnline,
+                    lastSeen: data.lastSeen,
+                    displayName: data.displayName
+                };
+            }
+        });
+        return statusMap;
+    } catch (error) {
+        console.error("Error getting users status:", error);
+        return {};
+    }
+};
+
+export const declarePayment = async (debtId: string, amount: number, note: string, userId: string, installmentId?: string) => {
+    try {
+        const debtRef = doc(db, 'debts', debtId);
+        const debtSnap = await getDoc(debtRef);
+
+        if (!debtSnap.exists()) throw new Error('Debt not found');
+        const debtData = debtSnap.data() as Debt;
+
+        // Create a log entry for the declaration
+        const logRef = doc(collection(db, 'debts', debtId, 'logs'));
+        await setDoc(logRef, {
+            type: 'PAYMENT_DECLARATION',
+            amountPaid: amount,
+            previousRemaining: debtData.remainingAmount,
+            newRemaining: debtData.remainingAmount, // Doesn't change yet
+            performedBy: userId,
+            timestamp: serverTimestamp(),
+            note: note,
+            status: 'PENDING',
+            ...(installmentId && { installmentId })
+        });
+    } catch (error) {
+        console.error("Error declaring payment:", error);
+        throw error;
+    }
+};
+
+export const confirmPayment = async (debtId: string, paymentId: string) => {
+    try {
+        const debtRef = doc(db, 'debts', debtId);
+        const logRef = doc(db, 'debts', debtId, 'logs', paymentId);
+
+        await runTransaction(db, async (transaction) => {
+            const debtDoc = await transaction.get(debtRef);
+            const logDoc = await transaction.get(logRef);
+
+            if (!debtDoc.exists() || !logDoc.exists()) {
+                throw new Error("Document does not exist!");
+            }
+
+            const debtData = debtDoc.data() as Debt;
+            const logData = logDoc.data() as PaymentLog;
+
+            if (logData.status !== 'PENDING') {
+                throw new Error("Payment is not pending!");
+            }
+
+            const amountPaid = logData.amountPaid || 0;
+            const newRemaining = debtData.remainingAmount - amountPaid;
+            let newStatus = debtData.status;
+
+            if (newRemaining <= 0) {
+                newStatus = 'PAID';
+            } else if (newRemaining < debtData.originalAmount) {
+                newStatus = 'PARTIALLY_PAID';
+            }
+
+            // Update Installments Logic
+            let updatedInstallments = debtData.installments;
+            if (debtData.installments && debtData.installments.length > 0) {
+                updatedInstallments = [...debtData.installments];
+                let remainingPayment = amountPaid;
+
+                // If specific installment targeted
+                if (logData.installmentId) {
+                    const targetIndex = updatedInstallments.findIndex(i => i.id === logData.installmentId);
+                    if (targetIndex !== -1) {
+                        const targetInst = updatedInstallments[targetIndex];
+
+                        // Mark target as paid
+                        updatedInstallments[targetIndex] = {
+                            ...targetInst,
+                            isPaid: true,
+                            paidAt: Timestamp.now()
+                        };
+                        remainingPayment -= targetInst.amount;
+                    }
+                }
+
+                // Distribute remaining payment (overpayment or general payment)
+                if (remainingPayment > 0) {
+                    for (let i = 0; i < updatedInstallments.length; i++) {
+                        if (remainingPayment <= 0) break;
+
+                        if (!updatedInstallments[i].isPaid) {
+                            if (remainingPayment >= updatedInstallments[i].amount) {
+                                updatedInstallments[i] = {
+                                    ...updatedInstallments[i],
+                                    isPaid: true,
+                                    paidAt: Timestamp.now()
+                                };
+                                remainingPayment -= updatedInstallments[i].amount;
+                            } else {
+                                // Partial payment of an installment - logic can be complex
+                                // For now, we only mark full payments or reduce amount?
+                                // Let's keep it simple: Only mark as paid if fully covered.
+                                // Or we could update the installment amount? 
+                                // Let's just leave it as unpaid but debt remaining decreases.
+                                // Ideally, we should split the installment or track partial.
+                                // For this MVP, we won't split installments.
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Update Debt
+            transaction.update(debtRef, {
+                remainingAmount: newRemaining,
+                status: newStatus,
+                ...(updatedInstallments && { installments: updatedInstallments })
+            });
+
+            // Update Log
+            transaction.update(logRef, {
+                status: 'APPROVED',
+                newRemaining: newRemaining,
+                type: 'PAYMENT'
+            });
+        });
+    } catch (error) {
+        console.error("Error confirming payment:", error);
+        throw error;
+    }
+};
+
+export const rejectPayment = async (debtId: string, paymentId: string) => {
+    try {
+        const logRef = doc(db, 'debts', debtId, 'logs', paymentId);
+        await updateDoc(logRef, {
+            status: 'REJECTED'
+        });
+    } catch (error) {
+        console.error("Error rejecting payment:", error);
+        throw error;
+    }
+};
+
+// --- Debt Management (Phase 8) ---
+
+export const softDeleteDebt = async (debtId: string) => {
+    try {
+        const debtRef = doc(db, 'debts', debtId);
+        await updateDoc(debtRef, {
+            isDeleted: true,
+            deletedAt: serverTimestamp()
+        });
+    } catch (error) {
+        console.error("Error soft deleting debt:", error);
+        throw error;
+    }
+};
+
+export const restoreDebt = async (debtId: string) => {
+    try {
+        const debtRef = doc(db, 'debts', debtId);
+        await updateDoc(debtRef, {
+            isDeleted: false,
+            deletedAt: null
+        });
+    } catch (error) {
+        console.error("Error restoring debt:", error);
+        throw error;
+    }
+};
+
+export const permanentlyDeleteDebt = async (debtId: string) => {
+    try {
+        const debtRef = doc(db, 'debts', debtId);
+        await deleteDoc(debtRef);
+    } catch (error) {
+        console.error("Error permanently deleting debt:", error);
+        throw error;
+    }
+};
+
+export const updateDebt = async (debtId: string, data: Partial<Debt>) => {
+    try {
+        const debtRef = doc(db, 'debts', debtId);
+        await updateDoc(debtRef, data);
+    } catch (error) {
+        console.error("Error updating debt:", error);
+        throw error;
+    }
+};

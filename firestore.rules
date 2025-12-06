@@ -1,0 +1,23 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /users/{userId} {
+      // Allow reading specific fields for search/list
+      allow list: if request.auth != null;
+      allow get: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null && request.auth.uid == userId;
+    }
+    
+    match /debts/{debtId} {
+      allow read: if request.auth != null && request.auth.uid in resource.data.participants;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null && request.auth.uid in resource.data.participants;
+      
+      match /logs/{logId} {
+        allow read: if request.auth != null && request.auth.uid in get(/databases/$(database)/documents/debts/$(debtId)).data.participants;
+        allow create: if request.auth != null && request.auth.uid in get(/databases/$(database)/documents/debts/$(debtId)).data.participants;
+      }
+    }
+  }
+}
