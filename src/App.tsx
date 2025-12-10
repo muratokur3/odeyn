@@ -27,7 +27,7 @@ import { ThemeProvider } from './context/ThemeContext';
 function App() {
   return (
     <ThemeProvider>
-      <div className="w-full max-w-md mx-auto min-h-screen bg-background shadow-2xl relative border-x border-border">
+      <div className="w-full max-w-3xl mx-auto min-h-screen bg-background shadow-2xl relative border-x border-border">
         <Router>
           <Routes>
             <Route path="/login" element={<Login />} />

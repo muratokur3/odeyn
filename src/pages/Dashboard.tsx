@@ -279,9 +279,17 @@ export const Dashboard = () => {
         <div className="min-h-full bg-gray-50 dark:bg-slate-900 pb-28 transition-colors duration-200">
             {/* Header */}
             <div className="bg-white dark:bg-slate-800 px-4 pt-4 pb-2 flex justify-between items-center shadow-sm z-50 sticky top-0">
-                <div className="flex flex-col">
-                    <span className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">Cüzdanım</span>
-                    <h1 className="text-lg font-bold text-gray-800 dark:text-white truncate max-w-[200px]">{user?.displayName || 'Kullanıcı'}</h1>
+                <div className="flex items-center gap-2">
+                    {/* Brand Logo / Text */}
+                    {/* Brand Logo / Text */}
+                    <div className="flex items-center gap-2">
+                        <div className="bg-blue-600 dark:bg-blue-500 rounded-lg p-1.5 shadow-sm">
+                            <Wallet className="text-white" size={20} strokeWidth={2.5} />
+                        </div>
+                        <span className="text-xl font-bold text-gray-900 dark:text-white tracking-tight leading-none">
+                            Pamuk<span className="text-blue-600 dark:text-blue-400">Eller</span>
+                        </span>
+                    </div>
                 </div>
                 <div className="flex items-center gap-2">
                     <button onClick={toggleTheme} className="p-2.5 bg-gray-100 dark:bg-slate-700 rounded-full hover:bg-gray-200 transition-colors">
@@ -503,14 +511,15 @@ export const Dashboard = () => {
                 </div>
             </main>
 
-            {/* BIG FAB BUTTON */}
-            <button
-                onClick={() => setShowCreateModal(true)}
-                className="fixed bottom-6 left-4 right-4 bg-gray-900 dark:bg-blue-600 text-white h-14 rounded-full shadow-2xl shadow-gray-900/20 flex items-center justify-center gap-2 active:scale-95 transition-transform z-40"
-            >
-                <Plus size={24} />
-                <span className="font-bold text-lg">Yeni İşlem Ekle</span>
-            </button>
+            {/* FIXED FAB VISUAL HACK: Pointer-events-none container to constrain width */}
+            <div className="fixed bottom-0 left-0 right-0 w-full max-w-3xl mx-auto h-0 z-50 pointer-events-none">
+                <button
+                    onClick={() => setShowCreateModal(true)}
+                    className="absolute bottom-24 right-6 bg-blue-600 hover:bg-blue-700 text-white w-14 h-14 rounded-full shadow-lg shadow-blue-600/30 flex items-center justify-center transition-transform active:scale-95 pointer-events-auto"
+                >
+                    <Plus size={28} strokeWidth={2.5} />
+                </button>
+            </div>
 
             {/* Modals */}
             <CreateDebtModal
