@@ -17,7 +17,7 @@ import clsx from 'clsx';
 import type { Debt, Installment } from '../types';
 import { EditDebtModal } from '../components/EditDebtModal';
 import { updateDebt } from '../services/db';
-import { cleanPhoneNumber } from '../utils/phone';
+import { cleanPhone as cleanPhoneNumber } from '../utils/phoneUtils';
 import { formatDistanceToNow } from 'date-fns';
 import { tr } from 'date-fns/locale';
 

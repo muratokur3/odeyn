@@ -1,5 +1,5 @@
 import { useContacts } from './useContacts';
-import { formatPhoneNumber } from '../utils/phone';
+import { formatPhoneForDisplay as formatPhoneNumber } from '../utils/phoneUtils';
 
 interface ContactNameResult {
     displayName: string; // The best name found

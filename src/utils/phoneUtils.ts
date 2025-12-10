@@ -16,7 +16,7 @@ export const cleanPhone = (input: string): string => {
         if (phoneNumber) {
             return phoneNumber.number as string; // Returns E.164
         }
-    } catch (error) {
+    } catch {
         // Fallback or ignore parse errors (will return handled below or processed crudely)
     }
 
@@ -50,7 +50,7 @@ export const formatPhoneForDisplay = (cleanNumber: string): string => {
             // parsePhoneNumber('+905551234567').format('NATIONAL') -> "0555 123 45 67"
             return phoneNumber.format('NATIONAL');
         }
-    } catch (e) {
+    } catch {
         // ignore
     }
     return cleanNumber;
@@ -64,7 +64,7 @@ export const isValidPhone = (input: string): boolean => {
     if (!input) return false;
     try {
         return isValidLibPhone(input, DEFAULT_COUNTRY);
-    } catch (e) {
+    } catch {
         return false;
     }
 };
@@ -79,7 +79,7 @@ export const getCountryCode = (input: string): string => {
         if (phoneNumber) {
             return `+${phoneNumber.countryCallingCode}`;
         }
-    } catch (e) {
+    } catch {
         // ignore
     }
     return '+90'; // Default

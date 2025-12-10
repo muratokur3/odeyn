@@ -1,266 +1,237 @@
-import { useState, useEffect, useRef } from 'react';
 
-import { loginUser, ensureUserDocument } from '../services/auth';
+import { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Lock, MessageSquare, Loader2, ArrowLeft } from 'lucide-react';
 import { auth } from '../services/firebase';
-import { RecaptchaVerifier, signInWithPhoneNumber, type ConfirmationResult } from 'firebase/auth';
+import { RecaptchaVerifier, type ConfirmationResult } from 'firebase/auth';
 import { PhoneInput } from '../components/PhoneInput';
-
-declare global {
-    interface Window {
-        recaptchaVerifier: RecaptchaVerifier | undefined;
-    }
-}
-
-
+import { loginWithPhoneAndPassword, startPhoneLogin, ensureUserDocument } from '../services/auth';
+import clsx from 'clsx';
 
 export const Login = () => {
-    const [mode, setMode] = useState<'PASSWORD' | 'SMS'>('PASSWORD');
-    // const [countryCode, setCountryCode] = useState('+90'); // REMOVED
-    const [phoneNumber, setPhoneNumber] = useState('');
+    const navigate = useNavigate();
+    const [activeTab, setActiveTab] = useState<'PASSWORD' | 'SMS'>('PASSWORD');
+    const [loading, setLoading] = useState(false);
+
+    // Form Data
+    const [phone, setPhone] = useState('');
     const [password, setPassword] = useState('');
     const [otp, setOtp] = useState('');
-    const [step, setStep] = useState<'INPUT' | 'VERIFY'>('INPUT');
-    const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
-    const [error, setError] = useState('');
-    const [loading, setLoading] = useState(false);
-    const navigate = useNavigate();
-    const recaptchaWrapperRef = useRef<HTMLDivElement>(null);
 
-    // Initialize Recaptcha
+    // SMS State
+    const [smsStep, setSmsStep] = useState<'REQUEST' | 'VERIFY'>('REQUEST');
+    const [confirmationResult, setConfirmationResult] = useState<ConfirmationResult | null>(null);
+    const recaptchaVerifier = useRef<RecaptchaVerifier | null>(null);
+
     useEffect(() => {
-        if (!window.recaptchaVerifier && recaptchaWrapperRef.current) {
-            window.recaptchaVerifier = new RecaptchaVerifier(auth, recaptchaWrapperRef.current, {
-                'size': 'invisible',
-                'callback': () => { }
+        // Initialize Recaptcha for SMS login
+        if (!recaptchaVerifier.current) {
+            recaptchaVerifier.current = new RecaptchaVerifier(auth, 'login-recaptcha', {
+                size: 'invisible',
             });
         }
-        return () => {
-            if (window.recaptchaVerifier) {
-                window.recaptchaVerifier.clear();
-                window.recaptchaVerifier = undefined;
-            }
-        };
-    }, [mode, step]);
+    }, []);
 
     const handlePasswordLogin = async (e: React.FormEvent) => {
         e.preventDefault();
-        setError('');
-        setLoading(true);
+        if (!phone || !password || loading) return;
 
+        setLoading(true);
         try {
-            const user = await loginUser(phoneNumber, password);
-            await ensureUserDocument(user);
+            await loginWithPhoneAndPassword(phone, password);
             navigate('/');
-        } catch (err: any) {
-            setError('Giriş başarısız. Lütfen bilgilerinizi kontrol edin.');
-            console.error(err);
+        } catch (error) {
+            console.error(error);
+            alert("Giriş başarısız. Bilgilerinizi kontrol edin.");
         } finally {
             setLoading(false);
         }
     };
 
-    const handleSendOtp = async (e: React.FormEvent) => {
+    const handleSendSms = async (e: React.FormEvent) => {
         e.preventDefault();
-        setError('');
+        if (!phone || loading) return;
+
         setLoading(true);
-
-        // Combine Country Code + Phone
-        // PhoneInput now returns E.164 full number
-        const fullPhoneNumber = phoneNumber;
-
         try {
-            if (!window.recaptchaVerifier) throw new Error("Recaptcha not initialized");
-            const confirmation = await signInWithPhoneNumber(auth, fullPhoneNumber, window.recaptchaVerifier);
-            setConfirmationResult(confirmation);
-            setStep('VERIFY');
-        } catch (err: any) {
-            console.error(err);
-            setError('SMS gönderilemedi: ' + err.message);
-            if (window.recaptchaVerifier) window.recaptchaVerifier.clear();
+            if (!recaptchaVerifier.current) return;
+            const result = await startPhoneLogin(phone, recaptchaVerifier.current);
+            setConfirmationResult(result);
+            setSmsStep('VERIFY');
+        } catch (error) {
+            console.error(error);
+            alert("SMS gönderilemedi.");
         } finally {
             setLoading(false);
         }
     };
 
-    const handleVerifyOtp = async (e: React.FormEvent) => {
+    const handleVerifySms = async (e: React.FormEvent) => {
         e.preventDefault();
-        setError('');
-        setLoading(true);
+        if (!otp || !confirmationResult || loading) return;
 
+        setLoading(true);
         try {
-            if (!confirmationResult) throw new Error("No confirmation result");
             const result = await confirmationResult.confirm(otp);
-            const user = result.user;
-
-            // Ensure Firestore Document Exists
-            await ensureUserDocument(user);
-
-            navigate('/');
-        } catch (err: any) {
-            console.error(err);
-            setError('Doğrulama kodu hatalı.');
+            if (result.user) {
+                // Ensure doc exists for SMS-only users
+                await ensureUserDocument(result.user);
+                navigate('/');
+            }
+        } catch (error) {
+            console.error(error);
+            alert("Hatalı kod.");
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-background p-4 transition-colors duration-200">
-            <div className="bg-surface p-8 rounded-2xl shadow-xl w-full max-w-md border border-border transition-colors duration-200 relative">
+        <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
+            <div className="w-full max-w-md bg-surface p-8 rounded-3xl shadow-xl border border-slate-700">
 
-                {/* Mode Switcher */}
-                {step === 'INPUT' && (
-                    <div className="flex bg-gray-100 dark:bg-slate-800 p-1 rounded-xl mb-6">
-                        <button
-                            onClick={() => setMode('PASSWORD')}
-                            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all flex items-center justify-center gap-2 ${mode === 'PASSWORD'
-                                ? 'bg-white dark:bg-slate-700 shadow text-primary'
-                                : 'text-gray-500 hover:text-gray-700 dark:text-slate-400'
-                                }`}
-                        >
-                            <Lock size={16} /> Şifre
-                        </button>
-                        <button
-                            onClick={() => setMode('SMS')}
-                            className={`flex-1 py-2 text-sm font-semibold rounded-lg transition-all flex items-center justify-center gap-2 ${mode === 'SMS'
-                                ? 'bg-white dark:bg-slate-700 shadow text-primary'
-                                : 'text-gray-500 hover:text-gray-700 dark:text-slate-400'
-                                }`}
-                        >
-                            <MessageSquare size={16} /> SMS
-                        </button>
-                    </div>
-                )}
+                {/* Header with Back */}
+                <div className="relative mb-6 text-center">
+                    <Link to="/" className="absolute left-0 top-1 text-text-secondary hover:text-text-primary transition-colors">
+                        <ArrowLeft size={24} />
+                    </Link>
+                    <h1 className="text-2xl font-bold text-text-primary">Giriş Yap</h1>
+                    <p className="text-text-secondary text-sm">Hesabınıza erişin</p>
+                </div>
 
-                <h1 className="text-3xl font-bold text-center mb-2 text-text-primary">
-                    {step === 'VERIFY' ? 'Doğrulama' : 'Giriş Yap'}
-                </h1>
-                <p className="text-center text-text-secondary mb-8 text-sm">
-                    {step === 'VERIFY' ? 'Telefonunuza gelen kodu giriniz.' : 'Hesabınıza erişmek için bilgilerinizi girin.'}
-                </p>
-
-                {error && (
-                    <div className="bg-red-500/10 text-red-600 dark:text-red-400 p-3 rounded-lg mb-4 text-sm border border-red-500/20">
-                        {error}
-                    </div>
-                )}
+                {/* Tabs */}
+                <div className="flex bg-background rounded-xl p-1 mb-8 border border-slate-700">
+                    <button
+                        onClick={() => setActiveTab('PASSWORD')}
+                        className={clsx(
+                            "flex-1 flex items-center justify-center gap-2 py-3 rounded-lg text-sm font-semibold transition-all",
+                            activeTab === 'PASSWORD'
+                                ? "bg-primary text-white shadow-md"
+                                : "text-text-secondary hover:text-text-primary hover:bg-surface"
+                        )}
+                    >
+                        <Lock size={16} /> Şifre ile
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('SMS')}
+                        className={clsx(
+                            "flex-1 flex items-center justify-center gap-2 py-3 rounded-lg text-sm font-semibold transition-all",
+                            activeTab === 'SMS'
+                                ? "bg-primary text-white shadow-md"
+                                : "text-text-secondary hover:text-text-primary hover:bg-surface"
+                        )}
+                    >
+                        <MessageSquare size={16} /> SMS ile
+                    </button>
+                </div>
 
                 {/* Password Login Form */}
-                {mode === 'PASSWORD' && (
-                    <form onSubmit={handlePasswordLogin} className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-medium text-text-secondary mb-1">Telefon Numarası</label>
+                {activeTab === 'PASSWORD' && (
+                    <form onSubmit={handlePasswordLogin} className="space-y-6 animate-in fade-in slide-in-from-left-4 duration-300">
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium text-text-secondary ml-1">Telefon Numarası</label>
                             <PhoneInput
-                                value={phoneNumber}
-                                onChange={setPhoneNumber}
+                                value={phone}
+                                onChange={setPhone}
                                 required
                                 placeholder="555 123 45 67"
                             />
                         </div>
-
-                        <div>
-                            <label className="block text-sm font-medium text-text-secondary mb-1">Şifre</label>
+                        <div className="space-y-2">
+                            <label className="text-sm font-medium text-text-secondary ml-1">Şifre</label>
                             <div className="relative">
-                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                    <Lock size={18} className="text-text-secondary" />
-                                </div>
+                                <Lock className="absolute left-4 top-3.5 text-text-secondary" size={20} />
                                 <input
                                     type="password"
                                     value={password}
                                     onChange={(e) => setPassword(e.target.value)}
-                                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary focus:ring-2 focus:ring-blue-900/50 outline-none transition-all"
                                     placeholder="••••••"
+                                    className="w-full pl-12 pr-4 py-3 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary outline-none transition-all"
                                     required
                                 />
+                            </div>
+                            <div className="text-right">
+                                <Link to="/forgot-password" className="text-xs text-primary hover:text-blue-400 font-medium transition-colors">
+                                    Şifremi Unuttum
+                                </Link>
                             </div>
                         </div>
 
                         <button
                             type="submit"
-                            disabled={loading}
-                            className="w-full bg-primary text-white py-3 rounded-xl font-semibold hover:bg-blue-600 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
+                            disabled={loading || !phone || !password}
+                            className="w-full bg-primary text-white py-4 rounded-xl font-bold text-lg hover:bg-blue-600 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20"
                         >
-                            {loading && <Loader2 size={18} className="animate-spin" />}
-                            {loading ? 'Giriş Yapılıyor...' : 'Giriş Yap'}
+                            {loading ? <Loader2 className="animate-spin" /> : "Giriş Yap"}
                         </button>
                     </form>
                 )}
 
                 {/* SMS Login Form */}
-                {mode === 'SMS' && step === 'INPUT' && (
-                    <form onSubmit={handleSendOtp} className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-medium text-text-secondary mb-1">Telefon Numarası</label>
-                            <PhoneInput
-                                value={phoneNumber}
-                                onChange={setPhoneNumber}
-                                required
-                                placeholder="555 123 45 67"
-                            />
-                            <p className="text-xs text-text-secondary mt-1 ml-1">SMS doğrulama kodu gönderilecektir.</p>
-                        </div>
-
-                        <div ref={recaptchaWrapperRef} className="flex justify-center my-2"></div>
-
-
-                        <button
-                            type="submit"
-                            disabled={loading}
-                            className="w-full bg-primary text-white py-3 rounded-xl font-semibold hover:bg-blue-600 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                        >
-                            {loading && <Loader2 size={18} className="animate-spin" />}
-                            {loading ? 'Gönderiliyor...' : 'Doğrulama Kodu Gönder'}
-                        </button>
-                    </form>
+                {activeTab === 'SMS' && (
+                    <div className="animate-in fade-in slide-in-from-right-4 duration-300">
+                        {smsStep === 'REQUEST' ? (
+                            <form onSubmit={handleSendSms} className="space-y-6">
+                                <div className="space-y-2">
+                                    <label className="text-sm font-medium text-text-secondary ml-1">Telefon Numarası</label>
+                                    <PhoneInput
+                                        value={phone}
+                                        onChange={setPhone}
+                                        required
+                                        placeholder="555 123 45 67"
+                                    />
+                                </div>
+                                <button
+                                    type="submit"
+                                    disabled={loading || !phone}
+                                    className="w-full bg-primary text-white py-4 rounded-xl font-bold text-lg hover:bg-blue-600 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20"
+                                >
+                                    {loading ? <Loader2 className="animate-spin" /> : "Kod Gönder"}
+                                </button>
+                            </form>
+                        ) : (
+                            <form onSubmit={handleVerifySms} className="space-y-6">
+                                <div className="text-center mb-2">
+                                    <p className="text-text-secondary text-sm">
+                                        {phone} numarasına gelen kodu girin.
+                                    </p>
+                                </div>
+                                <input
+                                    type="text"
+                                    value={otp}
+                                    onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                                    className="w-full text-center text-3xl tracking-[0.5em] font-bold py-4 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary outline-none transition-all"
+                                    placeholder="000000"
+                                    required
+                                />
+                                <button
+                                    type="submit"
+                                    disabled={loading || otp.length < 6}
+                                    className="w-full bg-primary text-white py-4 rounded-xl font-bold text-lg hover:bg-blue-600 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-lg shadow-blue-900/20"
+                                >
+                                    {loading ? <Loader2 className="animate-spin" /> : "Doğrula ve Giriş Yap"}
+                                </button>
+                                <button
+                                    type="button"
+                                    onClick={() => setSmsStep('REQUEST')}
+                                    className="w-full py-2 text-text-secondary hover:text-text-primary transition-colors text-sm"
+                                >
+                                    Numarayı Değiştir
+                                </button>
+                            </form>
+                        )}
+                    </div>
                 )}
 
-                {/* SMS Verify Form */}
-                {mode === 'SMS' && step === 'VERIFY' && (
-                    <form onSubmit={handleVerifyOtp} className="space-y-4">
-                        <div>
-                            <label className="block text-sm font-medium text-text-secondary mb-1">Doğrulama Kodu</label>
-                            <input
-                                type="text"
-                                value={otp}
-                                onChange={(e) => setOtp(e.target.value)}
-                                className="w-full text-center tracking-widest text-2xl px-4 py-3 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary focus:ring-2 focus:ring-blue-900/50 outline-none transition-all"
-                                placeholder="123456"
-                                maxLength={6}
-                                required
-                            />
-                        </div>
+                <div id="login-recaptcha"></div>
 
-                        <button
-                            type="submit"
-                            disabled={loading}
-                            className="w-full bg-primary text-white py-3 rounded-xl font-semibold hover:bg-blue-600 active:scale-95 transition-all disabled:opacity-50 flex items-center justify-center gap-2"
-                        >
-                            {loading && <Loader2 size={18} className="animate-spin" />}
-                            {loading ? 'Doğrulanıyor...' : 'Doğrula ve Giriş Yap'}
-                        </button>
-
-                        <button
-                            type="button"
-                            onClick={() => {
-                                setStep('INPUT');
-                                setOtp('');
-                            }}
-                            className="w-full text-text-secondary text-sm hover:text-primary transition-colors flex items-center justify-center gap-1"
-                        >
-                            <ArrowLeft size={14} /> Numarayı Değiştir
-                        </button>
-                    </form>
-                )}
-
-                <div className="mt-6 text-center">
-                    <Link
-                        to="/register"
-                        className="text-primary hover:underline text-sm font-medium"
-                    >
-                        Hesabın yok mu? Kayıt ol
-                    </Link>
+                <div className="mt-8 text-center">
+                    <p className="text-text-secondary">
+                        Hesabınız yok mu?{' '}
+                        <Link to="/register" className="text-primary hover:text-blue-400 font-medium transition-colors">
+                            Kayıt Ol
+                        </Link>
+                    </p>
                 </div>
             </div>
         </div>

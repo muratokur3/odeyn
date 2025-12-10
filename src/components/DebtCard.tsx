@@ -4,7 +4,7 @@ import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { CheckCheck, Clock } from 'lucide-react';
 import { formatCurrency } from '../utils/format';
-import { formatPhoneNumber } from '../utils/phone';
+import { formatPhoneForDisplay as formatPhoneNumber } from '../utils/phoneUtils';
 import { Avatar } from './Avatar';
 import clsx from 'clsx';
 
