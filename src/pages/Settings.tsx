@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Trash2, RotateCcw, XCircle, Clock, CheckCircle2, UserX, Database, ChevronRight, Settings as SettingsIcon, RefreshCw, Eye, Wallet } from 'lucide-react';
+import { ArrowLeft, Trash2, RotateCcw, XCircle, Clock, CheckCircle2, UserX, ChevronRight, RefreshCw, Eye, Wallet } from 'lucide-react';
 import { useDebts } from '../hooks/useDebts';
 import { restoreDebt, permanentlyDeleteDebt, updateUserPreferences } from '../services/db';
 import { useAuth } from '../hooks/useAuth';
@@ -65,7 +65,10 @@ const SectionHeader = ({ title }: { title: string }) => (
 // --- Main Component ---
 
 export const Settings = () => {
-    // ...
+    const navigate = useNavigate();
+    const { user } = useAuth(); // Get current user
+    const { debts: deletedDebts, loading } = useDebts(true);
+
     const [activeTab, setActiveTab] = useState<'GENERAL' | 'TRASH'>('GENERAL');
 
     // Local State
@@ -86,10 +89,6 @@ export const Settings = () => {
         }
         setAutoDeleteDuration(localStorage.getItem('autoDeleteDuration') || 'OFF');
     }, [user]);
-
-    const navigate = useNavigate();
-    const { user } = useAuth(); // Get current user
-    const { debts: deletedDebts, loading } = useDebts(true);
 
     // Persist Helpers
     const toggleSetting = async (key: keyof NonNullable<User['preferences']>, value: boolean, setter: (val: boolean) => void) => {
