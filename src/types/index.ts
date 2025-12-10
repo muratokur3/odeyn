@@ -8,12 +8,9 @@ export interface User {
     email?: string;
     photoURL?: string;
     savedContacts?: string[]; // List of UIDs
-    lastSeen?: Timestamp;
-    isOnline?: boolean;
     preferences?: {
         autoApproveDebt?: boolean;
         requireApproval?: boolean;
-        showOnline?: boolean;
         syncContacts?: boolean;
         defaultAllowPaymentAddition?: boolean;
     };

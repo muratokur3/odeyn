@@ -438,35 +438,7 @@ export const claimDebts = async (userId: string, phoneNumber: string) => {
     }
 };
 
-export const getUsersStatus = async (userIds: string[]) => {
-    if (userIds.length === 0) return {};
-    try {
-        // Firestore 'in' query supports up to 10 items. For more, we need to batch or fetch individually.
-        // For simplicity, we'll fetch individually for now or use batches if needed.
-        // Let's use Promise.all with individual gets for simplicity as lists are small.
 
-        const promises = userIds.map(uid => getDocs(query(collection(db, 'users'), where('uid', '==', uid))));
-        const snapshots = await Promise.all(promises);
-
-        const statusMap: Record<string, { isOnline?: boolean; lastSeen?: Timestamp; displayName?: string }> = {};
-        snapshots.forEach(snap => {
-            if (!snap.empty) {
-                const doc = snap.docs[0];
-                const data = doc.data();
-                statusMap[doc.id] = {
-                    isOnline: data.isOnline,
-                    lastSeen: data.lastSeen,
-                    displayName: data.displayName
-                };
-            }
-
-        });
-        return statusMap;
-    } catch (error) {
-        console.error("Error getting users status:", error);
-        return {};
-    }
-};
 
 export const updateUserPreferences = async (userId: string, preferences: User['preferences']) => {
     try {

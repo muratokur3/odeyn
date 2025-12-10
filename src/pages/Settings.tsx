@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Trash2, RotateCcw, XCircle, Clock, CheckCircle2, UserX, ChevronRight, RefreshCw, Eye, Wallet } from 'lucide-react';
+import { ArrowLeft, Trash2, RotateCcw, XCircle, Clock, CheckCircle2, UserX, ChevronRight, RefreshCw, Wallet } from 'lucide-react';
 import { useDebts } from '../hooks/useDebts';
 import { restoreDebt, permanentlyDeleteDebt, updateUserPreferences } from '../services/db';
 import { useAuth } from '../hooks/useAuth';
@@ -73,7 +73,6 @@ export const Settings = () => {
 
     // Local State
     const [autoApprove, setAutoApprove] = useState(false);
-    const [showOnline, setShowOnline] = useState(true);
     const [syncContacts, setSyncContacts] = useState(false);
     const [defaultAllowPayment, setDefaultAllowPayment] = useState(false);
     const [autoDeleteDuration, setAutoDeleteDuration] = useState('OFF');
@@ -83,7 +82,7 @@ export const Settings = () => {
         if (user) {
             const prefs = user.preferences || {};
             setAutoApprove(prefs.autoApproveDebt ?? false);
-            setShowOnline(prefs.showOnline ?? true);
+            setSyncContacts(prefs.syncContacts ?? false);
             setSyncContacts(prefs.syncContacts ?? false);
             setDefaultAllowPayment(prefs.defaultAllowPaymentAddition ?? false);
         }
@@ -196,12 +195,7 @@ export const Settings = () => {
                         {/* Group B: Privacy */}
                         <SectionHeader title="Gizlilik & Senkronizasyon" />
                         <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 overflow-hidden divide-y divide-gray-100 dark:divide-slate-800">
-                            <SettingsRow
-                                icon={Eye}
-                                title="Çevrimiçi Durumu"
-                                description="Diğer kullanıcılar uygulamada olduğumu görebilsin."
-                                action={<Switch checked={showOnline} onChange={(v) => toggleSetting('showOnline', v, setShowOnline)} />}
-                            />
+
                             <SettingsRow
                                 icon={RefreshCw}
                                 title="Rehber Senkronizasyonu"

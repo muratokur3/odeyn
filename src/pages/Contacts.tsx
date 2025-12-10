@@ -1,26 +1,26 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { getContacts, addContact, deleteContact, updateContact, getUsersStatus } from '../services/db';
+import { getContacts, addContact, deleteContact, updateContact } from '../services/db';
 import type { Contact } from '../types';
-import { Plus, Search, Trash2, ArrowLeft, Circle, Edit2, MessageCircle, Phone, Share2 } from 'lucide-react';
+import { Plus, Search, Trash2, ArrowLeft, Edit2, MessageCircle, Phone, Share2, Wallet } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Timestamp } from 'firebase/firestore';
-import { formatDistanceToNow } from 'date-fns';
-import { tr } from 'date-fns/locale';
 import { SwipeableItem } from '../components/SwipeableItem';
 import { Avatar } from '../components/Avatar';
 import { cleanPhoneNumber, formatPhoneNumber } from '../utils/phone';
+import { CreateDebtModal } from '../components/CreateDebtModal';
+import { createDebt } from '../services/db';
 
 export const Contacts = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
     const [contacts, setContacts] = useState<Contact[]>([]);
-    const [userStatuses, setUserStatuses] = useState<Record<string, { isOnline?: boolean; lastSeen?: Timestamp; displayName?: string }>>({});
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [showModal, setShowModal] = useState(false);
     const [editingContact, setEditingContact] = useState<Contact | null>(null);
+    const [selectedContactForDebt, setSelectedContactForDebt] = useState<Contact | null>(null);
+    const [showDebtModal, setShowDebtModal] = useState(false);
 
     // Form State
     const [name, setName] = useState('');
@@ -50,12 +50,6 @@ export const Contacts = () => {
         try {
             const data = await getContacts(user.uid);
             setContacts(data);
-
-            const linkedIds = data.map(c => c.linkedUserId).filter(id => id) as string[];
-            if (linkedIds.length > 0) {
-                const statuses = await getUsersStatus(linkedIds);
-                setUserStatuses(statuses);
-            }
         } catch (error) {
             console.error(error);
         } finally {
@@ -93,6 +87,38 @@ export const Contacts = () => {
             console.error(error);
             alert("Silme işlemi başarısız oldu.");
         }
+    };
+
+    const handleCreateDebtSubmit = async (
+        borrowerId: string,
+        borrowerName: string,
+        amount: number,
+        type: 'LENDING' | 'BORROWING',
+        currency: string,
+        note?: string,
+        dueDate?: Date,
+        installments?: any[],
+        canBorrowerAddPayment?: boolean,
+        requestApproval?: boolean,
+        initialPayment?: number
+    ) => {
+        if (!user) return;
+        await createDebt(
+            user.uid,
+            user.displayName || 'Bilinmeyen',
+            borrowerId,
+            borrowerName,
+            amount,
+            type,
+            currency,
+            note,
+            dueDate,
+            installments,
+            canBorrowerAddPayment,
+            requestApproval,
+            initialPayment || 0
+        );
+        setShowDebtModal(false);
     };
 
     const openAddModal = () => {
@@ -176,79 +202,23 @@ export const Contacts = () => {
                                         <div>
                                             <h3 className="font-semibold text-text-primary">
                                                 {contact.name}
-                                                {contact.linkedUserId && userStatuses[contact.linkedUserId]?.displayName &&
-                                                    userStatuses[contact.linkedUserId].displayName?.toLowerCase() !== contact.name.toLowerCase() && (
-                                                        <span className="ml-2 text-xs font-normal text-text-secondary">
-                                                            ({userStatuses[contact.linkedUserId].displayName})
-                                                        </span>
-                                                    )}
                                             </h3>
                                             <div className="flex items-center gap-2">
                                                 <p className="text-sm text-text-secondary">{formatPhoneNumber(contact.phoneNumber)}</p>
-                                                {contact.linkedUserId && userStatuses[contact.linkedUserId] && (
-                                                    <div className="flex items-center gap-1 text-xs">
-                                                        {userStatuses[contact.linkedUserId].isOnline ? (
-                                                            <span className="text-green-600 dark:text-green-400 font-medium flex items-center gap-1">
-                                                                <Circle size={8} fill="currentColor" /> Çevrimiçi
-                                                            </span>
-                                                        ) : (
-                                                            <span className="text-text-secondary">
-                                                                {userStatuses[contact.linkedUserId].lastSeen
-                                                                    ? `Son görülme: ${formatDistanceToNow(userStatuses[contact.linkedUserId].lastSeen!.toDate(), { addSuffix: true, locale: tr })}`
-                                                                    : ''}
-                                                            </span>
-                                                        )}
-                                                    </div>
-                                                )}
                                             </div>
                                         </div>
                                     </div>
-                                    <div className="hidden md:flex items-center gap-1">
-                                        {!contact.linkedUserId && (
-                                            <a
-                                                href={`https://wa.me/${cleanPhoneNumber(contact.phoneNumber)}?text=Merhaba, DebtDert uygulamasını kullanarak borç/alacak takibimizi kolayca yapabiliriz. Sen de katıl!`}
-                                                target="_blank"
-                                                rel="noopener noreferrer"
-                                                className="p-2 text-text-secondary hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-full transition-colors"
-                                                onClick={(e) => e.stopPropagation()}
-                                                title="Davet Et"
-                                            >
-                                                <Share2 size={18} />
-                                            </a>
-                                        )}
-                                        <a
-                                            href={`https://wa.me/${cleanPhoneNumber(contact.phoneNumber)}`}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            className="p-2 text-text-secondary hover:text-green-600 hover:bg-green-50 dark:hover:bg-green-900/20 rounded-full transition-colors"
-                                            onClick={(e) => e.stopPropagation()}
-                                        >
-                                            <MessageCircle size={18} />
-                                        </a>
-                                        <a
-                                            href={`tel:${contact.phoneNumber}`}
-                                            className="p-2 text-text-secondary hover:text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-full transition-colors"
-                                            onClick={(e) => e.stopPropagation()}
-                                        >
-                                            <Phone size={18} />
-                                        </a>
+                                    <div className="flex items-center gap-1 pl-2">
+                                        {/* Quick Debt Creation Button */}
                                         <button
                                             onClick={(e) => {
                                                 e.stopPropagation();
-                                                openEditModal(contact);
+                                                setSelectedContactForDebt(contact);
+                                                setShowDebtModal(true);
                                             }}
-                                            className="p-2 text-text-secondary hover:text-blue-500 hover:bg-blue-50 dark:hover:bg-blue-900/20 rounded-full transition-colors"
+                                            className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 flex items-center justify-center hover:scale-110 active:scale-95 transition-transform"
                                         >
-                                            <Edit2 size={18} />
-                                        </button>
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                handleDeleteContact(contact.id);
-                                            }}
-                                            className="p-2 text-text-secondary hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors"
-                                        >
-                                            <Trash2 size={18} />
+                                            <Wallet size={20} />
                                         </button>
                                     </div>
                                 </div>
@@ -268,56 +238,66 @@ export const Contacts = () => {
                 className="fixed bottom-24 right-6 bg-primary text-white p-4 rounded-full shadow-lg hover:bg-blue-600 active:scale-90 transition-all z-20"
             >
                 <Plus size={24} />
-            </button>
+            </button >
 
             {/* Modal */}
-            {showModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                    <div className="bg-surface rounded-2xl w-full max-w-sm p-6 shadow-xl animate-in fade-in zoom-in duration-200 border border-slate-700">
-                        <h2 className="text-xl font-bold text-text-primary mb-4">
-                            {editingContact ? 'Kişiyi Düzenle' : 'Yeni Kişi Ekle'}
-                        </h2>
-                        <form onSubmit={handleSubmit} className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-text-secondary mb-1">İsim Soyisim</label>
-                                <input
-                                    type="text"
-                                    value={name}
-                                    onChange={(e) => setName(e.target.value)}
-                                    className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-background text-text-primary focus:ring-2 focus:ring-primary outline-none"
-                                    required
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-text-secondary mb-1">Telefon Numarası</label>
-                                <input
-                                    type="tel"
-                                    value={phone}
-                                    onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
-                                    className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-background text-text-primary focus:ring-2 focus:ring-primary outline-none"
-                                    required
-                                />
-                            </div>
-                            <div className="flex gap-3 pt-2">
-                                <button
-                                    type="button"
-                                    onClick={closeModal}
-                                    className="flex-1 py-2 text-text-secondary hover:bg-background rounded-lg font-medium transition-colors"
-                                >
-                                    İptal
-                                </button>
-                                <button
-                                    type="submit"
-                                    disabled={submitting}
-                                    className="flex-1 py-2 bg-primary text-white rounded-lg font-medium hover:bg-blue-600 disabled:opacity-50 transition-colors"
-                                >
-                                    {submitting ? 'Kaydediliyor...' : 'Kaydet'}
-                                </button>
-                            </div>
-                        </form>
+            {
+                showModal && (
+                    <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                        <div className="bg-surface rounded-2xl w-full max-w-sm p-6 shadow-xl animate-in fade-in zoom-in duration-200 border border-slate-700">
+                            <h2 className="text-xl font-bold text-text-primary mb-4">
+                                {editingContact ? 'Kişiyi Düzenle' : 'Yeni Kişi Ekle'}
+                            </h2>
+                            <form onSubmit={handleSubmit} className="space-y-4">
+                                <div>
+                                    <label className="block text-sm font-medium text-text-secondary mb-1">İsim Soyisim</label>
+                                    <input
+                                        type="text"
+                                        value={name}
+                                        onChange={(e) => setName(e.target.value)}
+                                        className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-background text-text-primary focus:ring-2 focus:ring-primary outline-none"
+                                        required
+                                    />
+                                </div>
+                                <div>
+                                    <label className="block text-sm font-medium text-text-secondary mb-1">Telefon Numarası</label>
+                                    <input
+                                        type="tel"
+                                        value={phone}
+                                        onChange={(e) => setPhone(e.target.value.replace(/\D/g, ''))}
+                                        className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-background text-text-primary focus:ring-2 focus:ring-primary outline-none"
+                                        required
+                                    />
+                                </div>
+                                <div className="flex gap-3 pt-2">
+                                    <button
+                                        type="button"
+                                        onClick={closeModal}
+                                        className="flex-1 py-2 text-text-secondary hover:bg-background rounded-lg font-medium transition-colors"
+                                    >
+                                        İptal
+                                    </button>
+                                    <button
+                                        type="submit"
+                                        disabled={submitting}
+                                        className="flex-1 py-2 bg-primary text-white rounded-lg font-medium hover:bg-blue-600 disabled:opacity-50 transition-colors"
+                                    >
+                                        {submitting ? 'Kaydediliyor...' : 'Kaydet'}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
                     </div>
-                </div>
-            )}
-        </div>
+                )
+            }
+            {/* Debt Modal */}
+            <CreateDebtModal
+                isOpen={showDebtModal}
+                onClose={() => setShowDebtModal(false)}
+                initialPhoneNumber={selectedContactForDebt?.phoneNumber}
+                targetUser={selectedContactForDebt}
+                onSubmit={handleCreateDebtSubmit}
+            />
+        </div >
     );
 };
