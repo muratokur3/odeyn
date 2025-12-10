@@ -36,7 +36,7 @@ interface ContactSummary {
 }
 
 export const Dashboard = () => {
-    const { debts, loading } = useDebts();
+    const { dashboardDebts, incomingRequests: hookIncomingRequests, loading } = useDebts();
     const { user } = useAuth();
     const navigate = useNavigate();
     const [showCreateModal, setShowCreateModal] = useState(false);
@@ -112,16 +112,16 @@ export const Dashboard = () => {
     // Calculations & Aggregation
     const useMemoResult = useMemo(() => {
         if (!user || !rates) return {
-            incomingRequests: [],
             contactSummaries: [],
             availableCurrencies: [],
             grandTotal: { receivables: 0, payables: 0, net: 0, currency: 'TRY' }
         };
 
-        const incoming: Debt[] = [];
         const contactMap = new Map<string, {
             name: string;
-            balance: number;
+            balance: number; // Net balance in base currency
+            // Note: We might want multicoorrency balance per contact later, but for now filtering is global.
+            // Actually, if selectedCurrency is specific, we only sum that.
             lastActivity: Date;
             lastSnippet: string;
         }>();
@@ -130,43 +130,24 @@ export const Dashboard = () => {
         let totalPayables = 0;
         const currencies = new Set<string>();
 
-        // 1. Process all debts
-        debts.forEach(d => {
-            const isCreator = d.createdBy === user.uid;
-
-            // Collect currencies for scanner
+        // 1. Process Dashboard Debts (The Main List)
+        dashboardDebts.forEach(d => {
+            // Collect currencies
             if (d.currency) currencies.add(d.currency);
 
-            // Pending Requests Handling
-            if (d.status === 'PENDING' && !isCreator) {
-                // Respect currency filter for incoming as well? Usually incoming should always be visible.
-                // Let's filter visually if needed, but 'incoming' list is usually separate. 
-                // Let's keep incoming always visible or filter? User said "doviz filtreleme neden silindi".
-                // Usually affects the main list. Let's Filter incoming too for consistency if strict.
-                // But for now, let's keep incoming global, as they are alerts.
-                incoming.push(d);
-                return;
-            }
-
-            if (d.status === 'REJECTED') return;
-
-            // GLOBAL CURRENCY FILTER CHECK
-            // If selectedCurrency is not ALL, and debt currency doesn't match, skip it for aggregation
+            // Global Currency Filter Check
             if (selectedCurrency !== 'ALL' && (d.currency || 'TRY') !== selectedCurrency) {
                 return;
             }
 
-            const isActiveForBalance = d.status === 'ACTIVE' || d.status === 'PARTIALLY_PAID';
+            const isActiveForBalance = d.status === 'ACTIVE' || d.status === 'PARTIALLY_PAID' || d.status === 'PENDING';
+            // Note: We include PENDING here because dashboardDebts ONLY contains pending items if I AM THE CREATOR.
+            // And the rule is: "If I created it, it reflects on my balance immediately."
 
-            // Identify Other Party
             // Identify Other Party
             const isLender = d.lenderId === user.uid;
             const otherId = isLender ? d.borrowerId : d.lenderId;
             const fallbackName = isLender ? d.borrowerName : d.lenderName;
-
-            // Resolve Name if new or check if we have a better one?
-            // Since we group by ID, we only need to set the name once or keep the best one.
-            // But for simplicity in this loop, let's resolve it if we haven't added it yet.
 
             let displayName = fallbackName;
 
@@ -185,7 +166,6 @@ export const Dashboard = () => {
             const existing = contactMap.get(otherId)!;
 
             // Calculate Amount
-            // If Single Currency selected, use raw amount. If ALL, use TRY.
             let amountToAdd = d.remainingAmount;
             if (selectedCurrency === 'ALL') {
                 amountToAdd = convertToTRY(d.remainingAmount, d.currency || 'TRY', rates);
@@ -203,7 +183,6 @@ export const Dashboard = () => {
             }
 
             // Update Last Activity
-            // We consider this debt for activity log even if it's pending (if I created it)
             const debtDate = d.createdAt?.toDate() || new Date(0);
             if (debtDate > existing.lastActivity) {
                 existing.lastActivity = debtDate;
@@ -214,18 +193,22 @@ export const Dashboard = () => {
             contactMap.set(otherId, existing);
         });
 
-        // 2. Convert Map to List
-        let summaries: ContactSummary[] = Array.from(contactMap.entries()).map(([id, data]) => ({
-            id,
-            name: data.name,
-            netBalance: data.balance,
-            currency: selectedCurrency === 'ALL' ? 'TRY' : selectedCurrency,
-            lastActivity: data.lastActivity,
-            lastActionSnippet: data.lastSnippet,
-            status: getContactStatus(id)
-        }));
+        // 2. Convert Map to List & Filter Zero Balances
+        let summaries: ContactSummary[] = Array.from(contactMap.entries())
+            .map(([id, data]) => ({
+                id,
+                name: data.name,
+                netBalance: data.balance,
+                currency: selectedCurrency === 'ALL' ? 'TRY' : selectedCurrency,
+                lastActivity: data.lastActivity,
+                lastActionSnippet: data.lastSnippet,
+                status: getContactStatus(id)
+            }))
+            .filter(c => Math.abs(c.netBalance) > 0.01);
+        // STRICT FILTER: "anasayfada ödeşildi diye bir şey görmek istemiyorum"
+        // We only show contacts with non-zero balance.
 
-        // 3. Filters
+        // 3. Filters (Time & Type)
         // Time Filter
         const now = new Date();
         if (timeFilter === 'THIS_WEEK') {
@@ -243,21 +226,10 @@ export const Dashboard = () => {
             summaries = summaries.filter(c => c.netBalance < 0);
         }
 
-        // 4. Sorting: 
-        // Rule: Active (Non-zero) first (sorted by date), Then Settled (Zero) last (sorted by date).
-        summaries.sort((a, b) => {
-            const aIsSettled = a.netBalance === 0;
-            const bIsSettled = b.netBalance === 0;
-
-            if (aIsSettled && !bIsSettled) return 1; // a is settled, put it after b
-            if (!aIsSettled && bIsSettled) return -1; // b is settled, put a before b
-
-            // Both have same settled status, sort by date desc
-            return b.lastActivity.getTime() - a.lastActivity.getTime();
-        });
+        // 4. Sorting: Date Descending
+        summaries.sort((a, b) => b.lastActivity.getTime() - a.lastActivity.getTime());
 
         return {
-            incomingRequests: incoming,
             contactSummaries: summaries,
             availableCurrencies: Array.from(currencies).sort(),
             grandTotal: {
@@ -268,9 +240,11 @@ export const Dashboard = () => {
             }
         };
 
-    }, [debts, user, rates, filterType, timeFilter, selectedCurrency]);
+    }, [dashboardDebts, user, rates, filterType, timeFilter, selectedCurrency]);
 
-    const { incomingRequests, contactSummaries, grandTotal, availableCurrencies } = useMemoResult;
+    const { contactSummaries, grandTotal, availableCurrencies } = useMemoResult;
+    // Use the incoming requests directly from the hook
+    const incomingRequests = hookIncomingRequests;
     const { theme, toggleTheme } = useTheme();
 
     const isNetPositive = grandTotal.net >= 0;

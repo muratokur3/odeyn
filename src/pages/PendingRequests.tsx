@@ -6,7 +6,7 @@ import { useNavigate } from 'react-router-dom';
 import { useMemo } from 'react';
 
 export const PendingRequests = () => {
-    const { debts, loading } = useDebts();
+    const { incomingRequests: debts, loading } = useDebts();
     const { user } = useAuth();
     const navigate = useNavigate();
 

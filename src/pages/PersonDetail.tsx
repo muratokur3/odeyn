@@ -18,7 +18,7 @@ export const PersonDetail = () => {
     const { id } = useParams<{ id: string }>(); // This can be a userId or a contactId (phone number)
     const { user } = useAuth();
     const navigate = useNavigate();
-    const { debts, loading } = useDebts();
+    const { allDebts: debts, loading } = useDebts();
     const [rates, setRates] = useState<CurrencyRates | null>(null);
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [isRegisteredUser, setIsRegisteredUser] = useState(false);

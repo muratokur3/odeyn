@@ -13,11 +13,11 @@ export interface Notification {
 }
 
 export const useNotifications = () => {
-    const { debts } = useDebts();
+    const { allDebts: debts } = useDebts();
     const { user } = useAuth();
 
     const notifications = useMemo(() => {
-        if (!user) return [];
+        if (!user || !debts) return [];
         const notifs: Notification[] = [];
         const now = new Date();
 

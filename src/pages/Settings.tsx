@@ -67,7 +67,7 @@ const SectionHeader = ({ title }: { title: string }) => (
 export const Settings = () => {
     const navigate = useNavigate();
     const { user } = useAuth(); // Get current user
-    const { debts: deletedDebts, loading } = useDebts(true);
+    const { allDebts: deletedDebts, loading } = useDebts(true);
 
     const [activeTab, setActiveTab] = useState<'GENERAL' | 'TRASH'>('GENERAL');
 
