@@ -3,8 +3,8 @@ import { BottomNav } from './BottomNav';
 
 export const Layout = () => {
     return (
-        <div className="h-[100dvh] flex flex-col bg-background text-text-primary font-sans overflow-hidden">
-            <main className="flex-1 overflow-y-auto w-full relative scroll-smooth scrollbar-hide">
+        <div className="min-h-screen bg-background text-text-primary font-sans relative">
+            <main className="w-full pb-24">
                 <Outlet />
             </main>
             <BottomNav />

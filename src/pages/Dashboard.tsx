@@ -4,17 +4,16 @@ import { useAuth } from '../hooks/useAuth';
 import { useContacts } from '../hooks/useContacts';
 import { useContactName } from '../hooks/useContactName';
 import { ContactRow } from '../components/ContactRow';
-import { CreateDebtModal } from '../components/CreateDebtModal';
 import { NotificationsModal } from '../components/NotificationsModal';
 import { useNotifications } from '../hooks/useNotifications';
 import { useNavigate } from 'react-router-dom';
-import { Plus, Wallet, Bell, Sun, Moon, ArrowRight } from 'lucide-react';
-import { createDebt } from '../services/db';
+import { Wallet, Bell, Sun, Moon, ArrowRight } from 'lucide-react';
+
 import { formatCurrency } from '../utils/format';
 import { useTheme } from '../context/ThemeContext';
 import { fetchRates, convertToTRY, type CurrencyRates } from '../services/currency';
 import clsx from 'clsx';
-import type { Debt, Installment } from '../types';
+import type { Debt } from '../types';
 import { EditDebtModal } from '../components/EditDebtModal';
 import { updateDebt } from '../services/db';
 import { cleanPhone as cleanPhoneNumber } from '../utils/phoneUtils';
@@ -39,7 +38,7 @@ export const Dashboard = () => {
     const { dashboardDebts, incomingRequests: hookIncomingRequests, loading } = useDebts();
     const { user } = useAuth();
     const navigate = useNavigate();
-    const [showCreateModal, setShowCreateModal] = useState(false);
+
     const [showFilters, setShowFilters] = useState(false);
     const [showNotifications, setShowNotifications] = useState(false);
     const { notifications } = useNotifications();
@@ -56,42 +55,7 @@ export const Dashboard = () => {
         fetchRates().then(setRates);
     }, []);
 
-    const handleCreateDebt = async (
-        borrowerId: string,
-        borrowerName: string,
-        amount: number,
-        type: 'LENDING' | 'BORROWING',
-        currency: string,
-        note?: string,
-        dueDate?: Date,
-        installments?: Installment[],
-        canBorrowerAddPayment?: boolean,
-        requestApproval?: boolean,
-        initialPayment?: number
-    ) => {
-        if (!user) return;
-        try {
-            const targetId = borrowerId.length <= 15 ? cleanPhoneNumber(borrowerId) : borrowerId;
-            await createDebt(
-                user.uid,
-                user.displayName || 'Bilinmeyen',
-                targetId,
-                borrowerName,
-                amount,
-                type,
-                currency,
-                note,
-                dueDate,
-                installments,
-                canBorrowerAddPayment,
-                requestApproval,
-                initialPayment || 0
-            );
-        } catch (error) {
-            console.error(error);
-            alert("Hata oluştu.");
-        }
-    };
+
 
     const handleUpdateDebt = async (debtId: string, data: Partial<Debt>) => {
         await updateDebt(debtId, data);
@@ -538,22 +502,7 @@ export const Dashboard = () => {
                 </div>
             </main>
 
-            {/* FIXED FAB VISUAL HACK: Pointer-events-none container to constrain width */}
-            <div className="fixed bottom-0 left-0 right-0 w-full max-w-3xl mx-auto h-0 z-50 pointer-events-none">
-                <button
-                    onClick={() => setShowCreateModal(true)}
-                    className="absolute bottom-24 right-6 bg-blue-600 hover:bg-blue-700 text-white w-14 h-14 rounded-full shadow-lg shadow-blue-600/30 flex items-center justify-center transition-transform active:scale-95 pointer-events-auto"
-                >
-                    <Plus size={28} strokeWidth={2.5} />
-                </button>
-            </div>
 
-            {/* Modals */}
-            <CreateDebtModal
-                isOpen={showCreateModal}
-                onClose={() => setShowCreateModal(false)}
-                onSubmit={handleCreateDebt}
-            />
 
             <NotificationsModal
                 isOpen={showNotifications}

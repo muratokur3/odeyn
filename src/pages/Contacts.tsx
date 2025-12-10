@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { getContacts, addContact, deleteContact, updateContact } from '../services/db';
 import type { Contact } from '../types';
-import { Plus, Search, ArrowLeft, Wallet, X } from 'lucide-react';
+import { Search, ArrowLeft, Wallet, X } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { SwipeableItem } from '../components/SwipeableItem';
 import { Avatar } from '../components/Avatar';
@@ -122,12 +122,7 @@ export const Contacts = () => {
         setShowDebtModal(false);
     };
 
-    const openAddModal = () => {
-        setEditingContact(null);
-        setName('');
-        setPhone('');
-        setShowModal(true);
-    };
+
 
     const openEditModal = (contact: Contact) => {
         setEditingContact(contact);
@@ -160,7 +155,7 @@ export const Contacts = () => {
                 </div>
             </header>
 
-            <main className="max-w-2xl mx-auto p-4 space-y-4">
+            <main className="max-w-2xl mx-auto p-4 space-y-4 pb-24">
                 {/* Search */}
                 <div className="relative">
                     <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
@@ -234,12 +229,7 @@ export const Contacts = () => {
             </main>
 
             {/* FAB */}
-            <button
-                onClick={openAddModal}
-                className="fixed bottom-24 right-6 bg-primary text-white p-4 rounded-full shadow-lg hover:bg-blue-600 active:scale-90 transition-all z-20"
-            >
-                <Plus size={24} />
-            </button >
+            {/* FAB Removed per new navigation logic */}
 
             {/* Modal */}
             {
