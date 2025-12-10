@@ -25,7 +25,7 @@ export const useDebts = (includeDeleted = false) => {
         });
 
         return () => unsubscribe();
-    }, [user, includeDeleted]);
+    }, [user?.uid, includeDeleted]);
 
     return { debts, loading };
 };

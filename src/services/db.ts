@@ -14,7 +14,8 @@ import {
     deleteDoc,
     getDoc,
     setDoc,
-    updateDoc
+    updateDoc,
+    writeBatch
 } from 'firebase/firestore';
 import { db } from './firebase';
 import type { Debt, DebtStatus, PaymentLog, User, Contact, Installment } from '../types';
@@ -32,11 +33,13 @@ export const createDebt = async (
     dueDate?: Date,
     installments?: Installment[],
     canBorrowerAddPayment?: boolean,
-    requestApproval?: boolean
+    requestApproval?: boolean,
+    initialPayment: number = 0
 ) => {
     try {
         const isLending = type === 'LENDING';
 
+        // ... (existing logic for target determination) ...
         // Determine if targetUserId is a phone number or UID
         // If it's a phone number (length <= 15 and digits), try to find a user
         let finalTargetId = targetUserId;
@@ -58,16 +61,9 @@ export const createDebt = async (
         const borrowerName = isLending ? targetUserName : currentUserName;
 
         // CHECK PREFERENCES: Check if the counterparty has auto-approve enabled
-        // The counterparty is the one who did NOT create the debt. 
-        // If I am lending (I create), counterparty is borrower.
-        // If I am borrowing (I create), counterparty is lender.
         const counterpartyId = isLending ? borrowerId : lenderId;
 
         let initialStatus: DebtStatus = 'PENDING';
-
-        // Only check preferences if counterparty is a real user (has a UID length > 15 usually implies uid, but here we know finalTargetId logic)
-        // If finalTargetId is a phone number, they are not a system user yet (or we handled it above).
-        // logic: finalTargetId is definitely a UID if we found a user.
 
         if (counterpartyId.length > 20) { // Simple check for UID vs Phone
             const counterpartyUser = await getDoc(doc(db, 'users', counterpartyId));
@@ -84,13 +80,26 @@ export const createDebt = async (
             initialStatus = 'PENDING';
         }
 
+        // Calculate amounts
+        const remainingAmount = amount - initialPayment;
+        // If initial payment covers everything (unlikely but possible), status might need to be PAID if auto-approved?
+        // But usually down payment is partial. 
+
+        // If remaining is 0 and status was ACTIVE, it becomes PAID immediately.
+        if (remainingAmount <= 0 && initialStatus === 'ACTIVE') {
+            initialStatus = 'PAID';
+        } else if (amount > remainingAmount && remainingAmount > 0 && initialStatus === 'ACTIVE') {
+            initialStatus = 'PARTIALLY_PAID';
+        }
+
+
         const debtData = {
             lenderId,
             lenderName,
             borrowerId,
             borrowerName,
             originalAmount: amount,
-            remainingAmount: amount,
+            remainingAmount: remainingAmount,
             currency,
             status: initialStatus,
             participants: [lenderId, borrowerId],
@@ -102,10 +111,19 @@ export const createDebt = async (
             ...(canBorrowerAddPayment && { canBorrowerAddPayment }),
         };
 
+        // Use batch or transaction? 
+        // Simple addDoc is fine, but we need logs.
+        // Let's use runTransaction or just batch to be safe, but since createDebt was simple, 
+        // we can just stick to addDoc + subcollection adds. Atomic is better but for MVP...
+        // Actually, let's keep it simple as implemented before.
+
         const docRef = await addDoc(collection(db, 'debts'), debtData);
 
-        // Create initial log
-        await addDoc(collection(db, `debts/${docRef.id}/logs`), {
+        const batch = writeBatch(db); // Firestore batch for logs
+
+        // Log 1: Creation
+        const log1Ref = doc(collection(db, `debts/${docRef.id}/logs`));
+        batch.set(log1Ref, { // Using setDoc for specific ID if generated, or just addDoc. Batch needs ref.
             type: 'INITIAL_CREATION',
             previousRemaining: amount,
             newRemaining: amount,
@@ -113,6 +131,22 @@ export const createDebt = async (
             timestamp: serverTimestamp(),
             note: 'Borç oluşturuldu',
         });
+
+        // Log 2: Initial Payment (if any)
+        if (initialPayment > 0) {
+            const log2Ref = doc(collection(db, `debts/${docRef.id}/logs`));
+            batch.set(log2Ref, {
+                type: 'PAYMENT',
+                amountPaid: initialPayment,
+                previousRemaining: amount,
+                newRemaining: remainingAmount,
+                performedBy: currentUserId,
+                timestamp: serverTimestamp(), // Ideally slightly after, but serverTimestamp is resolution
+                note: 'Peşinat / İlk Ödeme'
+            });
+        }
+
+        await batch.commit();
 
         return docRef.id;
     } catch (error) {

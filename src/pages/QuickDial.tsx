@@ -81,7 +81,7 @@ export const QuickDial = () => {
 
         const timer = setTimeout(search, 300);
         return () => clearTimeout(timer);
-    }, [phoneNumber, user]);
+    }, [phoneNumber, user?.uid]);
 
 
     const handleCardClick = () => {
@@ -103,7 +103,8 @@ export const QuickDial = () => {
         dueDate?: Date,
         installments?: any[],
         canBorrowerAddPayment?: boolean,
-        requestApproval?: boolean
+        requestApproval?: boolean,
+        initialPayment?: number
     ) => {
         if (!user) return;
         await createDebt(
@@ -118,7 +119,8 @@ export const QuickDial = () => {
             dueDate,
             installments,
             canBorrowerAddPayment,
-            requestApproval
+            requestApproval,
+            initialPayment || 0
         );
         setShowCreateModal(false);
         setPhoneNumber('');

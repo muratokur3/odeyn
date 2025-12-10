@@ -15,7 +15,7 @@ export const useContacts = () => {
             setContacts([]);
             setLoading(false);
         }
-    }, [user]);
+    }, [user?.uid]);
 
     const loadContacts = async () => {
         if (!user) return;

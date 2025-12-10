@@ -35,5 +35,5 @@ export const usePresence = () => {
                 lastSeen: serverTimestamp()
             }).catch(console.error);
         };
-    }, [user]);
+    }, [user?.uid]);
 };
