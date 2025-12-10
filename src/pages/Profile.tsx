@@ -51,7 +51,7 @@ export const Profile = () => {
         if (user) {
             setFormData({
                 displayName: user.displayName || '',
-                email: user.email || '',
+                email: user.email || user.recoveryEmail || '',
                 phoneNumber: user.phoneNumber || ''
             });
         }
@@ -238,7 +238,7 @@ export const Profile = () => {
                                 />
                             ) : (
                                 <span className="font-medium text-gray-900 dark:text-white truncate block max-w-[200px]">
-                                    {user?.email}
+                                    {user?.email || user?.recoveryEmail || 'Belirtilmemiş'}
                                 </span>
                             )}
                         </div>

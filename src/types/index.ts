@@ -6,6 +6,7 @@ export interface User {
     displayName: string;
     createdAt: Timestamp;
     email?: string;
+    recoveryEmail?: string;
     photoURL?: string;
     savedContacts?: string[]; // List of UIDs
     preferences?: {

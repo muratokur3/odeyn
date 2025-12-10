@@ -33,7 +33,7 @@ export const updateUserProfile = async (userId: string, data: ProfileUpdateData)
         const firestoreData: any = {
             updatedAt: serverTimestamp(),
             ...(data.displayName && { displayName: data.displayName }),
-            ...(data.email && { email: data.email }),
+            ...(data.email && { email: data.email, recoveryEmail: data.email }),
             ...(data.phoneNumber && { phoneNumber: data.phoneNumber }), // Phone updated in DB only
             ...(data.photoURL && { photoURL: data.photoURL })
         };
