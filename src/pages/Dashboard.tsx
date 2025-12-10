@@ -50,7 +50,6 @@ export const Dashboard = () => {
     // State
     const [filterType, setFilterType] = useState<FilterType>('ALL');
     const [timeFilter, setTimeFilter] = useState<TimeFilter>('ALL');
-    const [selectedCurrency, setSelectedCurrency] = useState<string>('ALL');
     const [rates, setRates] = useState<CurrencyRates | null>(null);
 
     useEffect(() => {
@@ -114,46 +113,53 @@ export const Dashboard = () => {
         if (!user || !rates) return {
             contactSummaries: [],
             availableCurrencies: [],
-            grandTotal: { receivables: 0, payables: 0, net: 0, currency: 'TRY' }
+            totalsByCurrency: {} as Record<string, { receivables: number, payables: number, net: number, currency: string }>,
+            grandTotalInTRY: { receivables: 0, payables: 0, net: 0, currency: 'TRY' }
         };
 
         const contactMap = new Map<string, {
             name: string;
-            balance: number; // Net balance in base currency
-            // Note: We might want multicoorrency balance per contact later, but for now filtering is global.
-            // Actually, if selectedCurrency is specific, we only sum that.
+            balance: number; // Net balance in base currency (TRY)
             lastActivity: Date;
             lastSnippet: string;
         }>();
 
-        let totalReceivables = 0;
-        let totalPayables = 0;
+        const totalsByCurrency: Record<string, { receivables: number, payables: number, net: number, currency: string }> = {};
         const currencies = new Set<string>();
 
-        // 1. Process Dashboard Debts (The Main List)
+        // 1. Process Dashboard Debts
         dashboardDebts.forEach(d => {
-            // Collect currencies
-            if (d.currency) currencies.add(d.currency);
+            const currency = d.currency || 'TRY';
+            currencies.add(currency);
 
-            // Global Currency Filter Check
-            if (selectedCurrency !== 'ALL' && (d.currency || 'TRY') !== selectedCurrency) {
-                return;
+            if (!totalsByCurrency[currency]) {
+                totalsByCurrency[currency] = { receivables: 0, payables: 0, net: 0, currency };
             }
 
             const isActiveForBalance = d.status === 'ACTIVE' || d.status === 'PARTIALLY_PAID' || d.status === 'PENDING';
-            // Note: We include PENDING here because dashboardDebts ONLY contains pending items if I AM THE CREATOR.
-            // And the rule is: "If I created it, it reflects on my balance immediately."
+            // PENDING included per user rule: "Creator sees it immediately"
 
-            // Identify Other Party
             const isLender = d.lenderId === user.uid;
             const otherId = isLender ? d.borrowerId : d.lenderId;
             const fallbackName = isLender ? d.borrowerName : d.lenderName;
 
-            let displayName = fallbackName;
+            // Global Totals
+            if (isActiveForBalance) {
+                if (isLender) {
+                    totalsByCurrency[currency].receivables += d.remainingAmount;
+                    totalsByCurrency[currency].net += d.remainingAmount;
+                } else {
+                    totalsByCurrency[currency].payables += d.remainingAmount;
+                    totalsByCurrency[currency].net -= d.remainingAmount;
+                }
+            }
 
+            // Contact Summaries
             if (!contactMap.has(otherId)) {
+                // Resolve name if possible
+                let displayName = fallbackName;
                 const resolution = resolveName(otherId, fallbackName);
-                displayName = resolution.displayName;
+                if (resolution.displayName) displayName = resolution.displayName;
 
                 contactMap.set(otherId, {
                     name: displayName,
@@ -163,53 +169,46 @@ export const Dashboard = () => {
                 });
             }
 
-            const existing = contactMap.get(otherId)!;
+            const contact = contactMap.get(otherId)!;
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const dAny = d as any;
+            const debtDate = dAny.created_at ? new Date(dAny.created_at.seconds * 1000) : (d.createdAt?.toDate() || new Date(0));
+            // Fixed property access by casting or checking specific Firestore data structure if needed. 
+            // Assuming d.createdAt is the standard based on Debt type.
 
-            // Calculate Amount
-            let amountToAdd = d.remainingAmount;
-            if (selectedCurrency === 'ALL') {
-                amountToAdd = convertToTRY(d.remainingAmount, d.currency || 'TRY', rates);
+            // Update last activity
+            if (debtDate > contact.lastActivity) {
+                contact.lastActivity = debtDate;
+                const action = d.status === 'PAID' ? 'Ödendi' : (isLender ? 'Borç verdin' : 'Borç aldın');
+                contact.lastSnippet = `${action} • ${formatDistanceToNow(debtDate, { addSuffix: true, locale: tr })}`;
             }
 
-            // Update Balance
+            // Update Contact Balance (Always converted to TRY for unified list)
             if (isActiveForBalance) {
+                // Rates is guaranteed not null here due to top check
+                const amountInTRY = convertToTRY(d.remainingAmount, currency, rates!);
                 if (isLender) {
-                    existing.balance += amountToAdd;
-                    totalReceivables += amountToAdd;
+                    contact.balance += amountInTRY;
                 } else {
-                    existing.balance -= amountToAdd;
-                    totalPayables += amountToAdd;
+                    contact.balance -= amountInTRY;
                 }
             }
-
-            // Update Last Activity
-            const debtDate = d.createdAt?.toDate() || new Date(0);
-            if (debtDate > existing.lastActivity) {
-                existing.lastActivity = debtDate;
-                const action = d.status === 'PAID' ? 'Ödendi' : (isLender ? 'Borç verdin' : 'Borç aldın');
-                existing.lastSnippet = `${action} • ${formatDistanceToNow(debtDate, { addSuffix: true, locale: tr })}`;
-            }
-
-            contactMap.set(otherId, existing);
         });
 
-        // 2. Convert Map to List & Filter Zero Balances
+        // 2. Convert Map to List & Filter
         let summaries: ContactSummary[] = Array.from(contactMap.entries())
             .map(([id, data]) => ({
                 id,
                 name: data.name,
                 netBalance: data.balance,
-                currency: selectedCurrency === 'ALL' ? 'TRY' : selectedCurrency,
+                currency: 'TRY', // Contact list is unified in TRY
                 lastActivity: data.lastActivity,
                 lastActionSnippet: data.lastSnippet,
                 status: getContactStatus(id)
             }))
             .filter(c => Math.abs(c.netBalance) > 0.01);
-        // STRICT FILTER: "anasayfada ödeşildi diye bir şey görmek istemiyorum"
-        // We only show contacts with non-zero balance.
 
         // 3. Filters (Time & Type)
-        // Time Filter
         const now = new Date();
         if (timeFilter === 'THIS_WEEK') {
             const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
@@ -219,35 +218,43 @@ export const Dashboard = () => {
             summaries = summaries.filter(c => c.lastActivity >= oneMonthAgo);
         }
 
-        // Type Filter (Receivables / Payables)
         if (filterType === 'RECEIVABLES') {
             summaries = summaries.filter(c => c.netBalance > 0);
         } else if (filterType === 'PAYABLES') {
             summaries = summaries.filter(c => c.netBalance < 0);
         }
 
-        // 4. Sorting: Date Descending
+        // 4. Sorting
         summaries.sort((a, b) => b.lastActivity.getTime() - a.lastActivity.getTime());
+
+        // 5. Calculate Grand Total in TRY
+        const grandTotalInTRY = { receivables: 0, payables: 0, net: 0, currency: 'TRY' };
+        Object.values(totalsByCurrency).forEach(t => {
+            // Rates guaranteed not null
+            grandTotalInTRY.receivables += convertToTRY(t.receivables, t.currency, rates!);
+            grandTotalInTRY.payables += convertToTRY(t.payables, t.currency, rates!);
+            grandTotalInTRY.net += convertToTRY(t.net, t.currency, rates!);
+        });
 
         return {
             contactSummaries: summaries,
             availableCurrencies: Array.from(currencies).sort(),
-            grandTotal: {
-                receivables: totalReceivables,
-                payables: totalPayables,
-                net: totalReceivables - totalPayables,
-                currency: selectedCurrency === 'ALL' ? 'TRY' : selectedCurrency
-            }
+            totalsByCurrency,
+            grandTotalInTRY
         };
 
-    }, [dashboardDebts, user, rates, filterType, timeFilter, selectedCurrency]);
+    }, [dashboardDebts, user, rates, filterType, timeFilter]);
 
-    const { contactSummaries, grandTotal, availableCurrencies } = useMemoResult;
+    const { contactSummaries, totalsByCurrency, grandTotalInTRY } = useMemoResult;
     // Use the incoming requests directly from the hook
     const incomingRequests = hookIncomingRequests;
     const { theme, toggleTheme } = useTheme();
 
-    const isNetPositive = grandTotal.net >= 0;
+    const [toggledCards, setToggledCards] = useState<Record<string, boolean>>({});
+
+    const toggleCardCurrency = (currency: string) => {
+        setToggledCards(prev => ({ ...prev, [currency]: !prev[currency] }));
+    };
 
     if (loading) return <div className="flex justify-center items-center h-screen text-lg text-text-primary">Yükleniyor...</div>;
 
@@ -256,7 +263,6 @@ export const Dashboard = () => {
             {/* Header */}
             <div className="bg-white dark:bg-slate-800 px-4 pt-4 pb-2 flex justify-between items-center shadow-sm z-50 sticky top-0">
                 <div className="flex items-center gap-2">
-                    {/* Brand Logo / Text */}
                     {/* Brand Logo / Text */}
                     <div className="flex items-center gap-2">
                         <div className="bg-blue-600 dark:bg-blue-500 rounded-lg p-1.5 shadow-sm">
@@ -280,85 +286,130 @@ export const Dashboard = () => {
                 </div>
             </div>
 
-            {/* HERO CARD - NET WORTH */}
-            <div className="px-4 py-4 bg-white dark:bg-slate-800 pb-6 rounded-b-3xl shadow-sm mb-4">
-                <div className={clsx(
-                    "rounded-3xl p-6 shadow-xl text-white transition-all relative overflow-hidden",
-                    isNetPositive
-                        ? "bg-gradient-to-br from-emerald-600 to-teal-800 shadow-emerald-900/20"
-                        : "bg-gradient-to-br from-rose-600 to-red-800 shadow-rose-900/20"
-                )}>
-                    {/* Pattern */}
-                    <div className="absolute top-0 right-0 p-4 opacity-10">
-                        <Wallet size={120} />
+            {/* HERO CARDS - HORIZONTAL SCROLL */}
+            <div className="mb-4 overflow-hidden">
+                {/* Scroll Container */}
+                <div className="flex gap-4 overflow-x-auto pb-6 px-4 snap-x snap-mandatory scrollbar-hide pt-4">
+
+                    {/* 1. FIXED GRAND TOTAL CARD (Net Assets in TRY) */}
+                    <div className="snap-center shrink-0 w-[85%] max-w-[340px]">
+                        <div className={clsx(
+                            "rounded-3xl p-6 shadow-xl text-white transition-all relative overflow-hidden h-full flex flex-col justify-between",
+                            grandTotalInTRY.net >= 0
+                                ? "bg-gradient-to-br from-indigo-600 to-purple-800 shadow-indigo-900/20"
+                                : "bg-gradient-to-br from-rose-600 to-red-800 shadow-rose-900/20"
+                        )}>
+                            {/* Pattern */}
+                            <div className="absolute top-0 right-0 p-4 opacity-10">
+                                <Wallet size={120} />
+                            </div>
+
+                            <div className="relative z-10">
+                                <div className="flex items-center justify-between mb-4 opacity-90">
+                                    <div className="flex items-center gap-2">
+                                        <Wallet size={18} />
+                                        <span className="text-sm font-medium">Toplam Varlık</span>
+                                    </div>
+                                    <span className="text-xs bg-white/20 px-2 py-0.5 rounded-md font-bold backdrop-blur-sm">TRY</span>
+                                </div>
+
+                                <div className="text-4xl font-bold tracking-tight mb-8 tabular-nums">
+                                    {formatCurrency(grandTotalInTRY.net, 'TRY')}
+                                </div>
+
+                                <div className="flex gap-4 pt-4 border-t border-white/10">
+                                    <div className="flex-1">
+                                        <p className="text-xs opacity-70 mb-1 font-medium">Toplam Alacak</p>
+                                        <p className="font-bold text-lg text-emerald-100 tabular-nums">
+                                            +{formatCurrency(grandTotalInTRY.receivables, 'TRY')}
+                                        </p>
+                                    </div>
+                                    <div className="w-px bg-white/10"></div>
+                                    <div className="flex-1">
+                                        <p className="text-xs opacity-70 mb-1 font-medium">Toplam Borç</p>
+                                        <p className="font-bold text-lg text-rose-100 tabular-nums">
+                                            -{formatCurrency(grandTotalInTRY.payables, 'TRY')}
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
                     </div>
 
-                    <div className="relative z-10">
-                        <div className="flex items-center justify-between mb-2 opacity-90">
-                            <div className="flex items-center gap-2">
-                                <Wallet size={18} />
-                                <span className="text-sm font-medium">Net Varlık ({selectedCurrency === 'ALL' ? 'Tahmini' : selectedCurrency})</span>
-                            </div>
-                            <span className="text-xs bg-white/20 px-2 py-0.5 rounded-md font-bold backdrop-blur-sm">{grandTotal.currency}</span>
-                        </div>
+                    {/* 2. DYNAMIC CURRENCY CARDS */}
+                    {Object.values(totalsByCurrency)
+                        .sort((a, b) => (a.currency === 'TRY' ? -1 : b.currency === 'TRY' ? 1 : 0))
+                        .map((total) => {
+                            const isNetPositive = total.net >= 0;
+                            const isToggled = toggledCards[total.currency];
+                            const displayCurrency = isToggled ? 'TRY' : total.currency;
 
-                        <div className="text-4xl font-bold tracking-tight mb-6 tabular-nums">
-                            {formatCurrency(grandTotal.net, grandTotal.currency)}
-                        </div>
+                            // values to display
+                            // values to display
+                            const net = (isToggled && rates) ? convertToTRY(total.net, total.currency, rates) : total.net;
+                            const receivables = (isToggled && rates) ? convertToTRY(total.receivables, total.currency, rates) : total.receivables;
+                            const payables = (isToggled && rates) ? convertToTRY(total.payables, total.currency, rates) : total.payables;
 
-                        <div className="flex gap-4 pt-4 border-t border-white/10">
-                            <div className="flex-1">
-                                <p className="text-xs opacity-70 mb-1 font-medium">Toplam Alacak</p>
-                                <p className="font-bold text-lg text-emerald-100 tabular-nums">
-                                    +{formatCurrency(grandTotal.receivables, grandTotal.currency)}
-                                </p>
-                            </div>
-                            <div className="w-px bg-white/10"></div>
-                            <div className="flex-1">
-                                <p className="text-xs opacity-70 mb-1 font-medium">Toplam Borç</p>
-                                <p className="font-bold text-lg text-rose-100 tabular-nums">
-                                    -{formatCurrency(grandTotal.payables, grandTotal.currency)}
-                                </p>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                {/* CURRENCY SELECTOR */}
-                <div className="mt-4">
-                    <div className="flex gap-2 overflow-x-auto scrollbar-hide pb-2">
-                        <button
-                            onClick={() => setSelectedCurrency('ALL')}
-                            className={clsx(
-                                "px-4 py-2 rounded-xl text-sm font-semibold whitespace-nowrap transition-all border",
-                                selectedCurrency === 'ALL'
-                                    ? "bg-gray-900 text-white border-gray-900 dark:bg-white dark:text-slate-900"
-                                    : "bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200 dark:bg-slate-700 dark:text-gray-300"
-                            )}
-                        >
-                            Tümü (₺)
-                        </button>
-                        {availableCurrencies.map(currency => {
-                            if (currency === 'TRY' && selectedCurrency === 'ALL') return null;
-                            if (currency === 'TRY') {
-                                // Optional: Decide how to show TRY option when filtering
-                            }
                             return (
-                                <button
-                                    key={currency}
-                                    onClick={() => setSelectedCurrency(currency)}
-                                    className={clsx(
-                                        "px-4 py-2 rounded-xl text-sm font-semibold whitespace-nowrap transition-all border",
-                                        selectedCurrency === currency
-                                            ? "bg-gray-900 text-white border-gray-900 dark:bg-white dark:text-slate-900"
-                                            : "bg-gray-100 text-gray-600 border-transparent hover:bg-gray-200 dark:bg-slate-700 dark:text-gray-300"
-                                    )}
-                                >
-                                    {currency}
-                                </button>
+                                <div key={total.currency} className="snap-center shrink-0 w-[85%] max-w-[340px]">
+                                    <div className={clsx(
+                                        "rounded-3xl p-6 shadow-xl text-white transition-all relative overflow-hidden h-full flex flex-col justify-between",
+                                        isNetPositive
+                                            ? "bg-gradient-to-br from-emerald-600 to-teal-800 shadow-emerald-900/20"
+                                            : "bg-gradient-to-br from-rose-600 to-red-800 shadow-rose-900/20"
+                                    )}>
+                                        {/* Pattern */}
+                                        <div className="absolute top-0 right-0 p-4 opacity-10">
+                                            <Wallet size={120} />
+                                        </div>
+
+                                        <div className="relative z-10">
+                                            <div className="flex items-center justify-between mb-4 opacity-90">
+                                                <div className="flex items-center gap-2">
+                                                    <Wallet size={18} />
+                                                    <span className="text-sm font-medium">Net Varlık ({total.currency})</span>
+                                                </div>
+
+                                                {total.currency !== 'TRY' && (
+                                                    <button
+                                                        onClick={() => toggleCardCurrency(total.currency)}
+                                                        className="text-xs bg-white/20 px-2 py-1 rounded-md font-bold backdrop-blur-sm hover:bg-white/30 transition-colors active:scale-95"
+                                                    >
+                                                        {isToggled ? `Çevir: ${total.currency}` : 'TRY Göster'}
+                                                    </button>
+                                                )}
+                                                {total.currency === 'TRY' && (
+                                                    <span className="text-xs bg-white/20 px-2 py-0.5 rounded-md font-bold backdrop-blur-sm">{total.currency}</span>
+                                                )}
+                                            </div>
+
+                                            <div className="text-4xl font-bold tracking-tight mb-8 tabular-nums transition-all duration-300">
+                                                {formatCurrency(net, displayCurrency)}
+                                            </div>
+
+                                            <div className="flex gap-4 pt-4 border-t border-white/10">
+                                                <div className="flex-1">
+                                                    <p className="text-xs opacity-70 mb-1 font-medium">Toplam Alacak</p>
+                                                    <p className="font-bold text-lg text-emerald-100 tabular-nums">
+                                                        +{formatCurrency(receivables, displayCurrency)}
+                                                    </p>
+                                                </div>
+                                                <div className="w-px bg-white/10"></div>
+                                                <div className="flex-1">
+                                                    <p className="text-xs opacity-70 mb-1 font-medium">Toplam Borç</p>
+                                                    <p className="font-bold text-lg text-rose-100 tabular-nums">
+                                                        -{formatCurrency(payables, displayCurrency)}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
                             );
-                        })}
-                    </div>
+                        })
+                    }
+                    {/* Padding element for right-side peek if needed, but padding on container handles it usually */}
+                    <div className="w-2 shrink-0"></div>
                 </div>
             </div>
 
