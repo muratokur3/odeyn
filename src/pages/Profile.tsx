@@ -1,10 +1,11 @@
 import { useState, useRef, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
-import { useTheme } from '../context/ThemeContext'; // Assuming ThemeContext exists based on Dashboard viewing
+import { useTheme } from '../context/ThemeContext';
 import { logoutUser } from '../services/auth';
-import { updateUserProfile, uploadProfileImage } from '../services/profile';
+import { updateUserProfile } from '../services/profile';
+import { uploadProfileImage } from '../services/storage';
 import {
-    Settings, Phone, Camera, Edit2, Loader2, Mail,
+    Settings, Phone, Camera, Loader2, Mail,
     Save, ChevronRight, Moon, Sun,
     ShieldCheck, HelpCircle, CheckCircle2
 } from 'lucide-react';
@@ -42,7 +43,6 @@ export const Profile = () => {
         phoneNumber: ''
     });
 
-    const [selectedFile, setSelectedFile] = useState<File | null>(null);
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
     const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -64,11 +64,36 @@ export const Profile = () => {
         }
     };
 
-    const handleFileSelect = (e: React.ChangeEvent<HTMLInputElement>) => {
-        if (e.target.files && e.target.files[0]) {
+    // Unused but kept for structure if needed or remove
+    // const handleFileSelect = ... (This comes next in file)
+
+    const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
+        if (e.target.files && e.target.files[0] && user) {
             const file = e.target.files[0];
-            setSelectedFile(file);
-            setPreviewUrl(URL.createObjectURL(file));
+
+            // Immediate Upload flow
+            try {
+                setLoading(true);
+                // 1. Upload
+                const downloadURL = await uploadProfileImage(file, user.uid);
+
+                // 2. Update Profile
+                await updateUserProfile(user.uid, {
+                    photoURL: downloadURL
+                });
+
+                // 3. Update Local State
+                setPreviewUrl(downloadURL);
+                alert("Profil resmi güncellendi!");
+
+                // Reload to refresh auth state if needed, though onSnapshot in useAuth handles it mostly
+                // window.location.reload(); 
+            } catch (error: any) {
+                console.error("Upload error:", error);
+                alert("Resim yüklenirken hata oluştu: " + error.message);
+            } finally {
+                setLoading(false);
+            }
         }
     };
 
@@ -88,21 +113,16 @@ export const Profile = () => {
 
         setLoading(true);
         try {
-            let photoURL = user.photoURL || undefined;
-            if (selectedFile) {
-                photoURL = await uploadProfileImage(user.uid, selectedFile);
-            }
-
+            // Only update text fields here, photo is handled separately now
             await updateUserProfile(user.uid, {
                 displayName: formData.displayName,
                 email: formData.email,
-                phoneNumber: formData.phoneNumber,
-                photoURL
+                phoneNumber: formData.phoneNumber
             });
 
-            alert("Profil başarıyla güncellendi.");
+            alert("Profil bilgileri güncellendi.");
             setIsEditing(false);
-            window.location.reload();
+            window.location.reload(); // Force refresh to sync strict auth state
         } catch (error: any) {
             console.error(error);
             if (error.code === 'auth/requires-recent-login') {
@@ -123,7 +143,7 @@ export const Profile = () => {
             email: user?.email || '',
             phoneNumber: user?.phoneNumber || ''
         });
-        setSelectedFile(null);
+
         setPreviewUrl(null);
     };
 
@@ -145,12 +165,13 @@ export const Profile = () => {
                             />
                         </div>
 
-                        {/* Edit Badge Button on Avatar */}
+                        {/* Camera Button - Always visible or effectively triggers upload */}
                         <button
-                            onClick={() => isEditing ? fileInputRef.current?.click() : setIsEditing(true)}
-                            className="absolute bottom-1 right-1 p-2.5 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-colors border-2 border-white dark:border-slate-800 active:scale-95"
+                            disabled={loading}
+                            onClick={() => fileInputRef.current?.click()}
+                            className="absolute bottom-1 right-1 p-2.5 bg-blue-600 text-white rounded-full shadow-lg hover:bg-blue-700 transition-colors border-2 border-white dark:border-slate-800 active:scale-95 disabled:opacity-50"
                         >
-                            {isEditing ? <Camera size={18} /> : <Edit2 size={18} />}
+                            {loading ? <Loader2 size={18} className="animate-spin" /> : <Camera size={18} />}
                         </button>
 
                         <input
