@@ -10,12 +10,15 @@ interface EditDebtModalProps {
     onUpdate: (debtId: string, data: Partial<Debt>) => Promise<void>;
 }
 
+import { useModal } from '../context/ModalContext';
+
 export const EditDebtModal: React.FC<EditDebtModalProps> = ({ isOpen, onClose, debt, onUpdate }) => {
     const [amount, setAmount] = useState('');
     const [currency, setCurrency] = useState('TRY');
     const [note, setNote] = useState('');
     const [dueDate, setDueDate] = useState('');
     const [loading, setLoading] = useState(false);
+    const { showAlert } = useModal();
 
     const hasPayments = debt.originalAmount !== debt.remainingAmount;
 
@@ -56,7 +59,7 @@ export const EditDebtModal: React.FC<EditDebtModalProps> = ({ isOpen, onClose, d
             onClose();
         } catch (error) {
             console.error("Error updating debt:", error);
-            alert("Güncelleme sırasında bir hata oluştu.");
+            showAlert("Hata", "Güncelleme sırasında bir hata oluştu.", "error");
         } finally {
             setLoading(false);
         }

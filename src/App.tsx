@@ -23,36 +23,39 @@ const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
 };
 
 import { ThemeProvider } from './context/ThemeContext';
+import { ModalProvider } from './context/ModalContext';
 
 function App() {
   return (
     <ThemeProvider>
-      <div className="w-full max-w-3xl mx-auto min-h-screen bg-background shadow-2xl relative border-x border-border">
-        <Router>
-          <Routes>
-            <Route path="/login" element={<Login />} />
-            <Route path="/register" element={<Register />} />
+      <ModalProvider>
+        <div className="w-full max-w-3xl mx-auto min-h-screen bg-background shadow-2xl relative border-x border-border">
+          <Router>
+            <Routes>
+              <Route path="/login" element={<Login />} />
+              <Route path="/register" element={<Register />} />
 
-            <Route element={
-              <ProtectedRoute>
-                <Layout />
-              </ProtectedRoute>
-            }>
-              <Route path="/" element={<Dashboard />} />
-              <Route path="/receivables" element={<Dashboard />} />
-              <Route path="/payables" element={<Dashboard />} />
-              <Route path="/profile" element={<Profile />} />
-              <Route path="/debt/:id" element={<DebtDetail />} />
-              <Route path="/dial" element={<QuickDial />} />
-              <Route path="/tools" element={<Tools />} />
-              <Route path="/person/:id" element={<PersonDetail />} />
-              <Route path="/contacts" element={<Contacts />} />
-              <Route path="/settings" element={<Settings />} />
-              <Route path="/pending-requests" element={<PendingRequests />} />
-            </Route>
-          </Routes>
-        </Router>
-      </div>
+              <Route element={
+                <ProtectedRoute>
+                  <Layout />
+                </ProtectedRoute>
+              }>
+                <Route path="/" element={<Dashboard />} />
+                <Route path="/receivables" element={<Dashboard />} />
+                <Route path="/payables" element={<Dashboard />} />
+                <Route path="/profile" element={<Profile />} />
+                <Route path="/debt/:id" element={<DebtDetail />} />
+                <Route path="/dial" element={<QuickDial />} />
+                <Route path="/tools" element={<Tools />} />
+                <Route path="/person/:id" element={<PersonDetail />} />
+                <Route path="/contacts" element={<Contacts />} />
+                <Route path="/settings" element={<Settings />} />
+                <Route path="/pending-requests" element={<PendingRequests />} />
+              </Route>
+            </Routes>
+          </Router>
+        </div>
+      </ModalProvider>
     </ThemeProvider>
   );
 }

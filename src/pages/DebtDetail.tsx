@@ -15,12 +15,15 @@ import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import clsx from 'clsx';
 
+import { useModal } from '../context/ModalContext';
+
 export const DebtDetail = () => {
     const { id } = useParams();
     const navigate = useNavigate();
     const { debt, logs, loading } = useDebtDetails(id);
     const { user } = useAuth();
     const { pay } = usePayment();
+    const { showAlert, showConfirm } = useModal();
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
     const [selectedInstallmentId, setSelectedInstallmentId] = useState<string | undefined>(undefined);
@@ -31,16 +34,21 @@ export const DebtDetail = () => {
     const isBorrower = user?.uid === debt?.borrowerId;
 
     const handleDelete = async () => {
-        if (confirm("Bu borç kaydını silmek istediğinize emin misiniz? Çöp kutusuna taşınacaktır.")) {
-            if (debt) {
-                await softDeleteDebt(debt.id);
-                navigate(-1);
-            }
+        if (!debt) return;
+        const confirmed = await showConfirm(
+            "Borç Silme",
+            "Bu borç kaydını silmek istediğinize emin misiniz? Çöp kutusuna taşınacaktır."
+        );
+        if (confirmed) {
+            await softDeleteDebt(debt.id);
+            navigate(-1);
+            showAlert("Başarılı", "Kayıt silindi.", "success");
         }
     };
 
     const handleUpdate = async (debtId: string, data: Partial<Debt>) => {
         await updateDebt(debtId, data);
+        showAlert("Başarılı", "Borç güncellendi.", "success");
     };
 
     const handlePayment = async (amount: number, note: string) => {
@@ -48,10 +56,11 @@ export const DebtDetail = () => {
 
         if (isBorrower && !debt.canBorrowerAddPayment) {
             await declarePayment(debt.id, amount, note, user.uid, selectedInstallmentId);
-            alert("Ödeme bildirimi gönderildi. Alacaklı onayladığında düşülecektir.");
+            showAlert("Bildirim Gönderildi", "Ödeme bildirimi gönderildi. Alacaklı onayladığında düşülecektir.", "info");
         } else {
             // Lender OR Borrower with permission
             await pay(debt.id, amount, note);
+            showAlert("Başarılı", "Ödeme eklendi.", "success");
         }
         setIsPaymentModalOpen(false);
         setSelectedInstallmentId(undefined);

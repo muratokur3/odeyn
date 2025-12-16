@@ -11,11 +11,16 @@ import { CreateDebtModal } from '../components/CreateDebtModal';
 import { PhoneInput } from '../components/PhoneInput';
 import { createDebt } from '../services/db';
 
+import { useModal } from '../context/ModalContext';
+
 export const Contacts = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
+    const { showAlert, showConfirm } = useModal();
     const [contacts, setContacts] = useState<Contact[]>([]);
+
+    // ... (rest of states)
     const [loading, setLoading] = useState(true);
     const [searchTerm, setSearchTerm] = useState('');
     const [showModal, setShowModal] = useState(false);
@@ -66,27 +71,33 @@ export const Contacts = () => {
         try {
             if (editingContact) {
                 await updateContact(user.uid, editingContact.id, { name, phoneNumber: phone });
+                showAlert("Başarılı", "Kişi güncellendi.", "success");
             } else {
                 await addContact(user.uid, name, phone);
+                showAlert("Başarılı", "Kişi eklendi.", "success");
             }
             await loadContacts();
             closeModal();
         } catch (error) {
             console.error(error);
-            alert("İşlem sırasında bir hata oluştu.");
+            showAlert("Hata", "İşlem sırasında bir hata oluştu.", "error");
         } finally {
             setSubmitting(false);
         }
     };
 
     const handleDeleteContact = async (contactId: string) => {
-        if (!user || !confirm("Bu kişiyi silmek istediğinize emin misiniz?")) return;
+        if (!user) return;
+        const confirmed = await showConfirm("Kişi Sil", "Bu kişiyi silmek istediğinize emin misiniz?");
+        if (!confirmed) return;
+
         try {
             await deleteContact(user.uid, contactId);
             await loadContacts();
+            showAlert("Silindi", "Kişi başarıyla silindi.", "success");
         } catch (error) {
             console.error(error);
-            alert("Silme işlemi başarısız oldu.");
+            showAlert("Hata", "Silme işlemi başarısız oldu.", "error");
         }
     };
 

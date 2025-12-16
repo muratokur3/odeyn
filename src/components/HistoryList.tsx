@@ -4,8 +4,11 @@ import { tr } from 'date-fns/locale';
 import { formatCurrency } from '../utils/format';
 import { History, Wallet, Check, X, Clock } from 'lucide-react';
 import { confirmPayment, rejectPayment } from '../services/db';
+import { useAuth } from '../hooks/useAuth';
 import clsx from 'clsx';
 import { SwipeableItem } from './SwipeableItem';
+
+import { useModal } from '../context/ModalContext';
 
 interface HistoryListProps {
     logs: PaymentLog[];
@@ -15,23 +18,31 @@ interface HistoryListProps {
 }
 
 export const HistoryList: React.FC<HistoryListProps> = ({ logs, currency, isLender, debtId }) => {
+    const { showAlert, showConfirm } = useModal();
+    const { user } = useAuth();
+
     const handleConfirm = async (paymentId: string) => {
-        if (!confirm("Bu ödemeyi onaylıyor musunuz?")) return;
+        if (!user) return;
+        const confirmed = await showConfirm("Ödeme Onayı", "Bu ödemeyi onaylıyor musunuz?");
+        if (!confirmed) return;
         try {
-            await confirmPayment(debtId, paymentId);
+            await confirmPayment(debtId, paymentId, user.uid);
+            showAlert("Başarılı", "Ödeme onaylandı.", "success");
         } catch (error) {
             console.error(error);
-            alert("İşlem başarısız.");
+            showAlert("Hata", "İşlem başarısız veya yetkiniz yok.", "error");
         }
     };
 
     const handleReject = async (paymentId: string) => {
-        if (!confirm("Bu ödemeyi reddetmek istediğinize emin misiniz?")) return;
+        const confirmed = await showConfirm("Ödeme Reddi", "Bu ödemeyi reddetmek istediğinize emin misiniz?");
+        if (!confirmed) return;
         try {
             await rejectPayment(debtId, paymentId);
+            showAlert("Reddedildi", "Ödeme reddedildi.", "success");
         } catch (error) {
             console.error(error);
-            alert("İşlem başarısız.");
+            showAlert("Hata", "İşlem başarısız.", "error");
         }
     };
 

@@ -11,22 +11,11 @@ import {
 } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
 import { useNavigate } from 'react-router-dom';
+import clsx from 'clsx';
+import { useModal } from '../context/ModalContext';
 
 // Helper for masking phone (preserving existing logic)
-const formatPhoneNumber = (value: string) => {
-    const cleaned = ('' + value).replace(/\D/g, '');
-    let match = cleaned.match(/^(\d{0,3})(\d{0,3})(\d{0,2})(\d{0,2})$/);
-    if (match) {
-        if (cleaned.length === 0) return '';
-        let formatted = '';
-        if (match[1]) formatted += `(${match[1]}`;
-        if (match[2]) formatted += `) ${match[2]}`;
-        if (match[3]) formatted += ` ${match[3]}`;
-        if (match[4]) formatted += ` ${match[4]}`;
-        return formatted;
-    }
-    return value;
-};
+
 
 export const Profile = () => {
     const { user } = useAuth();
@@ -57,40 +46,28 @@ export const Profile = () => {
         }
     }, [user, isEditing]);
 
-    const handlePhoneChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const formatted = formatPhoneNumber(e.target.value);
-        if (formatted.length <= 15) {
-            setFormData(prev => ({ ...prev, phoneNumber: formatted }));
-        }
-    };
+
 
     // Unused but kept for structure if needed or remove
     // const handleFileSelect = ... (This comes next in file)
+
+    const { showAlert } = useModal();
+
+    // ...
 
     const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0] && user) {
             const file = e.target.files[0];
 
-            // Immediate Upload flow
             try {
                 setLoading(true);
-                // 1. Upload
                 const downloadURL = await uploadProfileImage(file, user.uid);
-
-                // 2. Update Profile
-                await updateUserProfile(user.uid, {
-                    photoURL: downloadURL
-                });
-
-                // 3. Update Local State
+                await updateUserProfile(user.uid, { photoURL: downloadURL });
                 setPreviewUrl(downloadURL);
-                alert("Profil resmi güncellendi!");
-
-                // Reload to refresh auth state if needed, though onSnapshot in useAuth handles it mostly
-                // window.location.reload(); 
+                showAlert("Başarılı", "Profil resmi güncellendi!", "success");
             } catch (error: any) {
                 console.error("Upload error:", error);
-                alert("Resim yüklenirken hata oluştu: " + error.message);
+                showAlert("Hata", "Resim yüklenirken hata oluştu: " + error.message, "error");
             } finally {
                 setLoading(false);
             }
@@ -102,34 +79,32 @@ export const Profile = () => {
 
         // Validation
         if (formData.displayName.length < 2) {
-            alert("İsim en az 2 karakter olmalıdır.");
+            showAlert("Uyarı", "İsim en az 2 karakter olmalıdır.", "warning");
             return;
         }
         const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
         if (!emailRegex.test(formData.email)) {
-            alert("Geçerli bir e-posta adresi giriniz.");
+            showAlert("Uyarı", "Geçerli bir e-posta adresi giriniz.", "warning");
             return;
         }
 
         setLoading(true);
         try {
-            // Only update text fields here, photo is handled separately now
             await updateUserProfile(user.uid, {
                 displayName: formData.displayName,
-                email: formData.email,
-                phoneNumber: formData.phoneNumber
+                email: formData.email
             });
 
-            alert("Profil bilgileri güncellendi.");
+            await showAlert("Başarılı", "Profil bilgileri güncellendi.", "success");
             setIsEditing(false);
-            window.location.reload(); // Force refresh to sync strict auth state
+            window.location.reload();
         } catch (error: any) {
             console.error(error);
             if (error.code === 'auth/requires-recent-login') {
-                alert("Güvenlik gereği işlem yapmak için yeniden giriş yapmalısınız.");
+                await showAlert("Güvenlik", "Güvenlik gereği işlem yapmak için yeniden giriş yapmalısınız.", "warning");
                 logoutUser();
             } else {
-                alert("Hata: " + error.message);
+                showAlert("Hata", "Hata: " + error.message, "error");
             }
         } finally {
             setLoading(false);
@@ -220,19 +195,16 @@ export const Profile = () => {
                         </div>
                         <div className="ml-4 flex-1">
                             <span className="text-xs text-gray-400 block mb-0.5">Telefon</span>
-                            {isEditing ? (
-                                <input
-                                    type="tel"
-                                    value={formData.phoneNumber}
-                                    onChange={handlePhoneChange}
-                                    className="w-full bg-transparent border-b border-gray-200 dark:border-slate-700 py-0.5 focus:outline-none focus:border-emerald-500 font-medium dark:text-white"
-                                    placeholder="(5XX) XXX XX XX"
-                                />
-                            ) : (
-                                <span className="font-medium text-gray-900 dark:text-white">
+                            <div className="flex items-center gap-2">
+                                <span className={clsx("font-medium", isEditing ? "text-gray-400 dark:text-gray-500" : "text-gray-900 dark:text-white")}>
                                     {user?.phoneNumber || 'Belirtilmemiş'}
                                 </span>
-                            )}
+                                {isEditing && (
+                                    <span className="text-[10px] bg-gray-100 dark:bg-slate-800 text-gray-500 px-2 py-0.5 rounded-full border border-gray-200 dark:border-slate-700">
+                                        Değiştirilemez
+                                    </span>
+                                )}
+                            </div>
                         </div>
                         {!isEditing && user?.phoneNumber && (
                             <div className="flex items-center gap-1.5 px-2.5 py-1 bg-emerald-50 dark:bg-emerald-900/20 rounded-full">

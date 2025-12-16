@@ -487,7 +487,7 @@ export const declarePayment = async (debtId: string, amount: number, note: strin
     }
 };
 
-export const confirmPayment = async (debtId: string, paymentId: string) => {
+export const confirmPayment = async (debtId: string, paymentId: string, currentUserId: string) => {
     try {
         const debtRef = doc(db, 'debts', debtId);
         const logRef = doc(db, 'debts', debtId, 'logs', paymentId);
@@ -502,6 +502,11 @@ export const confirmPayment = async (debtId: string, paymentId: string) => {
 
             const debtData = debtDoc.data() as Debt;
             const logData = logDoc.data() as PaymentLog;
+
+            // Security Check: Only Lender can confirm payments
+            if (debtData.lenderId !== currentUserId) {
+                throw new Error("Only the lender can confirm payments.");
+            }
 
             if (logData.status !== 'PENDING') {
                 throw new Error("Payment is not pending!");
@@ -626,9 +631,18 @@ export const restoreDebt = async (debtId: string) => {
     }
 };
 
-export const permanentlyDeleteDebt = async (debtId: string) => {
+export const permanentlyDeleteDebt = async (debtId: string, currentUserId: string) => {
     try {
         const debtRef = doc(db, 'debts', debtId);
+        const debtDoc = await getDoc(debtRef);
+
+        if (!debtDoc.exists()) return;
+
+        const data = debtDoc.data();
+        if (!data.participants.includes(currentUserId)) {
+            throw new Error("Unauthorized to delete this debt.");
+        }
+
         await deleteDoc(debtRef);
     } catch (error) {
         console.error("Error permanently deleting debt:", error);

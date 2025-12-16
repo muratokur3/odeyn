@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Lock, MessageSquare, Loader2, ArrowLeft } from 'lucide-react';
@@ -6,12 +5,15 @@ import { auth } from '../services/firebase';
 import { RecaptchaVerifier, type ConfirmationResult } from 'firebase/auth';
 import { PhoneInput } from '../components/PhoneInput';
 import { loginWithPhoneAndPassword, startPhoneLogin, ensureUserDocument } from '../services/auth';
+import { searchUserByPhone } from '../services/db';
+import { useModal } from '../context/ModalContext';
 import clsx from 'clsx';
 
 export const Login = () => {
     const navigate = useNavigate();
     const [activeTab, setActiveTab] = useState<'PASSWORD' | 'SMS'>('PASSWORD');
     const [loading, setLoading] = useState(false);
+    const { showAlert } = useModal();
 
     // Form Data
     const [phone, setPhone] = useState('');
@@ -42,7 +44,7 @@ export const Login = () => {
             navigate('/');
         } catch (error) {
             console.error(error);
-            alert("Giriş başarısız. Bilgilerinizi kontrol edin.");
+            showAlert("Giriş Başarısız", "Giriş yapılamadı. Bilgilerinizi kontrol edin.", "error");
         } finally {
             setLoading(false);
         }
@@ -54,13 +56,20 @@ export const Login = () => {
 
         setLoading(true);
         try {
+            // Check existence for SMS Login to prevent auto-registration or clarify flow
+            const existingUser = await searchUserByPhone(phone);
+            if (!existingUser) {
+                showAlert("Kayıt Bulunamadı", "Bu numarada bir kayıt yok. Lütfen kayıt olun.", "warning");
+                return;
+            }
+
             if (!recaptchaVerifier.current) return;
             const result = await startPhoneLogin(phone, recaptchaVerifier.current);
             setConfirmationResult(result);
             setSmsStep('VERIFY');
         } catch (error) {
             console.error(error);
-            alert("SMS gönderilemedi.");
+            showAlert("Hata", "SMS gönderilemedi.", "error");
         } finally {
             setLoading(false);
         }
@@ -80,7 +89,7 @@ export const Login = () => {
             }
         } catch (error) {
             console.error(error);
-            alert("Hatalı kod.");
+            showAlert("Hata", "Hatalı kod girdiniz.", "error");
         } finally {
             setLoading(false);
         }
@@ -88,6 +97,7 @@ export const Login = () => {
 
     return (
         <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
+
             <div className="w-full max-w-md bg-surface p-8 rounded-3xl shadow-xl border border-slate-700">
 
                 {/* Header with Back */}

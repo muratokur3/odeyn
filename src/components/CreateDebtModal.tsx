@@ -28,13 +28,18 @@ interface CreateDebtModalProps {
     targetUser?: User | Contact | null;
 }
 
+import { useModal } from '../context/ModalContext';
+
 export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClose, onSubmit, initialPhoneNumber, targetUser }) => {
     const { user } = useAuth();
+    const { showAlert } = useModal();
 
     // Derived state for initialization
     const initialName = targetUser
         ? ('displayName' in targetUser ? targetUser.displayName : targetUser.name)
         : '';
+
+    // ... [rest unchanged]
 
     const initialPhone = targetUser
         ? targetUser.phoneNumber
@@ -165,7 +170,7 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
 
         if (isNaN(numAmount) || numAmount <= 0) return;
         if (numDownPayment >= numAmount) {
-            alert("Peşinat tutarı toplam tutardan büyük veya eşit olamaz.");
+            showAlert("Hata", "Peşinat tutarı toplam tutardan büyük veya eşit olamaz.", "error");
             return;
         }
 
@@ -182,7 +187,7 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
         }
 
         if (!finalBorrowerName) {
-            alert("Lütfen bir isim girin veya kayıtlı bir kullanıcı seçin.");
+            showAlert("Bilgi", "Lütfen bir isim girin veya kayıtlı bir kullanıcı seçin.", "warning");
             return;
         }
 

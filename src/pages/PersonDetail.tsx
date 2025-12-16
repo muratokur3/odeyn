@@ -14,11 +14,14 @@ import { convertToTRY, fetchRates, type CurrencyRates } from '../services/curren
 import { cleanPhone as cleanPhoneNumber, formatPhoneForDisplay as formatPhoneNumber } from '../utils/phoneUtils';
 import clsx from 'clsx';
 
+import { useModal } from '../context/ModalContext';
+
 export const PersonDetail = () => {
     const { id } = useParams<{ id: string }>(); // This can be a userId or a contactId (phone number)
     const { user } = useAuth();
     const navigate = useNavigate();
     const { allDebts: debts, loading } = useDebts();
+    const { showAlert, showConfirm } = useModal();
     const [rates, setRates] = useState<CurrencyRates | null>(null);
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [isRegisteredUser, setIsRegisteredUser] = useState(false);
@@ -43,11 +46,16 @@ export const PersonDetail = () => {
 
     const handleDelete = async () => {
         if (!user || !id) return;
-        if (confirm("Bu kişiyi ve geçmişini silmek istediğinize emin misiniz?")) {
+        const confirmed = await showConfirm(
+            "Kişi Silme",
+            "Bu kişiyi ve geçmişini silmek istediğinize emin misiniz?",
+            "warning"
+        );
+        if (confirmed) {
             // Deletion logic requires Contact ID. Since we often navigate by phone, 
             // we'd need to lookup the contact doc by phone first.
             // For now, only UI is implemented as per safety.
-            alert("Kişi silme işlemi şu an sadece rehber listesinden yapılabilir.");
+            showAlert("Bilgi", "Kişi silme işlemi şu an sadece rehber listesinden yapılabilir.", "info");
         }
     };
 
@@ -99,10 +107,12 @@ export const PersonDetail = () => {
                 phoneNumber: editPhone
             });
             setShowEditModal(false);
-            window.location.reload();
+            showAlert("Başarılı", "Kişi bilgileri güncellendi.", "success");
+            // window.location.reload(); // Replacing reload with state update would be better but reloading is safe for now
+            setTimeout(() => window.location.reload(), 1500);
         } catch (error) {
             console.error(error);
-            alert("Güncelleme başarısız oldu.");
+            showAlert("Hata", "Güncelleme başarısız oldu.", "error");
         } finally {
             setSubmittingEdit(false);
         }
