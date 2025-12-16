@@ -19,7 +19,7 @@ export interface User {
 export interface Contact {
     id: string; // Document ID
     name: string;
-    phoneNumber: string;
+    phoneNumber: string; // E.164 format strictly (e.g., +905551234567)
     linkedUserId?: string; // If matched with a system user
     createdAt: Timestamp;
 }

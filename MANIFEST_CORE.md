@@ -14,7 +14,8 @@ Tekil Kimlik (Phone ID): Sistemdeki yegane kimlik belirleyici Telefon Numarasıd
 
 Format: E.164 (+905551234567).
 
-Veritabanına asla 0555 veya (555) formatında kayıt yapılamaz.
+*   Veritabanına asla `0555` veya `(555)` formatında kayıt yapılamaz.
+*   **Source of Truth:** E.164 formatı, Kullanıcı (Auth), Rehber (Contact) ve Borç (Debt) arasındaki tek ve değişmez bağlantı anahtarıdır.
 
 E-posta, sadece şifre kurtarma ve bildirim aracıdır; işlem anahtarı değildir.
 

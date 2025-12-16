@@ -424,32 +424,40 @@ export const searchContacts = async (userId: string, searchQuery: string) => {
     }
 };
 
-export const claimDebts = async (userId: string, phoneNumber: string) => {
+
+
+// Redefined logic below for claimDebts to include Contact Linking
+// Enhanced Claiming Logic for Data Integrity
+export const claimLegacyDebts = async (userId: string, phoneNumber: string) => {
     try {
         const cleanPhone = cleanPhoneNumber(phoneNumber);
-        // Find debts where lenderId or borrowerId matches the phone number (and is not yet a UID)
+        const affectedUserIds = new Set<string>();
 
-        // 1. As Lender
+        // We need to check both Lender and Borrower fields for the Phone Number
+        // And replace it with the UID.
+
+        // 1. Where I am the LENDER (as Phone)
         const qLender = query(collection(db, 'debts'), where('lenderId', '==', cleanPhone));
         const lenderSnapshot = await getDocs(qLender);
 
         const lenderUpdates = lenderSnapshot.docs.map(doc => {
+            const data = doc.data();
+            if (data.borrowerId && data.borrowerId.length > 20) affectedUserIds.add(data.borrowerId);
+
             return runTransaction(db, async (transaction) => {
                 const debtRef = doc.ref;
                 const debtDoc = await transaction.get(debtRef);
                 if (!debtDoc.exists()) return;
 
-                const data = debtDoc.data();
-                const participants = data.participants || [];
-                if (!participants.includes(userId)) {
-                    participants.push(userId);
-                }
+                const currentData = debtDoc.data();
+                // Security Check: If already claimed by another UID, skip?
+                // Assuming phone uniqueness, this is safe.
 
-                // Remove old phone number from participants if present
+                const participants = currentData.participants || [];
+                // Remove phone, Add UID
                 const phoneIndex = participants.indexOf(cleanPhone);
-                if (phoneIndex > -1) {
-                    participants.splice(phoneIndex, 1);
-                }
+                if (phoneIndex > -1) participants.splice(phoneIndex, 1);
+                if (!participants.includes(userId)) participants.push(userId);
 
                 transaction.update(debtRef, {
                     lenderId: userId,
@@ -458,27 +466,26 @@ export const claimDebts = async (userId: string, phoneNumber: string) => {
             });
         });
 
-        // 2. As Borrower
+        // 2. Where I am the BORROWER (as Phone)
         const qBorrower = query(collection(db, 'debts'), where('borrowerId', '==', cleanPhone));
         const borrowerSnapshot = await getDocs(qBorrower);
 
         const borrowerUpdates = borrowerSnapshot.docs.map(doc => {
+            const data = doc.data();
+            if (data.lenderId && data.lenderId.length > 20) affectedUserIds.add(data.lenderId);
+
             return runTransaction(db, async (transaction) => {
                 const debtRef = doc.ref;
                 const debtDoc = await transaction.get(debtRef);
                 if (!debtDoc.exists()) return;
 
-                const data = debtDoc.data();
-                const participants = data.participants || [];
-                if (!participants.includes(userId)) {
-                    participants.push(userId);
-                }
+                const currentData = debtDoc.data();
+                const participants = currentData.participants || [];
 
-                // Remove old phone number from participants
+                // Remove phone, Add UID
                 const phoneIndex = participants.indexOf(cleanPhone);
-                if (phoneIndex > -1) {
-                    participants.splice(phoneIndex, 1);
-                }
+                if (phoneIndex > -1) participants.splice(phoneIndex, 1);
+                if (!participants.includes(userId)) participants.push(userId);
 
                 transaction.update(debtRef, {
                     borrowerId: userId,
@@ -488,12 +495,45 @@ export const claimDebts = async (userId: string, phoneNumber: string) => {
         });
 
         await Promise.all([...lenderUpdates, ...borrowerUpdates]);
-        console.log(`Claimed ${lenderUpdates.length + borrowerUpdates.length} debts for user ${userId}`);
+
+        // 3. Link Contacts for Affected Users (Previous Logic)
+        // For each user who had a debt with me (as phone), find their contact for me and update link
+        for (const otherUserId of affectedUserIds) {
+            const contactsRef = collection(db, 'users', otherUserId, 'contacts');
+            const q = query(contactsRef, where('phoneNumber', '==', cleanPhone));
+            const snaps = await getDocs(q);
+
+            if (!snaps.empty) {
+                const batch = writeBatch(db);
+                snaps.docs.forEach(d => {
+                    batch.update(d.ref, { linkedUserId: userId });
+                });
+                await batch.commit();
+            }
+        }
+
+        console.log(`Successfully claimed legacy debts for ${userId} (${cleanPhone})`);
 
     } catch (error) {
-        console.error("Error claiming debts:", error);
+        console.error("Error claiming legacy debts:", error);
         throw error;
     }
+};
+
+// Alias for backward compatibility if needed, though we should update calls.
+export const claimDebts = claimLegacyDebts;
+
+export const subscribeToContacts = (userId: string, callback: (contacts: Contact[]) => void) => {
+    const contactsRef = collection(db, 'users', userId, 'contacts');
+    const q = query(contactsRef, orderBy('name'));
+
+    return onSnapshot(q, (snapshot) => {
+        const contacts = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        })) as Contact[];
+        callback(contacts);
+    });
 };
 
 

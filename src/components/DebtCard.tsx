@@ -1,4 +1,5 @@
 import { respondToDebtRequest } from '../services/db';
+import { useContactName } from '../hooks/useContactName';
 import type { Debt } from '../types';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
@@ -16,11 +17,21 @@ interface DebtCardProps {
 }
 
 export const DebtCard: React.FC<DebtCardProps> = ({ debt, currentUserId, onClick, otherPartyStatus = 'none' }) => {
-    const isLender = debt.lenderId === currentUserId;
-    let otherPartyName = isLender ? debt.borrowerName : debt.lenderName;
+    // Live Name Resolution (Scenario 4: Update Propagation)
+    // We prioritize the Contact Book name over the Debt Snapshot name.
+    const { resolveName } = useContactName();
 
-    if (otherPartyName.replace(/\D/g, '').length >= 10 && !otherPartyName.includes(' ')) {
-        otherPartyName = formatPhoneNumber(otherPartyName);
+    const isLender = debt.lenderId === currentUserId;
+    const rawOtherName = isLender ? debt.borrowerName : debt.lenderName;
+    const otherId = isLender ? debt.borrowerId : debt.lenderId; // Can be UID or Phone
+
+    // Resolve the name using the ID (which might be phone) and fallback to snapshot name
+    const { displayName: otherPartyName, source } = resolveName(otherId, rawOtherName);
+
+    // If still just a raw phone number (and source is not contact), format it nicely
+    let finalDisplayName = otherPartyName;
+    if (source !== 'contact' && finalDisplayName.replace(/\D/g, '').length >= 10 && !finalDisplayName.includes(' ')) {
+        finalDisplayName = formatPhoneNumber(finalDisplayName);
     }
 
     const isPaid = debt.status === 'PAID';
@@ -59,7 +70,7 @@ export const DebtCard: React.FC<DebtCardProps> = ({ debt, currentUserId, onClick
             <div className="flex items-center gap-4">
                 {/* Avatar */}
                 <Avatar
-                    name={otherPartyName}
+                    name={finalDisplayName}
                     size="md"
                     className="shadow-sm bg-white"
                     status={otherPartyStatus}
@@ -69,7 +80,7 @@ export const DebtCard: React.FC<DebtCardProps> = ({ debt, currentUserId, onClick
                 <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-start mb-1">
                         <h3 className="text-lg font-bold text-gray-900 dark:text-white truncate">
-                            {otherPartyName}
+                            {finalDisplayName}
                         </h3>
                         {/* Tutar - KOCAMAN */}
                         <div className={clsx(

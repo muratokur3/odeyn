@@ -11,7 +11,7 @@ import {
 } from 'firebase/auth';
 import { doc, setDoc, serverTimestamp, getDoc } from 'firebase/firestore';
 import { auth, db } from './firebase';
-import { claimDebts } from './db';
+import { claimLegacyDebts } from './db';
 import { cleanPhone as cleanPhoneNumber } from '../utils/phoneUtils';
 
 const EMAIL_DOMAIN = '@debtdert.local';
@@ -68,7 +68,7 @@ export const linkPasswordToPhone = async (user: User, password: string, displayN
         }, { merge: true });
 
         // Claim existing debts related to this phone number
-        await claimDebts(linkedUser.uid, cleanPhone);
+        await claimLegacyDebts(linkedUser.uid, cleanPhone);
 
         return linkedUser;
     } catch (error) {
@@ -87,11 +87,11 @@ export const loginWithPhoneAndPassword = async (phoneNumber: string, password: s
 
         // Ensure fresh claims
         if (userCredential.user.phoneNumber) {
-            await claimDebts(userCredential.user.uid, userCredential.user.phoneNumber);
+            await claimLegacyDebts(userCredential.user.uid, userCredential.user.phoneNumber);
         } else {
             // If phone number is somehow missing from auth object (rare for this flow), try to get from email
             const extractedPhone = pseudoEmail.replace(EMAIL_DOMAIN, '');
-            await claimDebts(userCredential.user.uid, extractedPhone);
+            await claimLegacyDebts(userCredential.user.uid, extractedPhone);
         }
 
         return userCredential.user;
@@ -123,7 +123,7 @@ export const ensureUserDocument = async (user: User) => {
             });
 
             if (phone) {
-                await claimDebts(user.uid, phone);
+                await claimLegacyDebts(user.uid, phone);
             }
         }
     } catch (error) {

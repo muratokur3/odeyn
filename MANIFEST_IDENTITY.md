@@ -20,15 +20,33 @@ Ham Numara:
 
 Hiçbiri yoksa +90 555... görünür.
 
-2. Rehber Mimarisi (Contact Architecture)
+3. Rehber Mimarisi (Decoupled Contact Architecture)
 
-Depolama: Rehber verisi asla users dökümanı içinde saklanmaz.
+**Felsefe:** "Kişi" (Contact) sadece bir **Görünüm Katmanıdır** (View Layer). "Borç" (Debt) ise **Varlık Katmanıdır** (Asset Layer). İkisi birbirinden ayrılmıştır.
 
-Path: users/{userId}/contacts/{contactId} (Alt Koleksiyon).
+1.  **Bağlantı (Decoupling):**
+    *   Bir Borç kaydı, asla bir `Contact ID`'ye bağlanmaz.
+    *   Borç kaydı, değişmez bir `Phone Number (E.164)`'a bağlanır.
+    *   İsim gösterimi anlık olarak (Live Resolution) yapılır.
 
-Otomatik Kayıt: Kullanıcı "Hızlı İşlem"den veya "Yeni Borç" ekranından yeni bir numara ile işlem yaparsa, sistem bu numarayı ve ismi otomatik olarak contacts koleksiyonuna kaydeder.
+2.  **Otomatik Kayıt (Auto-Save Rule):**
+    *   Kullanıcı telefon numarası girerek yeni bir borç oluşturduğunda, sistem arka planda:
+        *   Bu numara rehberde var mı? -> Yoksa
+        *   Otomatik olarak `users/{uid}/contacts` altına yeni bir Kişi Kartı oluşturur.
+    *   **Hedef:** Her borçlusunun rehberde bir karşılığı olmalıdır.
 
-3. Gölge Kullanıcı ve Veri Sahiplenme (Data Claiming)
+3.  **Güvenli Silme (Orphan Logic):**
+    *   Kullanıcı rehberinden "Ahmet"i sildiğinde:
+        *   Sadece `contacts` koleksiyonundaki kart silinir.
+        *   Borç kayıtları (`debts`) **ASLA SİLİNMEZ**.
+        *   Borç listesinde isim yerine, borcu oluştururken girilen "Snapshot Name" (Yedek İsim) gösterilir veya numara görünür.
+
+4.  **Dirilme (Resurrection Rule):**
+    *   Kullanıcı sildiği "Ahmet"i (+90555...) tekrar "Ahmet Abi" olarak kaydederse:
+        *   Sistem E.164 numarasını eşleştirir.
+        *   **Anında:** Geçmişteki 5 yıllık tüm borç kayıtlarında isim "Ahmet Abi" olarak güncellenir. Çünkü arayüz canlı olarak rehberden okuma yapar.
+
+5.  Gölge Kullanıcı ve Veri Sahiplenme (Data Claiming)
 
 Gölge Kullanıcı (Shadow User): Sisteme henüz kayıt olmamış ama üzerine borç yazılmış telefon numarasıdır.
 

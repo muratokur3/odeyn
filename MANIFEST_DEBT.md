@@ -30,15 +30,26 @@ remainingAmount asla originalAmounttan büyük olamaz.
 
 remainingAmount 0 olduğunda statü otomatik PAID (Kapandı) olur.
 
-2. Silme ve Arşivleme (Deletion)
+3. Borç Görünüm ve Silme Kuralları (Display & Integrity)
 
-Çöp Kutusu (Soft Delete): Hiçbir finansal veri veritabanından tamamen silinmez (Hard Delete yok). isDeleted: true işareti alarak Çöp Kutusuna gider.
+3.1. İsim Gösterim Hiyerarşisi (Smart Display Priority)
+Borç listesinde ismin nasıl görüneceği şu sırayla belirlenir (Sistem yukarıdan aşağıya tarar):
 
-Kim Silebilir?
+1.  **Canlı Rehber Kaydı:** `users/{uid}/contacts` içinde bu E.164 numarasıyla eşleşen bir isim var mı? (Varsa -> "Ahmet Abi")
+2.  **Sistem Kullanıcısı:** Bu numara kayıtlı bir `User` ise onun `displayName`'i. (Varsa -> "Ahmet Yılmaz")
+3.  **Snapshot İsim:** Borç oluşturulurken girilen yedek isim. (Varsa -> "Ahmet")
+4.  **Ham Numara:** Hiçbiri yoksa E.164 formatlı telefon no. (+90 555...)
+
+3.2. Silme ve Veri Bütünlüğü (Data Integrity)
+
+*   **Rehberden Silme Etkisizliği:** Rehberden kişi silmek, borcu etkilemez. Borç "Yetim" (Orphan) kalır ama var olmaya devam eder.
+*   **Çöp Kutusu (Soft Delete):** Finansal veri asla Hard Delete yapılmaz. `isDeleted: true` işareti alır.
+
+3.3. Kim Silebilir?
 
 PENDING durumunda: Sadece oluşturan (Creator) silebilir.
 
-ACTIVE durumunda: Silme işlemi yapılamaz. Sadece "Borç Kapatıldı" (Ödendi) yapılabilir veya "İptal" edilebilir (Karşı tarafın onayı gerekebilir - Opsiyonel).
+ACTIVE durumunda: Silme işlemi yapılamaz. Sadece "Borç Kapatıldı" (Ödendi) yapılabilir veya "İptal" edilebilir.
 
 REJECTED durumunda: Oluşturan kişi arşivleyebilir.
 

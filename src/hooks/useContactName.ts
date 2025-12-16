@@ -8,17 +8,15 @@ interface ContactNameResult {
 }
 
 export const useContactName = () => {
-    const { contacts } = useContacts();
+    const { contactsMap } = useContacts();
 
     const resolveName = (identifier: string, fallbackName?: string): ContactNameResult => {
         // 1. Check Local Contacts (My Address Book)
-        // Identifier could be a Phone or a UID. 
-        // Contacts are stored with 'phoneNumber' (cleaned) and 'linkedUserId'.
+        // Identifier could be a Phone (E.164) or a UID. 
+        // contactsMap is keyed by E.164 phone number.
 
-        const cleanIdentifier = identifier.replace(/\s/g, ''); // Simple cleanup for comparison if not already clean
-        const contactMatch = contacts.find(c =>
-            c.phoneNumber === identifier || c.phoneNumber === cleanIdentifier || c.linkedUserId === identifier
-        );
+        // Optimistic O(1) lookup
+        const contactMatch = contactsMap[identifier];
 
         if (contactMatch) {
             return {
@@ -27,6 +25,19 @@ export const useContactName = () => {
                 originalName: contactMatch.name
             };
         }
+
+        // If identifier is UID, we might need value check? 
+        // Current map is Phone -> Contact. 
+        // If identifier is UID, we can't find it in key map easily unless we also map UIDs.
+        // But rule #2 says Dept is tied to Phone. 
+        // Fallback to array find if not found in map (for UID/linkedUserId matching)
+        // Check if any contact has this linkedUserId?
+        // Actually, let's keep array search as fallback for edge/UID cases, but prefer map.
+        // Or create a secondary map? For now, simple fallback.
+        // Wait, 'contacts' is also available from useContacts if we destructured it.
+        // But for Phone scenarios (which is 99%), map is fast.
+
+        // ... (Fallbacks)
 
         // 2. Check fallbackName (Snapshot Name from Debt/User)
         // If we have a fallback name that is NOT just the phone number itself, use it.

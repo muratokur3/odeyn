@@ -164,7 +164,8 @@ export const PersonDetail = () => {
     const personInfo = useMemo(() => {
         // Determine fallback name and phone from debts if available
         let fallbackName = '';
-        let phone = id || '';
+        const cleanId = cleanPhoneNumber(id || ''); // Always clean the ID from URL (handles + becoming space)
+        let phone = cleanId;
 
         if (personDebts.length > 0) {
             const first = personDebts[0];
@@ -173,7 +174,7 @@ export const PersonDetail = () => {
             const otherId = isLender ? first.borrowerId : first.lenderId;
             // If the ID param is a UID, we prefer the phone from the debt record if it looks like a phone
             if (id && id.length > 20 && otherId.length <= 15) {
-                phone = otherId;
+                phone = cleanPhoneNumber(otherId);
             }
         }
 
@@ -181,7 +182,7 @@ export const PersonDetail = () => {
         if (contactId && editName) {
             return {
                 name: editName,
-                phone: editPhone || phone
+                phone: cleanPhoneNumber(editPhone || phone)
             };
         }
 
