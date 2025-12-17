@@ -4,10 +4,13 @@ import { ArrowLeft, Loader2, Info } from 'lucide-react';
 import { PhoneInput } from '../components/PhoneInput';
 import { checkUserExists } from '../services/auth';
 
+import { useModal } from '../context/ModalContext';
+
 export const ForgotPassword = () => {
     const [phone, setPhone] = useState('');
     const [loading, setLoading] = useState(false);
     const [userExists, setUserExists] = useState<boolean | null>(null);
+    const { showAlert } = useModal();
 
     const handleCheckUser = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -19,7 +22,7 @@ export const ForgotPassword = () => {
             setUserExists(exists);
         } catch (error) {
             console.error(error);
-            alert("Bir hata oluştu.");
+            showAlert("Hata", "Bir hata oluştu. Lütfen tekrar deneyin.", "error");
         } finally {
             setLoading(false);
         }

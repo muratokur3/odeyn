@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from './useAuth';
-import { getContacts } from '../services/db';
+import { subscribeToContacts } from '../services/db';
 import type { Contact } from '../types';
 
 export const useContacts = () => {
@@ -9,32 +9,40 @@ export const useContacts = () => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
+        let unsubscribe: () => void;
         if (user) {
-            loadContacts();
+            setLoading(true);
+            unsubscribe = subscribeToContacts(user.uid, (data) => {
+                setContacts(data);
+                setLoading(false);
+            });
         } else {
             setContacts([]);
             setLoading(false);
         }
+        return () => {
+            if (unsubscribe) unsubscribe();
+        };
     }, [user?.uid]);
 
-    const loadContacts = async () => {
-        if (!user) return;
-        setLoading(true);
-        try {
-            const data = await getContacts(user.uid);
-            setContacts(data);
-        } catch (error) {
-            console.error(error);
-        } finally {
-            setLoading(false);
-        }
-    };
+    // Manual refresh is no longer needed but kept for API compatibility.
+    const refreshContacts = () => { };
 
     const isContact = (identifier: string) => {
         // Identifier can be UID or Phone
-        // Check if any contact has this phone or linkedUserId
         return contacts.some(c => c.phoneNumber === identifier || c.linkedUserId === identifier);
     };
 
-    return { contacts, loading, refreshContacts: loadContacts, isContact };
+    // Dictionary for O(1) lookup: key = E.164 Phone Number
+    const contactsMap = useMemo(() => {
+        const map: Record<string, Contact> = {};
+        contacts.forEach(c => {
+            if (c.phoneNumber) {
+                map[c.phoneNumber] = c;
+            }
+        });
+        return map;
+    }, [contacts]);
+
+    return { contacts, contactsMap, loading, refreshContacts, isContact };
 };

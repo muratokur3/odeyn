@@ -20,6 +20,7 @@ import {
 import { db } from './firebase';
 import type { Debt, DebtStatus, PaymentLog, User, Contact, Installment } from '../types';
 import { cleanPhone as cleanPhoneNumber } from '../utils/phoneUtils';
+import { resolvePhoneToUid } from './registry';
 
 export const createDebt = async (
     currentUserId: string,
@@ -41,17 +42,20 @@ export const createDebt = async (
 
         // ... (existing logic for target determination) ...
         // Determine if targetUserId is a phone number or UID
-        // If it's a phone number (length <= 15 and digits), try to find a user
         let finalTargetId = targetUserId;
         const cleanTarget = cleanPhoneNumber(targetUserId);
 
         // If targetUserId looks like a phone number (not a long UID)
-        // Adjust check: UIDs are usually 28 chars. Standard E.164 is 13 chars max usually.
         // cleanTarget will be E.164 if it's a phone.
         if (targetUserId.length <= 15 || targetUserId.startsWith('+')) {
-            const existingUser = await searchUserByPhone(cleanTarget);
-            if (existingUser) {
-                finalTargetId = existingUser.uid;
+            // NEW: Multi-Phone Registry Lookup
+            // Using static import since we broke the circular dependency
+            const resolvedUid = await resolvePhoneToUid(cleanTarget);
+
+            if (resolvedUid) {
+                finalTargetId = resolvedUid;
+                // Fetch basic user info if needed for display?
+                // DebtCard will handle display resolution. We just need the ID.
             } else {
                 finalTargetId = cleanTarget; // Use cleaned phone as ID if no user found
             }
@@ -94,6 +98,18 @@ export const createDebt = async (
             initialStatus = 'PARTIALLY_PAID';
         }
 
+        // Determine Contact Phone for Locking & Auto-Add
+        let contactPhone = '';
+        if (counterpartyId.length <= 15) {
+            contactPhone = counterpartyId;
+        } else {
+            // If it's a UID, we might need the phone.
+            // In this flow, check if we started with a phone target.
+            if (cleanTarget && cleanTarget.length <= 15) {
+                contactPhone = cleanTarget;
+            }
+        }
+
 
         const debtData = {
             lenderId,
@@ -110,7 +126,9 @@ export const createDebt = async (
             ...(dueDate && { dueDate: Timestamp.fromDate(dueDate) }),
             ...(note && { note }),
             ...(installments && { installments }),
+            ...(installments && { installments }),
             ...(canBorrowerAddPayment && { canBorrowerAddPayment }),
+            ...(contactPhone && { lockedPhoneNumber: contactPhone }), // Always lock phone number if available
         };
 
         // Use batch or transaction? 
@@ -149,6 +167,23 @@ export const createDebt = async (
         }
 
         await batch.commit();
+
+        // Auto-Contact Creation Logic
+        // If I am the Creator (always true here as currentUserId), and the counterparty is NOT me
+        if (currentUserId) {
+            const counterpartyId = isLending ? borrowerId : lenderId;
+            const counterpartyName = isLending ? borrowerName : lenderName;
+
+            // If counterparty is a phone number or a user that might not be in my contacts
+            // We blindly try to add/update contact. addContact handles duplicates nicely.
+            // We use the cleaned phone for the ID check if possible.
+
+            if (contactPhone) {
+                // Fire and forget contact addition to ensure names show up in Dashboard
+                addContact(currentUserId, counterpartyName, contactPhone, counterpartyId.length > 20 ? counterpartyId : undefined)
+                    .catch(err => console.error("Auto-add contact failed", err));
+            }
+        }
 
         return docRef.id;
     } catch (error) {
@@ -285,9 +320,30 @@ export const addContact = async (currentUserId: string, name: string, phoneNumbe
         const cleanPhone = cleanPhoneNumber(phoneNumber);
         const contactsRef = collection(db, 'users', currentUserId, 'contacts');
 
-        // Check if phone number already exists
-        const q = query(contactsRef, where('phoneNumber', '==', cleanPhone));
-        const querySnapshot = await getDocs(q);
+        // Check if phone number already exists (Try strict clean first)
+        let q = query(contactsRef, where('phoneNumber', '==', cleanPhone));
+        let querySnapshot = await getDocs(q);
+
+        // Double check: If strict failed, maybe stored as non-standard?
+        // Example: DB has "0555..." but clean is "+90555..."
+        // Or DB has "+90 555" (spaces).
+        if (querySnapshot.empty && phoneNumber !== cleanPhone) {
+            const q2 = query(contactsRef, where('phoneNumber', '==', phoneNumber));
+            const snap2 = await getDocs(q2);
+            if (!snap2.empty) {
+                querySnapshot = snap2;
+            }
+        }
+
+        // Also check if stripped version matches (e.g. DB has 5551234567, clean is +905551234567)
+        if (querySnapshot.empty) {
+            const simple = phoneNumber.replace(/\D/g, '');
+            if (simple.length > 5 && simple !== cleanPhone && simple !== phoneNumber) {
+                const q3 = query(contactsRef, where('phoneNumber', '==', simple));
+                const snap3 = await getDocs(q3);
+                if (!snap3.empty) querySnapshot = snap3;
+            }
+        }
 
         if (!querySnapshot.empty) {
             // Update existing contact if name changed, or just return ID
@@ -376,76 +432,132 @@ export const searchContacts = async (userId: string, searchQuery: string) => {
     }
 };
 
-export const claimDebts = async (userId: string, phoneNumber: string) => {
+
+
+// Redefined logic below for claimDebts to include Contact Linking
+// Enhanced Claiming Logic for Data Integrity
+export const claimLegacyDebts = async (userId: string, phoneNumber: string) => {
     try {
         const cleanPhone = cleanPhoneNumber(phoneNumber);
-        // Find debts where lenderId or borrowerId matches the phone number (and is not yet a UID)
+        const affectedUserIds = new Set<string>();
 
-        // 1. As Lender
+        // We need to check both Lender and Borrower fields for the Phone Number
+        // And replace it with the UID.
+
+        // 1. Where I am the LENDER (as Phone)
         const qLender = query(collection(db, 'debts'), where('lenderId', '==', cleanPhone));
         const lenderSnapshot = await getDocs(qLender);
 
         const lenderUpdates = lenderSnapshot.docs.map(doc => {
+            const data = doc.data();
+            if (data.borrowerId && data.borrowerId.length > 20) affectedUserIds.add(data.borrowerId);
+
             return runTransaction(db, async (transaction) => {
                 const debtRef = doc.ref;
                 const debtDoc = await transaction.get(debtRef);
                 if (!debtDoc.exists()) return;
 
-                const data = debtDoc.data();
-                const participants = data.participants || [];
-                if (!participants.includes(userId)) {
-                    participants.push(userId);
-                }
+                const currentData = debtDoc.data();
+                // Security Check: If already claimed by another UID, skip?
+                // Assuming phone uniqueness, this is safe.
 
-                // Remove old phone number from participants if present
+                const participants = currentData.participants || [];
+                // Remove phone, Add UID
                 const phoneIndex = participants.indexOf(cleanPhone);
-                if (phoneIndex > -1) {
-                    participants.splice(phoneIndex, 1);
-                }
+                if (phoneIndex > -1) participants.splice(phoneIndex, 1);
+                if (!participants.includes(userId)) participants.push(userId);
 
-                transaction.update(debtRef, {
+                // Ensure lockedPhoneNumber is set
+                const updates: any = {
                     lenderId: userId,
                     participants
-                });
+                };
+
+                // CRITICAL: If no lockedPhoneNumber exists, using the phone number we just claimed
+                if (!currentData.lockedPhoneNumber) {
+                    updates.lockedPhoneNumber = cleanPhone;
+                }
+
+                transaction.update(debtRef, updates);
             });
         });
 
-        // 2. As Borrower
+        // 2. Where I am the BORROWER (as Phone)
         const qBorrower = query(collection(db, 'debts'), where('borrowerId', '==', cleanPhone));
         const borrowerSnapshot = await getDocs(qBorrower);
 
         const borrowerUpdates = borrowerSnapshot.docs.map(doc => {
+            const data = doc.data();
+            if (data.lenderId && data.lenderId.length > 20) affectedUserIds.add(data.lenderId);
+
             return runTransaction(db, async (transaction) => {
                 const debtRef = doc.ref;
                 const debtDoc = await transaction.get(debtRef);
                 if (!debtDoc.exists()) return;
 
-                const data = debtDoc.data();
-                const participants = data.participants || [];
-                if (!participants.includes(userId)) {
-                    participants.push(userId);
-                }
+                const currentData = debtDoc.data();
+                const participants = currentData.participants || [];
 
-                // Remove old phone number from participants
+                // Remove phone, Add UID
                 const phoneIndex = participants.indexOf(cleanPhone);
-                if (phoneIndex > -1) {
-                    participants.splice(phoneIndex, 1);
-                }
+                if (phoneIndex > -1) participants.splice(phoneIndex, 1);
+                if (!participants.includes(userId)) participants.push(userId);
 
-                transaction.update(debtRef, {
+                // Ensure lockedPhoneNumber is set
+                const updates: any = {
                     borrowerId: userId,
                     participants
-                });
+                };
+
+                // CRITICAL: If no lockedPhoneNumber exists, using the phone number we just claimed
+                if (!currentData.lockedPhoneNumber) {
+                    updates.lockedPhoneNumber = cleanPhone;
+                }
+
+                transaction.update(debtRef, updates);
             });
         });
 
         await Promise.all([...lenderUpdates, ...borrowerUpdates]);
-        console.log(`Claimed ${lenderUpdates.length + borrowerUpdates.length} debts for user ${userId}`);
+
+        // 3. Link Contacts for Affected Users (Previous Logic)
+        // For each user who had a debt with me (as phone), find their contact for me and update link
+        for (const otherUserId of affectedUserIds) {
+            const contactsRef = collection(db, 'users', otherUserId, 'contacts');
+            const q = query(contactsRef, where('phoneNumber', '==', cleanPhone));
+            const snaps = await getDocs(q);
+
+            if (!snaps.empty) {
+                const batch = writeBatch(db);
+                snaps.docs.forEach(d => {
+                    batch.update(d.ref, { linkedUserId: userId });
+                });
+                await batch.commit();
+            }
+        }
+
+        console.log(`Successfully claimed legacy debts for ${userId} (${cleanPhone})`);
 
     } catch (error) {
-        console.error("Error claiming debts:", error);
+        console.error("Error claiming legacy debts:", error);
         throw error;
     }
+};
+
+// Alias for backward compatibility if needed, though we should update calls.
+export const claimDebts = claimLegacyDebts;
+
+export const subscribeToContacts = (userId: string, callback: (contacts: Contact[]) => void) => {
+    const contactsRef = collection(db, 'users', userId, 'contacts');
+    const q = query(contactsRef, orderBy('name'));
+
+    return onSnapshot(q, (snapshot) => {
+        const contacts = snapshot.docs.map(doc => ({
+            id: doc.id,
+            ...doc.data()
+        })) as Contact[];
+        callback(contacts);
+    });
 };
 
 
@@ -487,7 +599,7 @@ export const declarePayment = async (debtId: string, amount: number, note: strin
     }
 };
 
-export const confirmPayment = async (debtId: string, paymentId: string) => {
+export const confirmPayment = async (debtId: string, paymentId: string, currentUserId: string) => {
     try {
         const debtRef = doc(db, 'debts', debtId);
         const logRef = doc(db, 'debts', debtId, 'logs', paymentId);
@@ -502,6 +614,11 @@ export const confirmPayment = async (debtId: string, paymentId: string) => {
 
             const debtData = debtDoc.data() as Debt;
             const logData = logDoc.data() as PaymentLog;
+
+            // Security Check: Only Lender can confirm payments
+            if (debtData.lenderId !== currentUserId) {
+                throw new Error("Only the lender can confirm payments.");
+            }
 
             if (logData.status !== 'PENDING') {
                 throw new Error("Payment is not pending!");
@@ -626,9 +743,18 @@ export const restoreDebt = async (debtId: string) => {
     }
 };
 
-export const permanentlyDeleteDebt = async (debtId: string) => {
+export const permanentlyDeleteDebt = async (debtId: string, currentUserId: string) => {
     try {
         const debtRef = doc(db, 'debts', debtId);
+        const debtDoc = await getDoc(debtRef);
+
+        if (!debtDoc.exists()) return;
+
+        const data = debtDoc.data();
+        if (!data.participants.includes(currentUserId)) {
+            throw new Error("Unauthorized to delete this debt.");
+        }
+
         await deleteDoc(debtRef);
     } catch (error) {
         console.error("Error permanently deleting debt:", error);

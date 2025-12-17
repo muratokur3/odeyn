@@ -1,4 +1,5 @@
 import { respondToDebtRequest } from '../services/db';
+import { useContactName } from '../hooks/useContactName';
 import type { Debt } from '../types';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
@@ -16,11 +17,51 @@ interface DebtCardProps {
 }
 
 export const DebtCard: React.FC<DebtCardProps> = ({ debt, currentUserId, onClick, otherPartyStatus = 'none' }) => {
-    const isLender = debt.lenderId === currentUserId;
-    let otherPartyName = isLender ? debt.borrowerName : debt.lenderName;
+    // Live Name Resolution (Scenario 4: Update Propagation)
+    // We prioritize the Contact Book name over the Debt Snapshot name.
+    const { resolveName } = useContactName();
 
-    if (otherPartyName.replace(/\D/g, '').length >= 10 && !otherPartyName.includes(' ')) {
-        otherPartyName = formatPhoneNumber(otherPartyName);
+    const isLender = debt.lenderId === currentUserId;
+    const rawOtherName = isLender ? debt.borrowerName : debt.lenderName;
+    const otherId = isLender ? debt.borrowerId : debt.lenderId; // Can be UID or Phone
+    const lockedPhone = debt.lockedPhoneNumber;
+
+    // Resolve the name using the ID (which might be phone) and fallback to snapshot name
+    // Priority:
+    // 1. Contact Match (via ID)
+    // 2. Contact Match (via lockedPhoneNumber)
+    // 3. Snapshot Name (if standard)
+    // 4. Formatted lockedPhoneNumber
+    // 5. Formatted ID (if phone)
+    let { displayName: otherPartyName, source } = resolveName(otherId, rawOtherName);
+
+    // If initial resolution failed to find a contact or useful name, try lockedPhoneNumber
+    if (source !== 'contact' && lockedPhone) {
+        // Try resolving name using the locked phone number
+        const lockedResolution = resolveName(lockedPhone, rawOtherName);
+        if (lockedResolution.source === 'contact') {
+            otherPartyName = lockedResolution.displayName;
+            source = 'contact';
+        } else if (source === 'user' && otherPartyName === otherId) {
+            // If primary resolution returned ID (bad), use locked phone resolution
+            otherPartyName = lockedResolution.displayName;
+            source = lockedResolution.source;
+        }
+    }
+
+    // If still just a raw phone number (and source is not contact), format it nicely
+    let finalDisplayName = otherPartyName;
+
+    // Check if the current name looks like a phone number
+    const isPhoneLike = (str: string) => str.replace(/\D/g, '').length >= 10 && !str.includes(' ');
+
+    if (source !== 'contact') {
+        if (isPhoneLike(finalDisplayName)) {
+            finalDisplayName = formatPhoneNumber(finalDisplayName);
+        } else if (finalDisplayName.length > 20 && lockedPhone) {
+            // If it looks like a UID and we have a locked phone, show formatted phone
+            finalDisplayName = formatPhoneNumber(lockedPhone);
+        }
     }
 
     const isPaid = debt.status === 'PAID';
@@ -59,7 +100,7 @@ export const DebtCard: React.FC<DebtCardProps> = ({ debt, currentUserId, onClick
             <div className="flex items-center gap-4">
                 {/* Avatar */}
                 <Avatar
-                    name={otherPartyName}
+                    name={finalDisplayName}
                     size="md"
                     className="shadow-sm bg-white"
                     status={otherPartyStatus}
@@ -69,7 +110,7 @@ export const DebtCard: React.FC<DebtCardProps> = ({ debt, currentUserId, onClick
                 <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-start mb-1">
                         <h3 className="text-lg font-bold text-gray-900 dark:text-white truncate">
-                            {otherPartyName}
+                            {finalDisplayName}
                         </h3>
                         {/* Tutar - KOCAMAN */}
                         <div className={clsx(

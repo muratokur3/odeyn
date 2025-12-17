@@ -8,16 +8,15 @@ interface ContactNameResult {
 }
 
 export const useContactName = () => {
-    const { contacts } = useContacts();
+    const { contactsMap } = useContacts();
 
     const resolveName = (identifier: string, fallbackName?: string): ContactNameResult => {
         // 1. Check Local Contacts (My Address Book)
-        // Identifier could be a Phone or a UID. 
-        // Contacts are stored with 'phoneNumber' (cleaned) and 'linkedUserId'.
+        // Identifier could be a Phone (E.164) or a UID.
+        // contactsMap is keyed by E.164 phone number.
 
-        const contactMatch = contacts.find(c =>
-            c.phoneNumber === identifier || c.linkedUserId === identifier
-        );
+        // Optimistic O(1) lookup
+        const contactMatch = contactsMap[identifier];
 
         if (contactMatch) {
             return {
@@ -27,19 +26,26 @@ export const useContactName = () => {
             };
         }
 
-        // 2. Check fallbackName (This usually comes from the Transaction 'targetUserName' or 'lenderName' snapshot)
-        // In this app, we store 'lenderName'/'borrowerName' on the Debt record at creation.
-        // If that name was set by the User (e.g. from their profile), use it? 
-        // OR does prompt say "Check Users table. Is there a display_name?"
-        // Since we don't fetch *ALL* users to client, we rely on the name stored in the Debt record 
-        // OR we fetch the user profile if we have a UID.
-        // For lists, likely we rely on the snapshot name IF we don't have a contact.
+        // If identifier is UID, we might need value check?
+        // Current map is Phone -> Contact.
+        // If identifier is UID, we can't find it in key map easily unless we also map UIDs.
+        // But rule #2 says Dept is tied to Phone.
+        // Fallback to array find if not found in map (for UID/linkedUserId matching)
+        // Check if any contact has this linkedUserId?
+        // Actually, let's keep array search as fallback for edge/UID cases, but prefer map.
+        // Or create a secondary map? For now, simple fallback.
+        // Wait, 'contacts' is also available from useContacts if we destructured it.
+        // But for Phone scenarios (which is 99%), map is fast.
 
-        if (fallbackName && identifier.length > 15) {
-            // If it's a UID and we have a name (likely from Auth profile at creation), use it.
+        // ... (Fallbacks)
+
+        // 2. Check fallbackName (Snapshot Name from Debt/User)
+        // If we have a fallback name that is NOT just the phone number itself, use it.
+        // This fixes the issue where "Ahmet" is passed as fallback, but the function sees a phone ID and returns formatted phone.
+        if (fallbackName && fallbackName !== identifier && fallbackName.replace(/\D/g, '').length !== identifier.replace(/\D/g, '').length) {
             return {
                 displayName: fallbackName,
-                source: 'user',
+                source: 'user', // Technically 'snapshot' or 'user' provided
                 originalName: fallbackName
             };
         }

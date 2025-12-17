@@ -3,6 +3,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useDebts } from '../hooks/useDebts';
+import { useContactName } from '../hooks/useContactName';
 import { ArrowLeft, Plus, Phone, MessageCircle, Trash2, Edit2, Share2, X, MoreVertical } from 'lucide-react';
 import { searchUserByPhone, getContacts, updateContact } from '../services/db';
 import { Avatar } from '../components/Avatar';
@@ -14,14 +15,24 @@ import { convertToTRY, fetchRates, type CurrencyRates } from '../services/curren
 import { cleanPhone as cleanPhoneNumber, formatPhoneForDisplay as formatPhoneNumber } from '../utils/phoneUtils';
 import clsx from 'clsx';
 
+import { useModal } from '../context/ModalContext';
+
+import { Timestamp } from 'firebase/firestore'; // Added import
+import type { User, Contact } from '../types'; // Added import
+
 export const PersonDetail = () => {
     const { id } = useParams<{ id: string }>(); // This can be a userId or a contactId (phone number)
     const { user } = useAuth();
     const navigate = useNavigate();
     const { allDebts: debts, loading } = useDebts();
+    const { resolveName } = useContactName(); // Added this
+    const { showAlert, showConfirm } = useModal();
     const [rates, setRates] = useState<CurrencyRates | null>(null);
     const [showCreateModal, setShowCreateModal] = useState(false);
     const [isRegisteredUser, setIsRegisteredUser] = useState(false);
+
+    // New State for Modal Target
+    const [targetUserObject, setTargetUserObject] = useState<User | Contact | null>(null);
 
     // Edit Contact State
     const [contactId, setContactId] = useState<string | null>(null);
@@ -43,11 +54,16 @@ export const PersonDetail = () => {
 
     const handleDelete = async () => {
         if (!user || !id) return;
-        if (confirm("Bu kişiyi ve geçmişini silmek istediğinize emin misiniz?")) {
+        const confirmed = await showConfirm(
+            "Kişi Silme",
+            "Bu kişiyi ve geçmişini silmek istediğinize emin misiniz?",
+            "warning"
+        );
+        if (confirmed) {
             // Deletion logic requires Contact ID. Since we often navigate by phone, 
             // we'd need to lookup the contact doc by phone first.
             // For now, only UI is implemented as per safety.
-            alert("Kişi silme işlemi şu an sadece rehber listesinden yapılabilir.");
+            showAlert("Bilgi", "Kişi silme işlemi şu an sadece rehber listesinden yapılabilir.", "info");
         }
     };
 
@@ -62,24 +78,43 @@ export const PersonDetail = () => {
             if (!id || !user) return;
             const cleanId = cleanPhoneNumber(id);
 
+            let foundSysUser: User | null = null;
+            let foundContactData: Contact | undefined;
+
             // 1. Check Registration
-            if (id.length > 15) {
+            if (id.length > 20) { // UID check
+                // If ID is UID, we can't easily fetch user without getDoc logic here or relying on search.
+                // Assuming searchUserByPhone won't work for UID.
+                // But typically we navigate by phone in this app.
+                // If ID is UID, we assume registered.
                 setIsRegisteredUser(true);
             } else {
-                const userFound = await searchUserByPhone(id);
-                setIsRegisteredUser(!!userFound);
+                foundSysUser = await searchUserByPhone(id);
+                setIsRegisteredUser(!!foundSysUser);
             }
 
-            // 2. Find Contact ID for editing
+            // 2. Find Contact ID for editing AND for Modal Target
             try {
                 const myContacts = await getContacts(user.uid);
-                const foundContact = myContacts.find(c =>
+                foundContactData = myContacts.find(c =>
                     c.phoneNumber === cleanId || c.phoneNumber === id
                 );
-                if (foundContact) {
-                    setContactId(foundContact.id);
-                    setEditName(foundContact.name);
-                    setEditPhone(foundContact.phoneNumber);
+
+                if (foundContactData) {
+                    setContactId(foundContactData.id);
+                    setEditName(foundContactData.name);
+                    setEditPhone(foundContactData.phoneNumber);
+                    setTargetUserObject(foundContactData);
+                } else if (foundSysUser) {
+                    setTargetUserObject(foundSysUser);
+                } else {
+                    // Raw phone number, construct temp contact object for Modal
+                    setTargetUserObject({
+                        id: 'temp',
+                        name: formatPhoneNumber(id),
+                        phoneNumber: cleanId,
+                        createdAt: Timestamp.now()
+                    });
                 }
             } catch (error) {
                 console.error("Error finding contact:", error);
@@ -99,10 +134,12 @@ export const PersonDetail = () => {
                 phoneNumber: editPhone
             });
             setShowEditModal(false);
-            window.location.reload();
+            showAlert("Başarılı", "Kişi bilgileri güncellendi.", "success");
+            // window.location.reload(); // Replacing reload with state update would be better but reloading is safe for now
+            setTimeout(() => window.location.reload(), 1500);
         } catch (error) {
             console.error(error);
-            alert("Güncelleme başarısız oldu.");
+            showAlert("Hata", "Güncelleme başarısız oldu.", "error");
         } finally {
             setSubmittingEdit(false);
         }
@@ -123,36 +160,39 @@ export const PersonDetail = () => {
         });
     }, [debts, id, user]);
 
-    // Get Person Info from the first debt found (or passed state if we had it)
+    // Get Person Info using standard hook
     const personInfo = useMemo(() => {
-        // If we found a contact in the database, use that info
-        if (contactId && editName) {
-            return {
-                name: editName,
-                phone: editPhone || (id || '')
+        // Determine fallback name and phone from debts if available
+        let fallbackName = '';
+        const cleanId = cleanPhoneNumber(id || ''); // Always clean the ID from URL (handles + becoming space)
+        let phone = cleanId;
+
+        if (personDebts.length > 0) {
+            const first = personDebts[0];
+            const isLender = first.lenderId === user?.uid;
+            fallbackName = isLender ? first.borrowerName : first.lenderName;
+            const otherId = isLender ? first.borrowerId : first.lenderId;
+            // If the ID param is a UID, we prefer the phone from the debt record if it looks like a phone
+            if (id && id.length > 20 && otherId.length <= 15) {
+                phone = cleanPhoneNumber(otherId);
             }
         }
 
-        if (personDebts.length === 0) {
-            // If ID looks like a phone, format it
-            const name = id && id.length <= 15 ? formatPhoneNumber(id) : 'Kişi';
-            return { name, phone: id || '' };
+        // Local override if we just edited (optimistic UI)
+        if (contactId && editName) {
+            return {
+                name: editName,
+                phone: cleanPhoneNumber(editPhone || phone)
+            };
         }
-        const first = personDebts[0];
-        const isLender = first.lenderId === user?.uid;
-        let name = isLender ? first.borrowerName : first.lenderName;
-        const phone = isLender ? first.borrowerId : first.lenderId;
 
-        // If name is raw phone, format it
-        if (name.replace(/\D/g, '').length >= 10 && !name.includes(' ')) {
-            name = formatPhoneNumber(name);
-        }
+        const { displayName } = resolveName(id || '', fallbackName);
 
         return {
-            name,
-            phone: phone.length > 20 ? '' : phone // Only show phone if it's not a UID (approx check)
+            name: displayName,
+            phone: phone.length > 20 ? '' : phone
         };
-    }, [personDebts, user, id, contactId, editName, editPhone]);
+    }, [personDebts, user, id, contactId, editName, editPhone, resolveName]);
 
     // Calculate Totals with this person
     const totals = useMemo(() => {
@@ -364,7 +404,7 @@ export const PersonDetail = () => {
                 isOpen={showCreateModal}
                 onClose={() => setShowCreateModal(false)}
                 initialPhoneNumber={id}
-                targetUser={undefined}
+                targetUser={targetUserObject}
                 onSubmit={async (borrowerId, borrowerName, amount, type, currency, note, dueDate, installments, canBorrowerAddPayment, requestApproval) => {
                     if (!user) return;
                     await import('../services/db').then(({ createDebt }) => createDebt(

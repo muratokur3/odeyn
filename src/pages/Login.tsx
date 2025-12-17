@@ -1,4 +1,3 @@
-
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { Lock, MessageSquare, Loader2, ArrowLeft } from 'lucide-react';
@@ -6,12 +5,15 @@ import { auth } from '../services/firebase';
 import { RecaptchaVerifier, type ConfirmationResult } from 'firebase/auth';
 import { PhoneInput } from '../components/PhoneInput';
 import { loginWithPhoneAndPassword, startPhoneLogin, ensureUserDocument } from '../services/auth';
+import { searchUserByPhone } from '../services/db';
+import { useModal } from '../context/ModalContext';
 import clsx from 'clsx';
 
 export const Login = () => {
     const navigate = useNavigate();
-    const [activeTab, setActiveTab] = useState<'PASSWORD' | 'SMS'>('PASSWORD');
+    const [activeTab, setActiveTab] = useState<'PASSWORD' | 'SMS'>('SMS');
     const [loading, setLoading] = useState(false);
+    const { showAlert } = useModal();
 
     // Form Data
     const [phone, setPhone] = useState('');
@@ -42,7 +44,7 @@ export const Login = () => {
             navigate('/');
         } catch (error) {
             console.error(error);
-            alert("Giriş başarısız. Bilgilerinizi kontrol edin.");
+            showAlert("Giriş Başarısız", "Giriş yapılamadı. Bilgilerinizi kontrol edin.", "error");
         } finally {
             setLoading(false);
         }
@@ -54,13 +56,20 @@ export const Login = () => {
 
         setLoading(true);
         try {
+            // Check existence for SMS Login to prevent auto-registration or clarify flow
+            const existingUser = await searchUserByPhone(phone);
+            if (!existingUser) {
+                showAlert("Kayıt Bulunamadı", "Bu numarada bir kayıt yok. Lütfen kayıt olun.", "warning");
+                return;
+            }
+
             if (!recaptchaVerifier.current) return;
             const result = await startPhoneLogin(phone, recaptchaVerifier.current);
             setConfirmationResult(result);
             setSmsStep('VERIFY');
         } catch (error) {
             console.error(error);
-            alert("SMS gönderilemedi.");
+            showAlert("Hata", "SMS gönderilemedi.", "error");
         } finally {
             setLoading(false);
         }
@@ -80,7 +89,7 @@ export const Login = () => {
             }
         } catch (error) {
             console.error(error);
-            alert("Hatalı kod.");
+            showAlert("Hata", "Hatalı kod girdiniz.", "error");
         } finally {
             setLoading(false);
         }
@@ -88,6 +97,7 @@ export const Login = () => {
 
     return (
         <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
+
             <div className="w-full max-w-md bg-surface p-8 rounded-3xl shadow-xl border border-slate-700">
 
                 {/* Header with Back */}
@@ -102,17 +112,6 @@ export const Login = () => {
                 {/* Tabs */}
                 <div className="flex bg-background rounded-xl p-1 mb-8 border border-slate-700">
                     <button
-                        onClick={() => setActiveTab('PASSWORD')}
-                        className={clsx(
-                            "flex-1 flex items-center justify-center gap-2 py-3 rounded-lg text-sm font-semibold transition-all",
-                            activeTab === 'PASSWORD'
-                                ? "bg-primary text-white shadow-md"
-                                : "text-text-secondary hover:text-text-primary hover:bg-surface"
-                        )}
-                    >
-                        <Lock size={16} /> Şifre ile
-                    </button>
-                    <button
                         onClick={() => setActiveTab('SMS')}
                         className={clsx(
                             "flex-1 flex items-center justify-center gap-2 py-3 rounded-lg text-sm font-semibold transition-all",
@@ -122,6 +121,17 @@ export const Login = () => {
                         )}
                     >
                         <MessageSquare size={16} /> SMS ile
+                    </button>
+                    <button
+                        onClick={() => setActiveTab('PASSWORD')}
+                        className={clsx(
+                            "flex-1 flex items-center justify-center gap-2 py-3 rounded-lg text-sm font-semibold transition-all",
+                            activeTab === 'PASSWORD'
+                                ? "bg-primary text-white shadow-md"
+                                : "text-text-secondary hover:text-text-primary hover:bg-surface"
+                        )}
+                    >
+                        <Lock size={16} /> Şifre ile
                     </button>
                 </div>
 

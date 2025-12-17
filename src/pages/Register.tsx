@@ -1,11 +1,12 @@
-
 import { useState, useRef, useEffect } from 'react';
 import { useNavigate, Link } from 'react-router-dom';
 import { RecaptchaVerifier, type ConfirmationResult } from 'firebase/auth';
 import { auth } from '../services/firebase';
 import { startPhoneLogin, linkPasswordToPhone } from '../services/auth';
+import { searchUserByPhone } from '../services/db';
 import { PhoneInput } from '../components/PhoneInput';
 import { Loader2, ArrowRight, Check, ShieldCheck, User, Lock, Mail } from 'lucide-react';
+import { useModal } from '../context/ModalContext';
 
 type Step = 'PHONE' | 'OTP' | 'DETAILS';
 
@@ -13,6 +14,7 @@ export const Register = () => {
     const navigate = useNavigate();
     const [step, setStep] = useState<Step>('PHONE');
     const [loading, setLoading] = useState(false);
+    const { showAlert } = useModal();
 
     // Data
     const [phone, setPhone] = useState('');
@@ -40,13 +42,20 @@ export const Register = () => {
 
         setLoading(true);
         try {
+            // Check for duplicate phone
+            const existingUser = await searchUserByPhone(phone);
+            if (existingUser) {
+                showAlert("Kayıtlı Numara", "Bu numara zaten kayıtlı. Lütfen giriş yapın.", "warning");
+                return;
+            }
+
             if (!recaptchaVerifier.current) return;
             const result = await startPhoneLogin(phone, recaptchaVerifier.current);
             setConfirmationResult(result);
             setStep('OTP');
         } catch (error) {
             console.error(error);
-            alert("SMS gönderilemedi. Lütfen numarayı kontrol edin.");
+            showAlert("Hata", "SMS gönderilemedi. Lütfen numarayı kontrol edin.", "error");
         } finally {
             setLoading(false);
         }
@@ -63,7 +72,7 @@ export const Register = () => {
             setStep('DETAILS');
         } catch (error) {
             console.error(error);
-            alert("Hatalı kod.");
+            showAlert("Hata", "Hatalı kod girdiniz. Lütfen tekrar deneyin.", "error");
         } finally {
             setLoading(false);
         }
@@ -82,7 +91,7 @@ export const Register = () => {
             navigate('/');
         } catch (error) {
             console.error(error);
-            alert("Hesap oluşturulurken bir hata oluştu.");
+            showAlert("Kayıt Hatası", "Hesap oluşturulurken bir hata oluştu.", "error");
         } finally {
             setLoading(false);
         }
@@ -90,6 +99,7 @@ export const Register = () => {
 
     return (
         <div className="min-h-screen bg-background flex flex-col items-center justify-center p-4">
+
             <div className="w-full max-w-md bg-surface p-8 rounded-3xl shadow-xl border border-slate-700">
                 <div className="text-center mb-8">
                     <h1 className="text-3xl font-bold text-text-primary mb-2">DebtDert</h1>
@@ -98,20 +108,20 @@ export const Register = () => {
 
                 {/* Stepper Indicators */}
                 <div className="flex justify-between mb-8 px-4">
-                    <div className={`flex flex - col items - center gap - 1 ${step === 'PHONE' ? 'text-primary' : 'text-text-secondary'} `}>
-                        <div className={`w - 8 h - 8 rounded - full flex items - center justify - center border - 2 ${step === 'PHONE' ? 'border-primary bg-primary/10' : 'border-slate-600'} `}>1</div>
+                    <div className={`flex flex-col items-center gap-1 ${step === 'PHONE' ? 'text-primary' : 'text-text-secondary'}`}>
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 ${step === 'PHONE' ? 'border-primary bg-primary/10' : 'border-slate-600'}`}>1</div>
                         <span className="text-xs">Tel</span>
                     </div>
-                    <div className={`h - 0.5 flex - 1 mx - 2 my - 4 bg - slate - 700 ${step !== 'PHONE' ? 'bg-primary' : ''} `} />
-                    <div className={`flex flex - col items - center gap - 1 ${step === 'OTP' ? 'text-primary' : step === 'DETAILS' ? 'text-primary' : 'text-text-secondary'} `}>
-                        <div className={`w - 8 h - 8 rounded - full flex items - center justify - center border - 2 ${step === 'OTP' ? 'border-primary bg-primary/10' : step === 'DETAILS' ? 'border-primary bg-primary' : 'border-slate-600'} `}>
+                    <div className={`h-0.5 flex-1 mx-2 my-4 bg-slate-700 ${step !== 'PHONE' ? 'bg-primary' : ''}`} />
+                    <div className={`flex flex-col items-center gap-1 ${step === 'OTP' ? 'text-primary' : step === 'DETAILS' ? 'text-primary' : 'text-text-secondary'}`}>
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 ${step === 'OTP' ? 'border-primary bg-primary/10' : step === 'DETAILS' ? 'border-primary bg-primary' : 'border-slate-600'}`}>
                             {step === 'DETAILS' ? <Check size={16} className="text-white" /> : '2'}
                         </div>
                         <span className="text-xs">Kod</span>
                     </div>
-                    <div className={`h - 0.5 flex - 1 mx - 2 my - 4 bg - slate - 700 ${step === 'DETAILS' ? 'bg-primary' : ''} `} />
-                    <div className={`flex flex - col items - center gap - 1 ${step === 'DETAILS' ? 'text-primary' : 'text-text-secondary'} `}>
-                        <div className={`w - 8 h - 8 rounded - full flex items - center justify - center border - 2 ${step === 'DETAILS' ? 'border-primary bg-primary/10' : 'border-slate-600'} `}>3</div>
+                    <div className={`h-0.5 flex-1 mx-2 my-4 bg-slate-700 ${step === 'DETAILS' ? 'bg-primary' : ''}`} />
+                    <div className={`flex flex-col items-center gap-1 ${step === 'DETAILS' ? 'text-primary' : 'text-text-secondary'}`}>
+                        <div className={`w-8 h-8 rounded-full flex items-center justify-center border-2 ${step === 'DETAILS' ? 'border-primary bg-primary/10' : 'border-slate-600'}`}>3</div>
                         <span className="text-xs">Bilgi</span>
                     </div>
                 </div>
@@ -238,4 +248,3 @@ export const Register = () => {
         </div>
     );
 };
-

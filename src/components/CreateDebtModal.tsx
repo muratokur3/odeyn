@@ -1,7 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { X, Search, ChevronDown, ChevronUp, Book } from 'lucide-react';
 import { Avatar } from './Avatar';
-import { searchUserByPhone, searchContacts, addContact } from '../services/db';
+import { SelectedUserCard } from './SelectedUserCard'; // Import moved to top
+
+import { searchUserByPhone, searchContacts } from '../services/db';
 import { formatCurrency } from '../utils/format';
 import type { User, Contact, Installment } from '../types';
 import { useAuth } from '../hooks/useAuth';
@@ -28,16 +30,23 @@ interface CreateDebtModalProps {
     targetUser?: User | Contact | null;
 }
 
+import { useModal } from '../context/ModalContext';
+
 export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClose, onSubmit, initialPhoneNumber, targetUser }) => {
     const { user } = useAuth();
+    const { showAlert } = useModal();
 
     // Derived state for initialization
     const initialName = targetUser
         ? ('displayName' in targetUser ? targetUser.displayName : targetUser.name)
         : '';
 
+    // ... [rest unchanged]
+
     const initialPhone = targetUser
-        ? targetUser.phoneNumber
+        ? ('uid' in targetUser
+            ? (targetUser.primaryPhoneNumber || targetUser.phoneNumbers?.[0] || targetUser.phoneNumber || '')
+            : targetUser.phoneNumber)
         : (initialPhoneNumber || '');
 
     const [phoneNumber, setPhoneNumber] = useState(initialPhone);
@@ -54,7 +63,9 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
     const [searchResults, setSearchResults] = useState<Contact[]>([]);
 
     const [loading, setLoading] = useState(false);
+
     const [searching, setSearching] = useState(false);
+    const [isManualSearch, setIsManualSearch] = useState(false); // New state to override targetUser lock
 
     // New Fields
     const [type, setType] = useState<'LENDING' | 'BORROWING'>('LENDING');
@@ -75,6 +86,7 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
         if (isOpen) {
             setPhoneNumber(initialPhone);
             setBorrowerName(initialName);
+            setIsManualSearch(false); // Reset manual search mode
             if (targetUser) {
                 if ('uid' in targetUser) {
                     setFoundUser(targetUser as User);
@@ -83,8 +95,12 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                     setFoundContact(targetUser as Contact);
                     setFoundUser(null);
                 }
-                setFoundContact(null);
+            } else {
+                // Only reset if NOT initial (this ensures manual typing doesn't get messed up if initial props change strangely,
+                // but mainly targets the bug where it wasn't persisting)
+                // Actually, logic above is enough if targetUser is provided.
             }
+
             // Initialize requestApproval to false (user can manually check if needed)
             // Previous behavior: Default was strictly logic-based.
             // We default to false so Auto-Approve works by default unless overridden.
@@ -100,9 +116,9 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
         }
     }, [isOpen, initialPhoneNumber, targetUser, user]);
 
-    // Search Effect - Disable if targetUser is set
+    // Search Effect - Disable if targetUser is set AND not overridden
     useEffect(() => {
-        if (targetUser) return; // Skip search if locked to a user
+        if (targetUser && !isManualSearch) return; // Skip search if locked to a user and not manually cleared
 
         const search = async () => {
             if (!user || !phoneNumber || phoneNumber.length < 3) {
@@ -150,8 +166,8 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
 
     const handleSelectUser = (sysUser: User) => {
         setFoundUser(sysUser);
-        setPhoneNumber(sysUser.phoneNumber);
-        setBorrowerName(sysUser.displayName);
+        setPhoneNumber(sysUser.primaryPhoneNumber || sysUser.phoneNumbers?.[0] || sysUser.phoneNumber || '');
+        setBorrowerName(sysUser.displayName || '');
         setSearchResults([]);
         setFoundContact(null);
     };
@@ -165,24 +181,27 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
 
         if (isNaN(numAmount) || numAmount <= 0) return;
         if (numDownPayment >= numAmount) {
-            alert("Peşinat tutarı toplam tutardan büyük veya eşit olamaz.");
+            showAlert("Hata", "Peşinat tutarı toplam tutardan büyük veya eşit olamaz.", "error");
             return;
         }
 
         // Determine final ID and Name
-        let finalBorrowerId = phoneNumber;
+        let finalBorrowerId: string = phoneNumber || '';
         let finalBorrowerName = borrowerName;
 
         if (foundContact) {
             finalBorrowerId = foundContact.linkedUserId || foundContact.phoneNumber;
-            finalBorrowerName = foundContact.name;
+            // Allow name override: IF user edited the name field, usage logic?
+            // Usually we trust the object, BUT user wants to edit displayed name.
+            // So if borrowerName is set, use it.
+            finalBorrowerName = borrowerName || foundContact.name;
         } else if (foundUser) {
             finalBorrowerId = foundUser.uid;
-            finalBorrowerName = foundUser.displayName;
+            finalBorrowerName = borrowerName || foundUser.displayName;
         }
 
         if (!finalBorrowerName) {
-            alert("Lütfen bir isim girin veya kayıtlı bir kullanıcı seçin.");
+            showAlert("Bilgi", "Lütfen bir isim girin veya kayıtlı bir kullanıcı seçin.", "warning");
             return;
         }
 
@@ -223,12 +242,8 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                 numDownPayment // Pass Initial Payment
             );
 
-            // 2. Auto-add to Contacts if not already a contact
-            if (!foundContact) {
-                // Check if we should link to a system user
-                const linkedId = foundUser ? foundUser.uid : undefined;
-                await addContact(user.uid, finalBorrowerName, phoneNumber, linkedId);
-            }
+            // 2. Auto-add to Contacts is now handled inside createDebt service globally.
+            // Redundant call removed to prevent duplicates.
 
             onClose();
             // Reset form
@@ -291,6 +306,8 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                             </button>
                         </div>
 
+                        {/* Type Toggle */}
+
                         <div>
                             <label className="block text-sm font-medium text-text-secondary mb-1">
                                 {type === 'LENDING' ? 'Kime Veriyorsun?' : 'Kimden Alıyorsun?'}
@@ -298,37 +315,18 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
 
                             {/* Selected User Display */}
                             {(foundContact || foundUser) ? (
-                                <div className="relative p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-800 flex items-center justify-between animate-in fade-in zoom-in duration-200">
-                                    <div className="flex items-center gap-3">
-                                        <Avatar
-                                            name={foundContact?.name || foundUser?.displayName}
-                                            size="md"
-                                            status={foundUser ? 'system' : 'contact'}
-                                        />
-                                        <div>
-                                            <p className="font-semibold text-text-primary">
-                                                {foundContact?.name || foundUser?.displayName}
-                                            </p>
-                                            <p className="text-xs text-text-secondary">
-                                                {foundContact?.phoneNumber || foundUser?.phoneNumber}
-                                            </p>
-                                        </div>
-                                    </div>
-                                    {!targetUser && (
-                                        <button
-                                            type="button"
-                                            onClick={() => {
-                                                setFoundContact(null);
-                                                setFoundUser(null);
-                                                setPhoneNumber('');
-                                                setBorrowerName('');
-                                            }}
-                                            className="p-2 text-text-secondary hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-full transition-colors"
-                                        >
-                                            <X size={20} />
-                                        </button>
-                                    )}
-                                </div>
+                                <SelectedUserCard
+                                    name={foundContact?.name || foundUser?.displayName || ''}
+                                    phoneNumber={foundContact?.phoneNumber || foundUser?.phoneNumber || ''}
+                                    status={foundUser ? 'system' : 'contact'}
+                                    onClear={() => {
+                                        setFoundContact(null);
+                                        setFoundUser(null);
+                                        setPhoneNumber('');
+                                        setBorrowerName('');
+                                        setIsManualSearch(true); // Enable manual search
+                                    }}
+                                />
                             ) : (
                                 /* Search Input */
                                 <div className="relative">
@@ -367,7 +365,7 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
 
                             {/* Search Results Dropdown */}
                             {!foundContact && !foundUser && (searchResults.length > 0 || (foundUser && !foundContact)) && (
-                                <div className="mt-2 bg-surface border border-border rounded-xl shadow-lg overflow-hidden max-h-48 overflow-y-auto absolute w-full max-w-[calc(100%-3rem)] z-20">
+                                <div className="mt-2 bg-surface border border-border rounded-xl shadow-lg overflow-hidden max-h-48 overflow-y-auto absolute w-[calc(100%-4rem)] z-20">
                                     {searchResults.map(contact => (
                                         <div
                                             key={contact.id}
@@ -407,6 +405,7 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                             )}
                         </div>
 
+                        {/* Name Input - HIDDEN if user selected */}
                         {!foundContact && !foundUser && (
                             <div className="animate-in fade-in slide-in-from-top-2 duration-200">
                                 <label className="block text-sm font-medium text-text-secondary mb-1">İsim</label>

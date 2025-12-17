@@ -28,12 +28,26 @@ export const cleanPhone = (input: string): string => {
     // If it fails, let's just do a basic digit cleanup to be safe, or return empty?
     // User requested: "Output ALWAYS E.164". If invalid, we return what?
     // Let's return the cleaned digits with +90 if length matches, essentially our old logic as absolute fallback.
+    // Digits only cleanup
     const digits = input.replace(/\D/g, '');
-    if (digits.length === 10) return `+90${digits}`;
-    if (digits.length === 11 && digits.startsWith('90')) return `+${digits}`;
-    if (input.startsWith('+')) return input.replace(/\s/g, ''); // Already looks like intl
 
-    return input.replace(/\s/g, ''); // Return stripped as last resort
+    // TR specific heuristics for robust cleaning
+    if (digits.length === 10 && (digits.startsWith('5') || digits.startsWith('05'))) {
+        return `+90${digits}`; // 5551234567 -> +905551234567
+    }
+    if (digits.length === 11 && digits.startsWith('0')) {
+        return `+90${digits.substring(1)}`; // 05551234567 -> +905551234567
+    }
+    if (digits.length === 12 && digits.startsWith('90')) {
+        return `+${digits}`; // 905551234567 -> +905551234567
+    }
+
+    // Default: Return +digits if it looks international, otherwise just digits?
+    // Manifest says E.164. If we can't parse or detect TR, we might be in trouble.
+    // Let's assume input +digits is safe.
+    if (input.includes('+')) return `+${digits}`;
+
+    return digits.length > 10 ? `+${digits}` : digits; // Fallback
 };
 
 /**
@@ -47,8 +61,8 @@ export const formatPhoneForDisplay = (cleanNumber: string): string => {
         const phoneNumber = parsePhoneNumber(cleanNumber);
         if (phoneNumber) {
             // "National" format for TR starts with 0 usually in libphonenumber? 
-            // parsePhoneNumber('+905551234567').format('NATIONAL') -> "0555 123 45 67"
-            return phoneNumber.format('NATIONAL');
+            // We want predictable +90 format or readable international for Contacts.
+            return phoneNumber.format('INTERNATIONAL');
         }
     } catch {
         // ignore

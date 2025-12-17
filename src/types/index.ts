@@ -2,13 +2,14 @@ import { Timestamp } from 'firebase/firestore';
 
 export interface User {
     uid: string;
-    phoneNumber: string;
+    phoneNumber?: string; // @deprecated Use phoneNumbers array
+    phoneNumbers: string[]; // List of verified E.164 numbers
+    primaryPhoneNumber: string; // The main number for display/notifications
     displayName: string;
     createdAt: Timestamp;
     email?: string;
     recoveryEmail?: string;
     photoURL?: string;
-    savedContacts?: string[]; // List of UIDs
     preferences?: {
         autoApproveDebt?: boolean;
         requireApproval?: boolean;
@@ -20,7 +21,7 @@ export interface User {
 export interface Contact {
     id: string; // Document ID
     name: string;
-    phoneNumber: string;
+    phoneNumber: string; // E.164 format strictly (e.g., +905551234567)
     linkedUserId?: string; // If matched with a system user
     createdAt: Timestamp;
 }
@@ -55,6 +56,7 @@ export interface Debt {
     deletedAt?: Timestamp;
     canBorrowerAddPayment?: boolean;
     allow_counterparty_edit?: boolean;
+    lockedPhoneNumber?: string; // Immutable E.164 phone number for recovery/display
 }
 
 export type PaymentLogType = 'INITIAL_CREATION' | 'PAYMENT' | 'NOTE_ADDED' | 'PAYMENT_DECLARATION';

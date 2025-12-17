@@ -6,6 +6,7 @@ import { restoreDebt, permanentlyDeleteDebt, updateUserPreferences } from '../se
 import { useAuth } from '../hooks/useAuth';
 import type { User } from '../types';
 import { DebtCard } from '../components/DebtCard';
+import { useModal } from '../context/ModalContext';
 import clsx from 'clsx';
 
 // --- Internal Components ---
@@ -67,6 +68,7 @@ const SectionHeader = ({ title }: { title: string }) => (
 export const Settings = () => {
     const navigate = useNavigate();
     const { user } = useAuth(); // Get current user
+    const { showAlert, showConfirm } = useModal();
     const { allDebts: deletedDebts, loading } = useDebts(true);
 
     const [activeTab, setActiveTab] = useState<'GENERAL' | 'TRASH'>('GENERAL');
@@ -82,7 +84,6 @@ export const Settings = () => {
         if (user) {
             const prefs = user.preferences || {};
             setAutoApprove(prefs.autoApproveDebt ?? false);
-            setSyncContacts(prefs.syncContacts ?? false);
             setSyncContacts(prefs.syncContacts ?? false);
             setDefaultAllowPayment(prefs.defaultAllowPaymentAddition ?? false);
         }
@@ -112,30 +113,57 @@ export const Settings = () => {
         if (val !== 'OFF') checkAutoDelete(parseInt(val));
     };
 
-    // Trash Logic (Preserved)
+    // Trash Logic (Real-time updates via useDebts)
     const handleRestore = async (debtId: string) => {
-        if (confirm("Bu kaydı geri yüklemek istediğinize emin misiniz?")) {
+        if (!user) return;
+        const confirmed = await showConfirm("Geri Yükle", "Bu kaydı geri yüklemek istediğinize emin misiniz?");
+        if (confirmed) {
             await restoreDebt(debtId);
+            showAlert("Başarılı", "Kayıt geri yüklendi.", "success");
         }
     };
 
-    const handleDelete = async (debtId: string) => {
-        if (confirm("Bu kaydı kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz!")) {
-            await permanentlyDeleteDebt(debtId);
+    const handlePermanentDelete = async (debtId: string) => {
+        if (!user) return;
+        const confirmed = await showConfirm(
+            "Kalıcı Silme",
+            "Bu kayıt kalıcı olarak silinecek. Geri alınamaz!",
+            "error" // Danger type
+        );
+        if (confirmed) {
+            await permanentlyDeleteDebt(debtId, user.uid);
+            // await loadDeletedDebts(); // Real-time update handles this
+            showAlert("Silindi", "Kayıt kalıcı olarak silindi.", "success");
         }
+    };
+
+    const handleCleanDeleted = async () => {
+        if (!deletedDebts.length || !user) return; // check user
+
+        const confirmed = await showConfirm("Temizlik", "Çöp kutusundaki tüm kayıtları kalıcı olarak silmek istiyor musunuz?", "warning");
+        if (!confirmed) return;
+
+        let deletedCount = 0;
+        for (const debt of deletedDebts) {
+            await permanentlyDeleteDebt(debt.id, user.uid);
+            deletedCount++;
+        }
+
+        if (deletedCount > 0) showAlert("Temizlik Tamamlandı", `${deletedCount} adet kayıt kalıcı olarak silindi.`, "success");
+        else showAlert("Bilgi", "Silinecek kayıt bulunamadı.", "info");
     };
 
     const checkAutoDelete = async (days: number) => {
-        if (!deletedDebts.length) return;
+        if (!deletedDebts.length || !user) return; // check user
         const cutoffDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
         let deletedCount = 0;
         for (const debt of deletedDebts) {
             if (debt.deletedAt && debt.deletedAt.toDate() < cutoffDate) {
-                await permanentlyDeleteDebt(debt.id);
+                await permanentlyDeleteDebt(debt.id, user.uid);
                 deletedCount++;
             }
         }
-        if (deletedCount > 0) alert(`${deletedCount} adet süresi dolmuş kayıt silindi.`);
+        if (deletedCount > 0) showAlert("Otomatik Temizlik", `${deletedCount} adet süresi dolmuş kayıt silindi.`, "info");
     };
 
     return (
@@ -211,7 +239,7 @@ export const Settings = () => {
                                 icon={UserX}
                                 title="Engellenen Kullanıcılar"
                                 description="Engellenmiş kişi listesini yönet."
-                                onClick={() => alert("Engellenen kullanıcılar sayfası yakında eklenecek.")}
+                                onClick={() => showAlert("Yakında", "Engellenen kullanıcılar sayfası yakında eklenecek.", "info")}
                             />
                         </div>
 
@@ -257,6 +285,12 @@ export const Settings = () => {
                             <div className="space-y-3">
                                 <div className="flex justify-between items-center px-2 pb-2 border-b border-gray-100 dark:border-slate-800">
                                     <span className="text-xs font-bold text-gray-500 uppercase">Silinen {deletedDebts.length} Kayıt</span>
+                                    <button
+                                        onClick={handleCleanDeleted}
+                                        className="text-xs font-bold text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 px-2 py-1 rounded transition-colors"
+                                    >
+                                        Hepsini Temizle
+                                    </button>
                                 </div>
                                 {deletedDebts.map(debt => (
                                     <div key={debt.id} className="relative group rounded-xl overflow-hidden border border-red-100 dark:border-red-900/30">
@@ -276,7 +310,7 @@ export const Settings = () => {
                                             </button>
                                             <div className="w-px h-12 bg-gray-200 dark:bg-slate-700" />
                                             <button
-                                                onClick={() => handleDelete(debt.id)}
+                                                onClick={() => handlePermanentDelete(debt.id)}
                                                 className="flex flex-col items-center gap-1 text-red-600 hover:scale-110 transition-transform"
                                                 title="Kalıcı Sil"
                                             >

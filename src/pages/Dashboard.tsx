@@ -1,7 +1,6 @@
 import { useState, useMemo, useEffect } from 'react';
 import { useDebts } from '../hooks/useDebts';
 import { useAuth } from '../hooks/useAuth';
-import { useContacts } from '../hooks/useContacts';
 import { useContactName } from '../hooks/useContactName';
 import { ContactRow } from '../components/ContactRow';
 import { NotificationsModal } from '../components/NotificationsModal';
@@ -32,6 +31,7 @@ interface ContactSummary {
     lastActivity: Date;
     lastActionSnippet: string;
     status: 'none' | 'system' | 'contact';
+    photoURL?: string; // Added support for avatar
 }
 
 export const Dashboard = () => {
@@ -42,7 +42,7 @@ export const Dashboard = () => {
     const [showFilters, setShowFilters] = useState(false);
     const [showNotifications, setShowNotifications] = useState(false);
     const { notifications } = useNotifications();
-    const { isContact } = useContacts();
+    // const { isContact } = useContacts(); // Unused
     const { resolveName } = useContactName();
     const [editingDebt, setEditingDebt] = useState<Debt | null>(null);
 
@@ -62,15 +62,8 @@ export const Dashboard = () => {
         setEditingDebt(null);
     };
 
-    // Helper to determine contact status
-    const getContactStatus = (id: string): 'none' | 'system' | 'contact' => {
-        if (!user) return 'none';
-        const isSystemUser = id.length > 20; // Basic check for UID vs Phone
-        const isUserContact = isContact(id);
-        if (isSystemUser) return 'system';
-        if (isUserContact) return 'contact';
-        return 'none';
-    };
+    // Removed getContactStatus in favor of resolveName source
+
 
     // Calculations & Aggregation
     const useMemoResult = useMemo(() => {
@@ -83,6 +76,7 @@ export const Dashboard = () => {
 
         const contactMap = new Map<string, {
             name: string;
+            source: 'contact' | 'user' | 'phone';
             balance: number; // Net balance in base currency (TRY)
             lastActivity: Date;
             lastSnippet: string;
@@ -127,6 +121,7 @@ export const Dashboard = () => {
 
                 contactMap.set(otherId, {
                     name: displayName,
+                    source: resolution.source, // Store the source
                     balance: 0,
                     lastActivity: new Date(0),
                     lastSnippet: ''
@@ -160,17 +155,19 @@ export const Dashboard = () => {
         });
 
         // 2. Convert Map to List & Filter
-        let summaries: ContactSummary[] = Array.from(contactMap.entries())
-            .map(([id, data]) => ({
+        const mapEntries = Array.from(contactMap.entries());
+        let summaries = mapEntries.map(([id, data]) => {
+            return {
                 id,
                 name: data.name,
                 netBalance: data.balance,
                 currency: 'TRY', // Contact list is unified in TRY
                 lastActivity: data.lastActivity,
                 lastActionSnippet: data.lastSnippet,
-                status: getContactStatus(id)
-            }))
-            .filter(c => Math.abs(c.netBalance) > 0.01);
+                status: data.source === 'contact' ? 'contact' : (data.source === 'user' ? 'system' : 'none'),
+                // photoURL: undefined
+            } as ContactSummary;
+        }).filter(c => Math.abs(c.netBalance) > 0.01);
 
         // 3. Filters (Time & Type)
         const now = new Date();
@@ -447,9 +444,8 @@ export const Dashboard = () => {
                     </div>
                 )}
 
-                {/* Contact List Title */}
-                <div className="flex items-center justify-between px-1 pt-2">
-                    <h2 className="text-lg font-bold text-gray-800 dark:text-white">Kişiler</h2>
+                {/* Contact List Title Removed */}
+                <div className="flex items-center justify-end px-1 pt-2">
                     <button
                         onClick={() => setShowFilters(!showFilters)}
                         className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded-lg"
@@ -487,6 +483,7 @@ export const Dashboard = () => {
                             lastActionSnippet={contact.lastActionSnippet}
                             onClick={() => navigate(`/person/${cleanPhoneNumber(contact.id)}`)}
                             status={contact.status}
+                            photoURL={contact.photoURL}
                         />
                     ))}
 
