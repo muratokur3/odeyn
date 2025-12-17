@@ -264,19 +264,33 @@ export const respondToDebtRequest = async (debtId: string, status: 'ACTIVE' | 'R
 export const searchUserByPhone = async (phoneNumber: string): Promise<User | null> => {
     const cleanPhone = cleanPhoneNumber(phoneNumber);
 
-    const q = query(
+    // 1. Search by primary phone number
+    const q1 = query(
         collection(db, 'users'),
         where('phoneNumber', '==', cleanPhone),
         limit(1)
     );
 
-    const querySnapshot = await getDocs(q);
-    if (querySnapshot.empty) {
-        return null;
+    const snapshot1 = await getDocs(q1);
+    if (!snapshot1.empty) {
+        const doc = snapshot1.docs[0];
+        return { uid: doc.id, ...doc.data() } as User;
     }
 
-    const doc = querySnapshot.docs[0];
-    return { uid: doc.id, ...doc.data() } as User;
+    // 2. Search by secondary phone numbers
+    const q2 = query(
+        collection(db, 'users'),
+        where('secondaryPhoneNumbers', 'array-contains', cleanPhone),
+        limit(1)
+    );
+
+    const snapshot2 = await getDocs(q2);
+    if (!snapshot2.empty) {
+        const doc = snapshot2.docs[0];
+        return { uid: doc.id, ...doc.data() } as User;
+    }
+
+    return null;
 };
 // --- Contacts Services ---
 
@@ -393,6 +407,8 @@ export const claimDebts = async (userId: string, phoneNumber: string) => {
 
                 const data = debtDoc.data();
                 const participants = data.participants || [];
+
+                // Add new UID to participants if not present
                 if (!participants.includes(userId)) {
                     participants.push(userId);
                 }
@@ -422,6 +438,8 @@ export const claimDebts = async (userId: string, phoneNumber: string) => {
 
                 const data = debtDoc.data();
                 const participants = data.participants || [];
+
+                // Add new UID to participants if not present
                 if (!participants.includes(userId)) {
                     participants.push(userId);
                 }
@@ -448,7 +466,33 @@ export const claimDebts = async (userId: string, phoneNumber: string) => {
     }
 };
 
+/**
+ * Checks a user's contacts and links them to system users if found.
+ * This is client-side syncing because we can't search all users' contacts globally.
+ */
+export const syncContactsWithSystem = async (userId: string) => {
+    try {
+        const contacts = await getContacts(userId);
+        let updatedCount = 0;
 
+        for (const contact of contacts) {
+            // Only check if not already linked
+            if (!contact.linkedUserId) {
+                const systemUser = await searchUserByPhone(contact.phoneNumber);
+                if (systemUser) {
+                    await updateContact(userId, contact.id, { linkedUserId: systemUser.uid });
+                    updatedCount++;
+                }
+            }
+        }
+
+        if (updatedCount > 0) {
+            console.log(`Synced ${updatedCount} contacts with system users.`);
+        }
+    } catch (error) {
+        console.error("Error syncing contacts:", error);
+    }
+}
 
 export const updateUserPreferences = async (userId: string, preferences: User['preferences']) => {
     try {

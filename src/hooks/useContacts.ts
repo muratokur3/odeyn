@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useAuth } from './useAuth';
-import { getContacts } from '../services/db';
+import { getContacts, syncContactsWithSystem } from '../services/db';
 import type { Contact } from '../types';
 
 export const useContacts = () => {
@@ -8,9 +8,18 @@ export const useContacts = () => {
     const [contacts, setContacts] = useState<Contact[]>([]);
     const [loading, setLoading] = useState(true);
 
+    // Initial Load & Sync
     useEffect(() => {
         if (user) {
             loadContacts();
+
+            // Trigger background sync to link contacts with system users
+            // We do this silently in the background
+            syncContactsWithSystem(user.uid).then(() => {
+                // Optional: reload if changes detected, but simpler to just reload on next visit or manual refresh
+                // or we could reload silently:
+                // loadContacts();
+            });
         } else {
             setContacts([]);
             setLoading(false);

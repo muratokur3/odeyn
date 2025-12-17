@@ -37,17 +37,20 @@
 ### User
 Represents a registered user of the application.
 - **uid:** Unique identifier (from Firebase Auth).
-- **phoneNumber:** Primary identifier for finding users.
+- **phoneNumber:** Primary identifier for finding users (E.164 format).
+- **secondaryPhoneNumbers:** (Array) Additional verified numbers for the user.
 - **displayName:** User's chosen name.
 - **preferences:** Settings for auto-approval, notifications, etc.
 
 ### Debt
 The central entity tracking a financial obligation.
-- **lenderId / borrowerId:** UIDs or Phone Numbers of participants.
+- **lenderId / borrowerId:**
+    - If user is registered: Uses `UID`.
+    - If user is NOT registered: Uses `PhoneNumber` (E.164).
 - **amount:** Original and remaining amounts.
 - **currency:** Currency of the debt (e.g., TRY, USD).
 - **status:** Current state (`PENDING`, `ACTIVE`, `PAID`, `PARTIALLY_PAID`, `REJECTED`).
-- **participants:** Array of IDs for security rules.
+- **participants:** Array of IDs (UIDs or PhoneNumbers) for security rules and querying.
 
 ### PaymentLog
 Tracks history of actions on a debt.
@@ -60,23 +63,33 @@ Tracks history of actions on a debt.
 Local address book for a user.
 - **name:** Display name set by the user.
 - **phoneNumber:** Normalized phone number.
-- **linkedUserId:** Link to a real system user if available.
+- **linkedUserId:** Link to a real system user if available. This allows the app to show "Real Name" or profile photo even if saved as "Plumber" in contacts.
 
 ## 5. Key Workflows & Rules
 
+### Phone-Centric Architecture
+- **Primary Identifier:** The phone number is the fundamental key for identity before registration.
+- **Ghost Users:** Users who haven't registered yet exist in the system as "Phone Number IDs" within Debt documents.
+- **Identity Resolution:** The system constantly attempts to resolve a Phone Number to a UID.
+
+### Debt Claiming & Linking (The "Link" Protocol)
+When a user registers or adds a phone number:
+1.  **Debt Claiming:** The system searches for all debts where `participants` contains the user's phone number. It updates the `lenderId` or `borrowerId` from the Phone String to the new User UID. This ensures the user "inherits" their history.
+2.  **Contact Linking:** The system (via client-side sync) checks the user's contacts. If a contact's phone number matches a registered System User, the contact is updated with `linkedUserId`. This connects the local address book to the global system.
+
 ### Debt Creation
 - Users can create debts by entering a phone number.
-- If the number matches a registered user, they are linked.
-- Status defaults to `PENDING` unless the counterparty has `autoApproveDebt` enabled.
+- **Search Logic:**
+    1. Check `contacts` for a match.
+    2. Check `users` collection for a match (Primary or Secondary phone).
+    3. If match found: Use `UID`.
+    4. If no match: Use `PhoneNumber` string.
 
 ### Payment Flow
 - **Direct Payment:** Users can record a payment immediately (updates remaining amount).
 - **Payment Declaration:** Borrowers can declare they paid; Lender must confirm (updates status/amount).
 
-### Currency Handling
-- Debts retain their original currency.
-- Dashboard aggregates totals by converting to a base currency (TRY) using real-time rates for display, but underlying data remains in original currency.
-
-### Security (Firestore Rules)
-- Users can only read/write data they participate in (`participants` array).
-- Users can only edit their own profile.
+### Security & Integrity
+- **Multiple Numbers:** Users can have multiple numbers. The system treats all of them as aliases for the UID.
+- **Number Change:** If a user changes their number, their old debts (already linked to UID) remain safe.
+- **Data Safety:** `claimDebts` must be transactional to prevent data inconsistency.

@@ -98,7 +98,7 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
             }
             setDownPayment('');
         }
-    }, [isOpen, initialPhoneNumber, targetUser, user]);
+    }, [isOpen, initialPhoneNumber, targetUser, user]); // Added initialPhone and initialName to deps if needed, but they are derived. Logic is safe.
 
     // Search Effect - Disable if targetUser is set
     useEffect(() => {
@@ -119,6 +119,7 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                 setSearchResults(contacts);
 
                 // 2. Search System Users (only if full phone number)
+                // Use the enhanced searchUserByPhone which checks primary and secondary numbers
                 if (phoneNumber.length >= 10) {
                     const sysUser = await searchUserByPhone(phoneNumber);
                     if (sysUser && sysUser.uid !== user.uid) {
@@ -174,6 +175,7 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
         let finalBorrowerName = borrowerName;
 
         if (foundContact) {
+            // Prioritize Linked User ID if available, otherwise use phone number
             finalBorrowerId = foundContact.linkedUserId || foundContact.phoneNumber;
             finalBorrowerName = foundContact.name;
         } else if (foundUser) {

@@ -2,7 +2,8 @@ import { Timestamp } from 'firebase/firestore';
 
 export interface User {
     uid: string;
-    phoneNumber: string;
+    phoneNumber: string; // Primary E.164
+    secondaryPhoneNumbers?: string[]; // Additional E.164 numbers
     displayName: string;
     createdAt: Timestamp;
     email?: string;
