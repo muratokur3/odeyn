@@ -1,5 +1,5 @@
 import { db, auth } from './firebase';
-import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { doc, updateDoc, serverTimestamp, FieldValue } from 'firebase/firestore';
 import { updateProfile, updateEmail } from 'firebase/auth';
 
 export interface ProfileUpdateData {
@@ -29,24 +29,32 @@ export const updateUserProfile = async (userId: string, data: ProfileUpdateData)
 
         // 3. Update Firestore User Document
         const userRef = doc(db, 'users', userId);
-        const firestoreData: any = {
+
+        // Use a more specific type instead of any, or Record<string, unknown>
+        const firestoreData: Record<string, string | FieldValue> = {
             updatedAt: serverTimestamp(),
-            ...(data.displayName && { displayName: data.displayName }),
-            ...(data.email && { email: data.email, recoveryEmail: data.email }),
-            ...(data.phoneNumber && { phoneNumber: data.phoneNumber }), // Phone updated in DB only
-            ...(data.photoURL && { photoURL: data.photoURL })
         };
+
+        if (data.displayName) firestoreData.displayName = data.displayName;
+        if (data.email) {
+            firestoreData.email = data.email;
+            firestoreData.recoveryEmail = data.email;
+        }
+        if (data.phoneNumber) firestoreData.phoneNumber = data.phoneNumber;
+        if (data.photoURL) firestoreData.photoURL = data.photoURL;
 
         await updateDoc(userRef, firestoreData);
 
-    } catch (error: any) {
+    } catch (error) {
         console.error("Error updating profile:", error);
+
+        // Type check error
+        const err = error as { code?: string };
+
         // Rethrow specific auth errors for UI handling
-        if (error.code === 'auth/requires-recent-login' || error.code === 'auth/email-already-in-use') {
+        if (err.code === 'auth/requires-recent-login' || err.code === 'auth/email-already-in-use') {
             throw error;
         }
         throw new Error("Profil güncellenirken bir hata oluştu.");
     }
 };
-
-

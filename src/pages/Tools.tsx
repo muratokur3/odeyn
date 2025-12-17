@@ -44,6 +44,25 @@ export const Tools = () => {
     );
 };
 
+// Define component outside of render
+const CalcButton = ({ label, type = 'default', onClick }: { label: string, type?: 'default' | 'operator' | 'action', onClick: () => void }) => {
+    let bgClass = "bg-surface text-text-primary hover:bg-slate-100 dark:hover:bg-slate-700";
+    if (type === 'operator') bgClass = "bg-orange-500 text-white hover:bg-orange-600";
+    if (type === 'action') bgClass = "bg-gray-300 dark:bg-slate-600 text-text-primary hover:bg-gray-400 dark:hover:bg-slate-500";
+
+    return (
+        <button
+            onClick={onClick}
+            className={clsx(
+                "h-14 sm:h-16 rounded-xl sm:rounded-2xl text-xl sm:text-2xl font-medium shadow-sm active:scale-95 transition-all",
+                bgClass
+            )}
+        >
+            {label}
+        </button>
+    );
+};
+
 const CalculatorView = () => {
     const [display, setDisplay] = useState('0');
     const [prevValue, setPrevValue] = useState<number | null>(null);
@@ -73,6 +92,16 @@ const CalculatorView = () => {
         setWaitingForOperand(false);
     };
 
+    const calculate = (prev: number, next: number, op: string) => {
+        switch (op) {
+            case '+': return prev + next;
+            case '-': return prev - next;
+            case '*': return prev * next;
+            case '/': return prev / next;
+            default: return next;
+        }
+    };
+
     const performOperation = (nextOperator: string) => {
         const inputValue = parseFloat(display);
 
@@ -87,34 +116,6 @@ const CalculatorView = () => {
 
         setWaitingForOperand(true);
         setOperator(nextOperator);
-    };
-
-    const calculate = (prev: number, next: number, op: string) => {
-        switch (op) {
-            case '+': return prev + next;
-            case '-': return prev - next;
-            case '*': return prev * next;
-            case '/': return prev / next;
-            default: return next;
-        }
-    };
-
-    const CalcButton = ({ label, type = 'default', onClick }: { label: string, type?: 'default' | 'operator' | 'action', onClick: () => void }) => {
-        let bgClass = "bg-surface text-text-primary hover:bg-slate-100 dark:hover:bg-slate-700";
-        if (type === 'operator') bgClass = "bg-orange-500 text-white hover:bg-orange-600";
-        if (type === 'action') bgClass = "bg-gray-300 dark:bg-slate-600 text-text-primary hover:bg-gray-400 dark:hover:bg-slate-500";
-
-        return (
-            <button
-                onClick={onClick}
-                className={clsx(
-                    "h-14 sm:h-16 rounded-xl sm:rounded-2xl text-xl sm:text-2xl font-medium shadow-sm active:scale-95 transition-all",
-                    bgClass
-                )}
-            >
-                {label}
-            </button>
-        );
     };
 
     return (
@@ -156,37 +157,24 @@ const ConverterView = () => {
     const [fromCurrency, setFromCurrency] = useState('USD');
     const [toCurrency, setToCurrency] = useState('TRY');
     const [rates, setRates] = useState<CurrencyRates | null>(null);
-    const [result, setResult] = useState<number | null>(null);
+    // Removed unused 'result' state and 'setResult'
 
     useEffect(() => {
         fetchRates().then(setRates);
     }, []);
 
-    useEffect(() => {
-        if (rates && amount) {
-            const numAmount = parseFloat(amount);
-            if (isNaN(numAmount)) return;
-
-            // Convert From -> TRY
+    // Derived state
+    let calculatedResult: number | null = null;
+    if (rates && amount) {
+        const numAmount = parseFloat(amount);
+        if (!isNaN(numAmount)) {
             const amountInTry = convertToTRY(numAmount, fromCurrency, rates);
-
-            // Convert TRY -> To
-            // convertToTRY converts X -> TRY.
-            // To convert TRY -> Y, we need 1 / (Y -> TRY rate).
-            // This is slightly complex because our convertToTRY is one-way.
-            // Let's reuse convertToTRY logic but reverse it for the second step.
-
-            // Simplification: convertToTRY handles X -> TRY.
-            // If we want X -> Y:
-            // 1. X -> TRY
-            // 2. TRY -> Y (which is AmountInTry / (1 Y in TRY))
-
             const oneUnitToInTry = convertToTRY(1, toCurrency, rates);
             if (oneUnitToInTry > 0) {
-                setResult(amountInTry / oneUnitToInTry);
+                calculatedResult = amountInTry / oneUnitToInTry;
             }
         }
-    }, [amount, fromCurrency, toCurrency, rates]);
+    }
 
     return (
         <div className="max-w-sm mx-auto space-y-6">
@@ -246,7 +234,7 @@ const ConverterView = () => {
             <div className="bg-primary/10 p-6 rounded-2xl border border-primary/20 text-center">
                 <p className="text-sm text-text-secondary mb-1">Sonuç</p>
                 <h2 className="text-4xl font-bold text-primary">
-                    {formatCurrency(result || 0, toCurrency)}
+                    {formatCurrency(calculatedResult || 0, toCurrency)}
                 </h2>
                 <p className="text-xs text-text-secondary mt-2 opacity-70">
                     * Kurlar yaklaşık değerlerdir.

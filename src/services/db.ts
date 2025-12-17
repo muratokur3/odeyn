@@ -36,7 +36,7 @@ export const createDebt = async (
     requestApproval?: boolean,
     initialPayment: number = 0
 ) => {
-    try {
+    // try { // Removed useless try/catch
         const isLending = type === 'LENDING';
 
         // ... (existing logic for target determination) ...
@@ -151,13 +151,13 @@ export const createDebt = async (
         await batch.commit();
 
         return docRef.id;
-    } catch (error) {
-        throw error;
-    }
+    // } catch (error) {
+    //    throw error;
+    // }
 };
 
 export const makePayment = async (debtId: string, amount: number, performedBy: string, note?: string) => {
-    try {
+    // try {
         await runTransaction(db, async (transaction) => {
             const debtRef = doc(db, 'debts', debtId);
             const debtDoc = await transaction.get(debtRef);
@@ -198,9 +198,9 @@ export const makePayment = async (debtId: string, amount: number, performedBy: s
                 note: note || 'Ödeme yapıldı'
             });
         });
-    } catch (error) {
-        throw error;
-    }
+    // } catch (error) {
+    //    throw error;
+    // }
 };
 
 export const subscribeToUserDebts = (userId: string, callback: (debts: Debt[]) => void) => {
@@ -233,7 +233,7 @@ export const subscribeToPaymentLogs = (debtId: string, callback: (logs: PaymentL
 };
 
 export const respondToDebtRequest = async (debtId: string, status: 'ACTIVE' | 'REJECTED', performedBy: string) => {
-    try {
+    // try {
         await runTransaction(db, async (transaction) => {
             const debtRef = doc(db, 'debts', debtId);
             const debtDoc = await transaction.get(debtRef);
@@ -256,9 +256,9 @@ export const respondToDebtRequest = async (debtId: string, status: 'ACTIVE' | 'R
                 note: status === 'ACTIVE' ? 'Borç isteği onaylandı' : 'Borç isteği reddedildi'
             });
         });
-    } catch (error) {
-        throw error;
-    }
+    // } catch (error) {
+    //    throw error;
+    // }
 };
 
 export const searchUserByPhone = async (phoneNumber: string): Promise<User | null> => {

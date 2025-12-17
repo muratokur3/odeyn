@@ -15,7 +15,7 @@ import { useNavigate } from 'react-router-dom';
 // Helper for masking phone (preserving existing logic)
 const formatPhoneNumber = (value: string) => {
     const cleaned = ('' + value).replace(/\D/g, '');
-    let match = cleaned.match(/^(\d{0,3})(\d{0,3})(\d{0,2})(\d{0,2})$/);
+    const match = cleaned.match(/^(\d{0,3})(\d{0,3})(\d{0,2})(\d{0,2})$/);
     if (match) {
         if (cleaned.length === 0) return '';
         let formatted = '';

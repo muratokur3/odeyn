@@ -33,9 +33,9 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
             // We only update display if it's significantly different to avoid cursor jumps?
             // simpler: just set it. formatPhoneForDisplay might be safer if not typing.
             // But AsYouType is best for input.
-            setDisplayValue(formatted);
+            setDisplayValue(prev => prev !== formatted ? formatted : prev);
         } else {
-            setDisplayValue('');
+            setDisplayValue(prev => prev !== '' ? '' : prev);
         }
     }, [value]);
 

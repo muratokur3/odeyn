@@ -1,22 +1,67 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
+
+    // Functions to helper with common logic
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function isParticipant(data) {
+      return request.auth.uid in data.participants;
+    }
+
+    // --- Users ---
     match /users/{userId} {
-      // Allow reading specific fields for search/list
-      allow list: if request.auth != null;
-      allow get: if request.auth != null;
-      allow create: if request.auth != null;
-      allow update: if request.auth != null && request.auth.uid == userId;
+      // Allow list only for authenticated users.
+      // Ideally this should be restricted, but user search is needed.
+      // We rely on app logic to not expose everything, but rules here allow listing.
+      // A stricter rule would check for specific query constraints if possible.
+      allow list: if isAuthenticated();
+      allow get: if isAuthenticated();
+
+      // Allow create if auth is valid (usually handled by backend triggers or client on first login)
+      allow create: if isAuthenticated() && request.auth.uid == userId;
+
+      // Users can only update their own profile
+      allow update: if isAuthenticated() && request.auth.uid == userId;
+
+      match /contacts/{contactId} {
+        allow read, write: if isAuthenticated() && request.auth.uid == userId;
+      }
     }
     
+    // --- Debts ---
     match /debts/{debtId} {
-      allow read: if request.auth != null && request.auth.uid in resource.data.participants;
-      allow create: if request.auth != null;
-      allow update: if request.auth != null && request.auth.uid in resource.data.participants;
+      // READ: Only participants can read the debt
+      allow read: if isAuthenticated() && isParticipant(resource.data);
+
+      // CREATE: Authenticated users can create debts
+      // Must ensure creator is in participants
+      allow create: if isAuthenticated() &&
+                    request.resource.data.participants.hasAll([request.auth.uid]) &&
+                    request.resource.data.originalAmount is number &&
+                    request.resource.data.originalAmount > 0;
+
+      // UPDATE: Only participants can update
+      // Logic for fields (like remainingAmount) is complex to validate fully here
+      // without duplicating business logic, but we ensure participation.
+      allow update: if isAuthenticated() && isParticipant(resource.data);
       
+      // DELETE: Not generally allowed (soft delete via update preference), but if implemented:
+      // allow delete: if false;
+
+      // --- Debt Logs ---
       match /logs/{logId} {
-        allow read: if request.auth != null && request.auth.uid in get(/databases/$(database)/documents/debts/$(debtId)).data.participants;
-        allow create: if request.auth != null && request.auth.uid in get(/databases/$(database)/documents/debts/$(debtId)).data.participants;
+        // Parent debt access determines log access usually
+        allow read: if isAuthenticated() &&
+                    request.auth.uid in get(/databases/$(database)/documents/debts/$(debtId)).data.participants;
+
+        allow create: if isAuthenticated() &&
+                      request.auth.uid in get(/databases/$(database)/documents/debts/$(debtId)).data.participants;
+
+        allow update: if isAuthenticated() &&
+                      request.auth.uid in get(/databases/$(database)/documents/debts/$(debtId)).data.participants;
       }
     }
   }

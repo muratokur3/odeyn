@@ -59,7 +59,7 @@ export const useDebts = (includeDeleted = false) => {
         });
 
         return () => unsubscribe();
-    }, [user?.uid, includeDeleted]);
+    }, [user, includeDeleted]); // Added user to dependency array
 
     return { allDebts, dashboardDebts, incomingRequests, loading };
 };

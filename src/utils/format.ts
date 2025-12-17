@@ -7,7 +7,7 @@ export const formatCurrency = (amount: number | undefined | null, currency: stri
 
     try {
         return validAmount.toLocaleString('tr-TR', { style: 'currency', currency });
-    } catch (error) {
+    } catch {
         // Fallback for invalid currency codes
         return `${validAmount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} ${currency}`;
     }

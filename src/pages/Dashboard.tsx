@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useEffect } from 'react';
 import { useDebts } from '../hooks/useDebts';
 import { useAuth } from '../hooks/useAuth';
 import { useContacts } from '../hooks/useContacts';
@@ -17,25 +17,14 @@ import type { Debt } from '../types';
 import { EditDebtModal } from '../components/EditDebtModal';
 import { updateDebt } from '../services/db';
 import { cleanPhone as cleanPhoneNumber } from '../utils/phoneUtils';
-import { formatDistanceToNow } from 'date-fns';
-import { tr } from 'date-fns/locale';
+import { useDashboardStats } from '../hooks/useDashboardStats';
 
 // Types
 type FilterType = 'ALL' | 'RECEIVABLES' | 'PAYABLES';
 type TimeFilter = 'ALL' | 'THIS_WEEK' | 'THIS_MONTH';
 
-interface ContactSummary {
-    id: string; // The unique identifier for the contact (User ID or Phone Number)
-    name: string;
-    netBalance: number;
-    currency: string;
-    lastActivity: Date;
-    lastActionSnippet: string;
-    status: 'none' | 'system' | 'contact';
-}
-
 export const Dashboard = () => {
-    const { dashboardDebts, incomingRequests: hookIncomingRequests, loading } = useDebts();
+    const { dashboardDebts, incomingRequests, loading } = useDebts();
     const { user } = useAuth();
     const navigate = useNavigate();
 
@@ -55,165 +44,22 @@ export const Dashboard = () => {
         fetchRates().then(setRates);
     }, []);
 
-
-
     const handleUpdateDebt = async (debtId: string, data: Partial<Debt>) => {
         await updateDebt(debtId, data);
         setEditingDebt(null);
     };
 
-    // Helper to determine contact status
-    const getContactStatus = (id: string): 'none' | 'system' | 'contact' => {
-        if (!user) return 'none';
-        const isSystemUser = id.length > 20; // Basic check for UID vs Phone
-        const isUserContact = isContact(id);
-        if (isSystemUser) return 'system';
-        if (isUserContact) return 'contact';
-        return 'none';
-    };
+    const { contactSummaries, totalsByCurrency, grandTotalInTRY } = useDashboardStats(
+        dashboardDebts,
+        user,
+        rates,
+        filterType,
+        timeFilter,
+        isContact,
+        resolveName
+    );
 
-    // Calculations & Aggregation
-    const useMemoResult = useMemo(() => {
-        if (!user || !rates) return {
-            contactSummaries: [],
-            availableCurrencies: [],
-            totalsByCurrency: {} as Record<string, { receivables: number, payables: number, net: number, currency: string }>,
-            grandTotalInTRY: { receivables: 0, payables: 0, net: 0, currency: 'TRY' }
-        };
-
-        const contactMap = new Map<string, {
-            name: string;
-            balance: number; // Net balance in base currency (TRY)
-            lastActivity: Date;
-            lastSnippet: string;
-        }>();
-
-        const totalsByCurrency: Record<string, { receivables: number, payables: number, net: number, currency: string }> = {};
-        const currencies = new Set<string>();
-
-        // 1. Process Dashboard Debts
-        dashboardDebts.forEach(d => {
-            const currency = d.currency || 'TRY';
-            currencies.add(currency);
-
-            if (!totalsByCurrency[currency]) {
-                totalsByCurrency[currency] = { receivables: 0, payables: 0, net: 0, currency };
-            }
-
-            const isActiveForBalance = d.status === 'ACTIVE' || d.status === 'PARTIALLY_PAID' || d.status === 'PENDING';
-            // PENDING included per user rule: "Creator sees it immediately"
-
-            const isLender = d.lenderId === user.uid;
-            const otherId = isLender ? d.borrowerId : d.lenderId;
-            const fallbackName = isLender ? d.borrowerName : d.lenderName;
-
-            // Global Totals
-            if (isActiveForBalance) {
-                if (isLender) {
-                    totalsByCurrency[currency].receivables += d.remainingAmount;
-                    totalsByCurrency[currency].net += d.remainingAmount;
-                } else {
-                    totalsByCurrency[currency].payables += d.remainingAmount;
-                    totalsByCurrency[currency].net -= d.remainingAmount;
-                }
-            }
-
-            // Contact Summaries
-            if (!contactMap.has(otherId)) {
-                // Resolve name if possible
-                let displayName = fallbackName;
-                const resolution = resolveName(otherId, fallbackName);
-                if (resolution.displayName) displayName = resolution.displayName;
-
-                contactMap.set(otherId, {
-                    name: displayName,
-                    balance: 0,
-                    lastActivity: new Date(0),
-                    lastSnippet: ''
-                });
-            }
-
-            const contact = contactMap.get(otherId)!;
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const dAny = d as any;
-            const debtDate = dAny.created_at ? new Date(dAny.created_at.seconds * 1000) : (d.createdAt?.toDate() || new Date(0));
-            // Fixed property access by casting or checking specific Firestore data structure if needed. 
-            // Assuming d.createdAt is the standard based on Debt type.
-
-            // Update last activity
-            if (debtDate > contact.lastActivity) {
-                contact.lastActivity = debtDate;
-                const action = d.status === 'PAID' ? 'Ödendi' : (isLender ? 'Borç verdin' : 'Borç aldın');
-                contact.lastSnippet = `${action} • ${formatDistanceToNow(debtDate, { addSuffix: true, locale: tr })}`;
-            }
-
-            // Update Contact Balance (Always converted to TRY for unified list)
-            if (isActiveForBalance) {
-                // Rates is guaranteed not null here due to top check
-                const amountInTRY = convertToTRY(d.remainingAmount, currency, rates!);
-                if (isLender) {
-                    contact.balance += amountInTRY;
-                } else {
-                    contact.balance -= amountInTRY;
-                }
-            }
-        });
-
-        // 2. Convert Map to List & Filter
-        let summaries: ContactSummary[] = Array.from(contactMap.entries())
-            .map(([id, data]) => ({
-                id,
-                name: data.name,
-                netBalance: data.balance,
-                currency: 'TRY', // Contact list is unified in TRY
-                lastActivity: data.lastActivity,
-                lastActionSnippet: data.lastSnippet,
-                status: getContactStatus(id)
-            }))
-            .filter(c => Math.abs(c.netBalance) > 0.01);
-
-        // 3. Filters (Time & Type)
-        const now = new Date();
-        if (timeFilter === 'THIS_WEEK') {
-            const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-            summaries = summaries.filter(c => c.lastActivity >= oneWeekAgo);
-        } else if (timeFilter === 'THIS_MONTH') {
-            const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-            summaries = summaries.filter(c => c.lastActivity >= oneMonthAgo);
-        }
-
-        if (filterType === 'RECEIVABLES') {
-            summaries = summaries.filter(c => c.netBalance > 0);
-        } else if (filterType === 'PAYABLES') {
-            summaries = summaries.filter(c => c.netBalance < 0);
-        }
-
-        // 4. Sorting
-        summaries.sort((a, b) => b.lastActivity.getTime() - a.lastActivity.getTime());
-
-        // 5. Calculate Grand Total in TRY
-        const grandTotalInTRY = { receivables: 0, payables: 0, net: 0, currency: 'TRY' };
-        Object.values(totalsByCurrency).forEach(t => {
-            // Rates guaranteed not null
-            grandTotalInTRY.receivables += convertToTRY(t.receivables, t.currency, rates!);
-            grandTotalInTRY.payables += convertToTRY(t.payables, t.currency, rates!);
-            grandTotalInTRY.net += convertToTRY(t.net, t.currency, rates!);
-        });
-
-        return {
-            contactSummaries: summaries,
-            availableCurrencies: Array.from(currencies).sort(),
-            totalsByCurrency,
-            grandTotalInTRY
-        };
-
-    }, [dashboardDebts, user, rates, filterType, timeFilter]);
-
-    const { contactSummaries, totalsByCurrency, grandTotalInTRY } = useMemoResult;
-    // Use the incoming requests directly from the hook
-    const incomingRequests = hookIncomingRequests;
     const { theme, toggleTheme } = useTheme();
-
     const [toggledCards, setToggledCards] = useState<Record<string, boolean>>({});
 
     const toggleCardCurrency = (currency: string) => {
@@ -308,7 +154,6 @@ export const Dashboard = () => {
                             const isToggled = toggledCards[total.currency];
                             const displayCurrency = isToggled ? 'TRY' : total.currency;
 
-                            // values to display
                             // values to display
                             const net = (isToggled && rates) ? convertToTRY(total.net, total.currency, rates) : total.net;
                             const receivables = (isToggled && rates) ? convertToTRY(total.receivables, total.currency, rates) : total.receivables;
@@ -501,8 +346,6 @@ export const Dashboard = () => {
                     )}
                 </div>
             </main>
-
-
 
             <NotificationsModal
                 isOpen={showNotifications}

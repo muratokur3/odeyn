@@ -6,7 +6,7 @@ import { searchUserByPhone, searchContacts, createDebt } from '../services/db';
 import { CreateDebtModal } from '../components/CreateDebtModal';
 import { Avatar } from '../components/Avatar';
 import { clsx } from 'clsx';
-import type { User, Contact } from '../types';
+import type { User, Contact, Installment } from '../types';
 
 export const QuickDial = () => {
     const { user } = useAuth();
@@ -39,7 +39,10 @@ export const QuickDial = () => {
 
     // Card Display Data
     // Merged Results
-    const allMatches = [...searchResults];
+    // We need a union type for display items that can be either Contact or User
+    type DisplayItem = Contact | User;
+    const allMatches: DisplayItem[] = [...searchResults];
+
     // Check duplication with foundUser
     // Note: searchResults are Contacts (have phoneNumber). foundUser is User (has phoneNumber).
     // Simple check:
@@ -48,7 +51,7 @@ export const QuickDial = () => {
             c.phoneNumber.replace(/\D/g, '') === foundUser.phoneNumber.replace(/\D/g, '')
         );
         if (!isAlreadyInContacts) {
-            allMatches.push(foundUser as any);
+            allMatches.push(foundUser);
         }
     }
 
@@ -105,7 +108,7 @@ export const QuickDial = () => {
         currency: string,
         note?: string,
         dueDate?: Date,
-        installments?: any[],
+        installments?: Installment[],
         canBorrowerAddPayment?: boolean,
         requestApproval?: boolean,
         initialPayment?: number
@@ -169,16 +172,17 @@ export const QuickDial = () => {
                     {displayMatches.length > 0 ? (
                         displayMatches.map((match, idx) => {
                             const isContact = 'name' in match;
+                            // Type narrowing
                             const name = isContact ? (match as Contact).name : (match as User).displayName;
                             const phone = 'phoneNumber' in match ? (match as Contact).phoneNumber : (match as User).phoneNumber;
-                            const photo = 'photoURL' in match ? (match as any).photoURL : undefined;
+                            const photo = (!isContact && 'photoURL' in match) ? (match as User).photoURL : undefined;
 
                             return (
                                 <div
                                     key={idx}
                                     onClick={() => {
                                         setPhoneNumber(phone);
-                                        setSelectedUser(match as (User | Contact));
+                                        setSelectedUser(match);
                                         setShowCreateModal(true);
                                     }}
                                     className="w-full bg-surface rounded-3xl p-4 shadow-md border border-slate-200 dark:border-slate-700 cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-800 flex items-center gap-4 transition-colors"

@@ -81,10 +81,9 @@ export const Settings = () => {
     useEffect(() => {
         if (user) {
             const prefs = user.preferences || {};
-            setAutoApprove(prefs.autoApproveDebt ?? false);
-            setSyncContacts(prefs.syncContacts ?? false);
-            setSyncContacts(prefs.syncContacts ?? false);
-            setDefaultAllowPayment(prefs.defaultAllowPaymentAddition ?? false);
+            setAutoApprove(prev => prefs.autoApproveDebt ?? prev);
+            setSyncContacts(prev => prefs.syncContacts ?? prev);
+            setDefaultAllowPayment(prev => prefs.defaultAllowPaymentAddition ?? prev);
         }
         setAutoDeleteDuration(localStorage.getItem('autoDeleteDuration') || 'OFF');
     }, [user]);
