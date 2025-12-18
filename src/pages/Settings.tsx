@@ -69,7 +69,8 @@ export const Settings = () => {
     const navigate = useNavigate();
     const { user } = useAuth(); // Get current user
     const { showAlert, showConfirm } = useModal();
-    const { allDebts: deletedDebts, loading } = useDebts(true);
+    const { allDebts, loading } = useDebts(true);
+    const deletedDebts = allDebts.filter(d => d.isDeleted);
 
     const [activeTab, setActiveTab] = useState<'GENERAL' | 'TRASH'>('GENERAL');
 

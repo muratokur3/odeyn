@@ -1,73 +1,40 @@
-# React + TypeScript + Vite
+# Pamuk Eller (DebtDert)
 
-This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+Arkadaşlarınızla aranızdaki alacak/verecek durumunu takip etmenizi sağlayan modern, kullanıcı dostu bir borç takip uygulaması.
 
-Currently, two official plugins are available:
+## Özellikler
+- **Kişiler arası borç takibi:** Alacak ve verecekleri tek ekrandan yönetin.
+- **Çoklu Para Birimi:** TRY, USD, EUR, Altın gibi farklı birimlerle işlem yapın.
+- **gölge Kullanıcılar:** Uygulamayı kullanmayan arkadaşlarınızı rehberden ekleyip takip edebilirsiniz.
+- **Onay Mekanizması:** Karşı taraf uygulamayı kullanıyorsa işlemler onaydan geçer.
 
-- [@vitejs/plugin-react](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react) uses [Babel](https://babeljs.io/) (or [oxc](https://oxc.rs) when used in [rolldown-vite](https://vite.dev/guide/rolldown)) for Fast Refresh
-- [@vitejs/plugin-react-swc](https://github.com/vitejs/vite-plugin-react/blob/main/packages/plugin-react-swc) uses [SWC](https://swc.rs/) for Fast Refresh
+## Son Güncellemeler (v0.1.0)
 
-## React Compiler
+### 🎨 Arayüz ve Tasarım
+- **Kişi Detay Sayfası:** Başlık alanı WhatsApp tarzı modern bir görünüme kavuşturuldu.
+- **Araçlar Sayfası:** Header alanı küçültülerek ve gereksiz boşluklar alınarak minimalist hale getirildi.
+- **Avatar Sistemi:** 
+    - Varsayılan baş harfler yerine modern ikonlar eklendi.
+    - Sistem kullanıcıları ve rehber kişileri için renkli durum halkaları eklendi.
 
-The React Compiler is not enabled on this template because of its impact on dev & build performances. To add it, see [this documentation](https://react.dev/learn/react-compiler/installation).
+### 🛠️ Düzeltmeler ve İyileştirmeler
+- **Avatar Görünürlüğü (Global Fix):**
+    - Anasayfa, Rehber, Kişi Detay ve Onay Bekleyenler sayfalarında; sistem kullanıcısı olan kişilerin profil fotoğraflarının görünmemesi sorunu çözüldü.
+    - Arka planda UID/Telefon eşleşme mantığı ("Reverse Lookup") geliştirildi.
+- **Kişi Ekleme:** 
+    - Gölge kullanıcı oluştururken isim girme zorunluluğu kaldırıldı (Rehber ismini veya telefonu kullanır).
+    - "Hayalet Bellek" özelliği ile daha önce işlem yapılan numaranın ismi hatırlandı.
+- **Çöp Kutusu:** Silinen kayıtların filtreleme hatası giderildi.
+- **Mobil Uyumluluk:** Modal pencerelerin (Borç Ekle vb.) mobilde klavye açılınca oluşan kayma sorunları giderildi.
 
-## Expanding the ESLint configuration
+## Kurulum
 
-If you are developing a production application, we recommend updating the configuration to enable type-aware lint rules:
+\`\`\`bash
+npm install
+npm run dev
+\`\`\`
 
-```js
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-
-      // Remove tseslint.configs.recommended and replace with this
-      tseslint.configs.recommendedTypeChecked,
-      // Alternatively, use this for stricter rules
-      tseslint.configs.strictTypeChecked,
-      // Optionally, add this for stylistic rules
-      tseslint.configs.stylisticTypeChecked,
-
-      // Other configs...
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
-
-You can also install [eslint-plugin-react-x](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-x) and [eslint-plugin-react-dom](https://github.com/Rel1cx/eslint-react/tree/main/packages/plugins/eslint-plugin-react-dom) for React-specific lint rules:
-
-```js
-// eslint.config.js
-import reactX from 'eslint-plugin-react-x'
-import reactDom from 'eslint-plugin-react-dom'
-
-export default defineConfig([
-  globalIgnores(['dist']),
-  {
-    files: ['**/*.{ts,tsx}'],
-    extends: [
-      // Other configs...
-      // Enable lint rules for React
-      reactX.configs['recommended-typescript'],
-      // Enable lint rules for React DOM
-      reactDom.configs.recommended,
-    ],
-    languageOptions: {
-      parserOptions: {
-        project: ['./tsconfig.node.json', './tsconfig.app.json'],
-        tsconfigRootDir: import.meta.dirname,
-      },
-      // other options...
-    },
-  },
-])
-```
+## Teknoloji Stack
+- React + TypeScript + Vite
+- Firebase (Auth, Firestore)
+- Tailwind CSS

@@ -204,6 +204,7 @@ export const Contacts = () => {
                                                 size="md"
                                                 status={contact.linkedUserId ? 'system' : 'contact'}
                                                 className="shadow-sm"
+                                                uid={contact.linkedUserId}
                                             />
                                         </div>
                                         <div>

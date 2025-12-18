@@ -13,6 +13,7 @@ interface ContactRowProps {
     onClick: () => void;
     status?: 'none' | 'system' | 'contact';
     photoURL?: string;
+    linkedUserId?: string;
 }
 
 export const ContactRow: React.FC<ContactRowProps> = ({
@@ -22,7 +23,8 @@ export const ContactRow: React.FC<ContactRowProps> = ({
     currency,
     onClick,
     status = 'none',
-    photoURL
+    photoURL,
+    linkedUserId
 }) => {
     const isReceivable = netBalance > 0;
     const isPayable = netBalance < 0;
@@ -37,7 +39,8 @@ export const ContactRow: React.FC<ContactRowProps> = ({
         initials: getInitials(name),
         isSystemUser: status === 'system',
         isContact: status === 'contact',
-        phoneNumber: '' // Not visually used here
+        phoneNumber: '', // Not visually used here
+        uid: linkedUserId
     };
 
     const BalanceInfo = (

@@ -5,10 +5,11 @@ interface ContactNameResult {
     displayName: string; // The best name found
     source: 'contact' | 'user' | 'phone';
     originalName?: string; // If 'contact', this is the contact name. If 'user', display name.
+    linkedUserId?: string;
 }
 
 export const useContactName = () => {
-    const { contactsMap } = useContacts();
+    const { contacts, contactsMap } = useContacts();
 
     const resolveName = (identifier: string, fallbackName?: string): ContactNameResult => {
         // 1. Check Local Contacts (My Address Book)
@@ -22,8 +23,23 @@ export const useContactName = () => {
             return {
                 displayName: contactMatch.name,
                 source: 'contact',
-                originalName: contactMatch.name
+                originalName: contactMatch.name,
+                linkedUserId: contactMatch.linkedUserId
             };
+        }
+
+        // 2. Check by UID (Reverse Lookup)
+        // If identifier is a UID, it won't be in the phone map. Check linkedUserId.
+        if (identifier.length > 20) {
+            const uidMatch = contacts.find(c => c.linkedUserId === identifier);
+            if (uidMatch) {
+                return {
+                    displayName: uidMatch.name,
+                    source: 'contact',
+                    originalName: uidMatch.name,
+                    linkedUserId: uidMatch.linkedUserId
+                };
+            }
         }
 
         // If identifier is UID, we might need value check? 

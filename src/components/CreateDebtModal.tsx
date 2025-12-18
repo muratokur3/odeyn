@@ -364,15 +364,10 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                         {/* Flow Control */}
                         {step === 'DETAILS' ? (
                             <SelectedUserCard
-                                name={foundContact?.name || foundUser?.displayName || (isShadowUser ? borrowerName : '')} // If shadow, use input name (partially correct, actually name is below)
-                                // Actually for shadow user, SelectedUserCard might show just Phone if name is empty, or "Yeni Kişi"
-                                // Let's refine: If shadow, we show the Phone in card, and "Yeni Kişi" or "Bilinmeyen" as name?
-                                // Prompt says: "Show SelectedUserCard... Show separate Name Input below"
-
-                                // For Shadow User:
-                                // Name = borrowerName (which is being edited) OR "Kayıtsız Kişi"
+                                name={foundContact?.name || foundUser?.displayName || (isShadowUser ? borrowerName : '')}
                                 phoneNumber={phoneNumber}
                                 status={foundUser ? 'system' : (foundContact ? 'contact' : 'none')}
+                                uid={foundUser ? foundUser.uid : foundContact?.linkedUserId}
                                 onClear={() => {
                                     setFoundContact(null);
                                     setFoundUser(null);
@@ -416,6 +411,7 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                                                     name={contact.name}
                                                     size="sm"
                                                     status={contact.linkedUserId ? 'system' : 'contact'}
+                                                    uid={contact.linkedUserId}
                                                 />
                                                 <div>
                                                     <p className="text-sm font-semibold text-text-primary">{contact.name}</p>

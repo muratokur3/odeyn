@@ -7,9 +7,10 @@ interface SelectedUserCardProps {
     phoneNumber: string;
     onClear: () => void;
     status: 'system' | 'contact' | 'none';
+    uid?: string;
 }
 
-export const SelectedUserCard: React.FC<SelectedUserCardProps> = ({ name, phoneNumber, onClear, status }) => {
+export const SelectedUserCard: React.FC<SelectedUserCardProps> = ({ name, phoneNumber, onClear, status, uid }) => {
     return (
         <div className="relative p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-800 flex items-center justify-between animate-in fade-in zoom-in duration-200">
             <div className="flex items-center gap-3">
@@ -17,6 +18,7 @@ export const SelectedUserCard: React.FC<SelectedUserCardProps> = ({ name, phoneN
                     name={name}
                     size="md"
                     status={status}
+                    uid={uid}
                 />
                 <div>
                     <p className="font-semibold text-text-primary">

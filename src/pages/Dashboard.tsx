@@ -31,6 +31,7 @@ interface ContactSummary {
     lastActionSnippet: string;
     status: 'none' | 'system' | 'contact';
     photoURL?: string; // Added support for avatar
+    linkedUserId?: string;
 }
 
 export const Dashboard = () => {
@@ -79,6 +80,7 @@ export const Dashboard = () => {
             balance: number; // Net balance in base currency (TRY)
             lastActivity: Date;
             lastSnippet: string;
+            linkedUserId?: string;
         }>();
 
         const totalsByCurrency: Record<string, { receivables: number, payables: number, net: number, currency: string }> = {};
@@ -123,7 +125,8 @@ export const Dashboard = () => {
                     source: resolution.source, // Store the source
                     balance: 0,
                     lastActivity: new Date(0),
-                    lastSnippet: ''
+                    lastSnippet: '',
+                    linkedUserId: resolution.linkedUserId
                 });
             }
 
@@ -165,6 +168,7 @@ export const Dashboard = () => {
                 lastActionSnippet: data.lastSnippet,
                 status: data.source === 'contact' ? 'contact' : (data.source === 'user' && id.length > 20 ? 'system' : 'none'),
                 // photoURL: undefined 
+                linkedUserId: data.linkedUserId
             } as ContactSummary;
         }).filter(c => Math.abs(c.netBalance) > 0.01);
 
@@ -480,9 +484,15 @@ export const Dashboard = () => {
                             netBalance={contact.netBalance}
                             currency={contact.currency}
                             lastActionSnippet={contact.lastActionSnippet}
-                            onClick={() => navigate(`/person/${contact.id}`, { state: { name: contact.name, phone: contact.id } })}
+                            onClick={() => navigate(`/person/${contact.id}`, {
+                                state: {
+                                    name: contact.name,
+                                    id: contact.linkedUserId || contact.id
+                                }
+                            })}
                             status={contact.status}
-                            photoURL={contact.photoURL}
+                            photoURL={undefined}
+                            linkedUserId={contact.linkedUserId}
                         />
                     ))}
 

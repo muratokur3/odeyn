@@ -9,31 +9,31 @@ export const Tools = () => {
 
     return (
         <div className="min-h-full bg-background pb-6 px-4">
-            <div className="sticky top-0 bg-background z-10 py-6 border-b border-border/50 mb-4">
-                <h1 className="text-2xl font-bold text-text-primary text-center">Araçlar</h1>
+            <div className="sticky top-0 bg-background z-10 py-2 border-b border-border/50 mb-2 flex items-center justify-center">
+                <h1 className="text-lg font-bold text-text-primary text-center">Araçlar</h1>
             </div>
 
             {/* Segmented Control */}
-            <div className="bg-surface p-1 rounded-xl flex mb-8 border border-border">
+            <div className="bg-surface p-0.5 rounded-xl flex mb-4 border border-border">
                 <button
                     onClick={() => setActiveTab('CALCULATOR')}
                     className={clsx(
-                        "flex-1 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2",
+                        "flex-1 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2",
                         activeTab === 'CALCULATOR' ? "bg-background text-primary shadow-sm" : "text-text-secondary hover:text-text-primary"
                     )}
                 >
-                    <Calculator size={18} />
-                    Hesap Makinesi
+                    <Calculator size={16} />
+                    Hesapla
                 </button>
                 <button
                     onClick={() => setActiveTab('CONVERTER')}
                     className={clsx(
-                        "flex-1 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2",
+                        "flex-1 py-1.5 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2",
                         activeTab === 'CONVERTER' ? "bg-background text-primary shadow-sm" : "text-text-secondary hover:text-text-primary"
                     )}
                 >
-                    <ArrowRightLeft size={18} />
-                    Döviz Çevirici
+                    <ArrowRightLeft size={16} />
+                    Çevirici
                 </button>
             </div>
 

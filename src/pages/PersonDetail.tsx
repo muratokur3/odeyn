@@ -253,7 +253,11 @@ export const PersonDetail = () => {
                             size="lg"
                             status={isRegisteredUser ? 'system' : (contactId ? 'contact' : 'none')}
                             className="shadow-sm"
-                            uid={targetUserObject && 'uid' in targetUserObject ? targetUserObject.uid : (id && id.length > 20 ? id : undefined)}
+                            uid={
+                                targetUserObject
+                                    ? ('uid' in targetUserObject ? targetUserObject.uid : targetUserObject.linkedUserId)
+                                    : (id && id.length > 20 ? id : undefined)
+                            }
                         />
                     </div>
 

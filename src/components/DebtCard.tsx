@@ -33,7 +33,7 @@ export const DebtCard: React.FC<DebtCardProps> = ({ debt, currentUserId, onClick
     // 3. Snapshot Name (if standard)
     // 4. Formatted lockedPhoneNumber
     // 5. Formatted ID (if phone)
-    let { displayName: otherPartyName, source } = resolveName(otherId, rawOtherName);
+    let { displayName: otherPartyName, source, linkedUserId } = resolveName(otherId, rawOtherName);
 
     // If initial resolution failed to find a contact or useful name, try lockedPhoneNumber
     if (source !== 'contact' && lockedPhone) {
@@ -104,6 +104,7 @@ export const DebtCard: React.FC<DebtCardProps> = ({ debt, currentUserId, onClick
                     size="md"
                     className="shadow-sm bg-white"
                     status={otherPartyStatus}
+                    uid={linkedUserId || (otherId.length > 20 ? otherId : undefined)}
                 />
 
                 {/* Main Content */}
