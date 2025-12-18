@@ -4,7 +4,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useDebts } from '../hooks/useDebts';
 import { useContactName } from '../hooks/useContactName';
-import { ArrowLeft, Plus, Phone, MessageCircle, Trash2, Edit2, Share2, X, MoreVertical } from 'lucide-react';
+import { ArrowLeft, Plus, Phone, MessageCircle, Trash2, Edit2, X, MoreVertical } from 'lucide-react';
 import { searchUserByPhone, getContacts, updateContact } from '../services/db';
 import { Avatar } from '../components/Avatar';
 import { DebtCard } from '../components/DebtCard';
@@ -13,11 +13,11 @@ import { PhoneInput } from '../components/PhoneInput';
 import { formatCurrency } from '../utils/format';
 import { convertToTRY, fetchRates, type CurrencyRates } from '../services/currency';
 import { cleanPhone as cleanPhoneNumber, formatPhoneForDisplay as formatPhoneNumber } from '../utils/phoneUtils';
+import { doc, getDoc } from 'firebase/firestore'; // Added imports
+import { db } from '../services/firebase'; // Added import
 import clsx from 'clsx';
-
 import { useModal } from '../context/ModalContext';
 
-import { Timestamp } from 'firebase/firestore'; // Added import
 import type { User, Contact } from '../types'; // Added import
 
 export const PersonDetail = () => {
@@ -42,8 +42,9 @@ export const PersonDetail = () => {
     const [editPhone, setEditPhone] = useState('');
     const [submittingEdit, setSubmittingEdit] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
-    const [isScrolled, setIsScrolled] = useState(false);
+    // const [isScrolled, setIsScrolled] = useState(false); // Removed scroll logic
 
+    /* Removed scroll effect
     useEffect(() => {
         const handleScroll = () => {
             const scrolled = window.scrollY > 20;
@@ -52,6 +53,7 @@ export const PersonDetail = () => {
         window.addEventListener('scroll', handleScroll);
         return () => window.removeEventListener('scroll', handleScroll);
     }, []);
+    */
 
     const handleDelete = async () => {
         if (!user || !id) return;
@@ -85,13 +87,18 @@ export const PersonDetail = () => {
             let foundSysUser: User | null = null;
             let foundContactData: Contact | undefined;
 
-            // 1. Check Registration
+            // 1. Check Registration & Fetch User
             if (id.length > 20) { // UID check
-                // If ID is UID, we can't easily fetch user without getDoc logic here or relying on search.
-                // Assuming searchUserByPhone won't work for UID.
-                // But typically we navigate by phone in this app.
-                // If ID is UID, we assume registered.
                 setIsRegisteredUser(true);
+                // Fetch User Details for UID
+                try {
+                    const userDoc = await getDoc(doc(db, 'users', id));
+                    if (userDoc.exists()) {
+                        foundSysUser = userDoc.data() as User;
+                    }
+                } catch (e) {
+                    console.error("Failed to fetch user by UID", e);
+                }
             } else {
                 foundSysUser = await searchUserByPhone(id);
                 setIsRegisteredUser(!!foundSysUser);
@@ -112,13 +119,9 @@ export const PersonDetail = () => {
                 } else if (foundSysUser) {
                     setTargetUserObject(foundSysUser);
                 } else {
-                    // Raw phone number, construct temp contact object for Modal
-                    setTargetUserObject({
-                        id: 'temp',
-                        name: formatPhoneNumber(id),
-                        phoneNumber: cleanId,
-                        createdAt: Timestamp.now()
-                    });
+                    // Raw phone number
+                    setTargetUserObject(null); // Don't lock to a user object
+                    // We will rely on passing initialPhoneNumber and initialName to the modal
                 }
             } catch (error) {
                 console.error("Error finding contact:", error);
@@ -237,18 +240,62 @@ export const PersonDetail = () => {
         <div className="min-h-full bg-background pb-24">
             {/* Header */}
             <header className="bg-surface sticky top-0 z-10 shadow-sm transition-colors duration-200">
-                <div className="max-w-2xl mx-auto relative">
-                    {/* Top Bar */}
-                    <div className="flex justify-between items-center px-4 pt-2 pb-0">
-                        <button onClick={() => navigate(-1)} className="p-2 -ml-2 text-text-secondary hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors">
-                            <ArrowLeft size={20} />
+                <div className="max-w-3xl mx-auto px-4 py-3 flex items-center gap-3">
+                    {/* Back Button */}
+                    <button onClick={() => navigate(-1)} className="p-2 -ml-2 text-text-secondary hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors shrink-0">
+                        <ArrowLeft size={20} />
+                    </button>
+
+                    {/* Avatar */}
+                    <div className="shrink-0">
+                        <Avatar
+                            name={personInfo.name}
+                            size="lg"
+                            status={isRegisteredUser ? 'system' : (contactId ? 'contact' : 'none')}
+                            className="shadow-sm"
+                            uid={targetUserObject && 'uid' in targetUserObject ? targetUserObject.uid : (id && id.length > 20 ? id : undefined)}
+                        />
+                    </div>
+
+                    {/* Name & Phone */}
+                    <div className="flex flex-col justify-center overflow-hidden min-w-0 mr-2">
+                        <h1 className="text-base font-bold text-text-primary leading-tight truncate">{personInfo.name}</h1>
+                        <p className="text-xs text-text-secondary font-medium mt-0.5 truncate">{formatPhoneNumber(personInfo.phone || '')}</p>
+                    </div>
+
+                    {/* Right Side Actions */}
+                    <div className="ml-auto flex items-center gap-2 shrink-0">
+                        {/* WhatsApp */}
+                        <a
+                            href={`https://wa.me/${cleanPhoneNumber(personInfo.phone || '')}`}
+                            target="_blank"
+                            rel="noopener noreferrer"
+                            className="w-9 h-9 rounded-full bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-green-600 dark:text-green-500 flex items-center justify-center hover:bg-green-50 dark:hover:bg-slate-700 transition-colors shadow-sm"
+                        >
+                            <MessageCircle size={18} />
+                        </a>
+
+                        {/* Call */}
+                        <a
+                            href={`tel:${personInfo.phone || ''}`}
+                            className="w-9 h-9 rounded-full bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-blue-600 dark:text-blue-500 flex items-center justify-center hover:bg-blue-50 dark:hover:bg-slate-700 transition-colors shadow-sm"
+                        >
+                            <Phone size={18} />
+                        </a>
+
+                        {/* Primary Action: Create Debt */}
+                        <button
+                            onClick={() => setShowCreateModal(true)}
+                            className="w-10 h-10 rounded-full bg-primary text-white shadow-lg shadow-blue-500/30 flex items-center justify-center hover:bg-blue-600 active:scale-95 transition-all"
+                        >
+                            <Plus size={20} className="stroke-[3]" />
                         </button>
 
-                        {/* More Options */}
+                        {/* More Options Menu */}
                         <div className="relative">
                             <button
                                 onClick={() => setShowMenu(!showMenu)}
-                                className="p-2 -mr-2 text-text-secondary hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors"
+                                className="p-2 text-text-secondary hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors"
                             >
                                 <MoreVertical size={20} />
                             </button>
@@ -285,86 +332,8 @@ export const PersonDetail = () => {
                             )}
                         </div>
                     </div>
-
-                    <div className={clsx(
-                        "flex flex-col items-center justify-center w-full px-4 transition-all duration-300 ease-in-out",
-                        isScrolled ? "scale-75 -mt-6 pb-0 opacity-90" : "pt-0 pb-4 -mt-2 opacity-100"
-                    )}>
-                        <div className={clsx("transition-all duration-300", isScrolled ? "mb-1" : "mb-3")}>
-                            <Avatar
-                                name={personInfo.name}
-                                size={isScrolled ? 'md' : 'xl'}
-                                status={isRegisteredUser ? 'system' : 'contact'}
-                                className="shadow-md transition-all duration-300"
-                            />
-                        </div>
-                        <h1 className="text-xl font-bold text-text-primary text-center leading-tight">{personInfo.name}</h1>
-                        <p className="text-sm text-text-secondary font-medium mt-1">{formatPhoneNumber(personInfo.phone || '')}</p>
-
-
-                    </div>
                 </div>
-
-                {/* Actions - Distinct Area */}
-                <div className={clsx(
-                    "px-4 bg-gray-50 dark:bg-slate-900/50 flex items-center justify-center gap-4 transition-all duration-300 ease-in-out overflow-hidden border-t border-b border-gray-100 dark:border-slate-800",
-                    isScrolled ? "max-h-0 py-0 opacity-0 border-none" : "max-h-24 py-3 opacity-100"
-                )}>
-
-                    {/* Primary Action: Create Debt */}
-                    <button
-                        onClick={() => setShowCreateModal(true)}
-                        className="flex flex-col items-center gap-1 group cursor-pointer"
-                    >
-                        <div className="w-12 h-12 rounded-full bg-primary text-white shadow-lg shadow-blue-500/30 flex items-center justify-center hover:bg-blue-600 active:scale-95 transition-all">
-                            <Plus size={24} className="stroke-[3]" />
-                        </div>
-                        <span className="text-[11px] font-bold text-primary">Yeni İşlem</span>
-                    </button>
-
-                    <div className="w-px h-8 bg-gray-300 dark:bg-slate-700 mx-2"></div>
-                    {/* Message */}
-                    <a
-                        href={`https://wa.me/${cleanPhoneNumber(personInfo.phone || '')}`}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        className="flex flex-col items-center gap-1 group cursor-pointer"
-                    >
-                        <div className="w-10 h-10 rounded-full bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-green-600 dark:text-green-500 flex items-center justify-center group-hover:bg-green-50 dark:group-hover:bg-slate-700 transition-colors shadow-sm">
-                            <MessageCircle size={20} />
-                        </div>
-                        <span className="text-[10px] text-gray-500 font-medium">WhatsApp</span>
-                    </a >
-
-                    {/* Call */}
-                    < a
-                        href={`tel:${personInfo.phone || ''}`}
-                        className="flex flex-col items-center gap-1 group cursor-pointer"
-                    >
-                        <div className="w-10 h-10 rounded-full bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-blue-600 dark:text-blue-500 flex items-center justify-center group-hover:bg-blue-50 dark:group-hover:bg-slate-700 transition-colors shadow-sm">
-                            <Phone size={20} />
-                        </div>
-                        <span className="text-[10px] text-gray-500 font-medium">Ara</span>
-                    </a >
-
-                    {/* Invite */}
-                    {
-                        !isRegisteredUser && (
-                            <a
-                                href={`https://wa.me/${cleanPhoneNumber(personInfo.phone || '')}?text=DebtDert'e gel!`}
-                                target="_blank"
-                                rel="noopener noreferrer"
-                                className="flex flex-col items-center gap-1 group cursor-pointer"
-                            >
-                                <div className="w-10 h-10 rounded-full bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-indigo-600 dark:text-indigo-500 flex items-center justify-center group-hover:bg-indigo-50 dark:group-hover:bg-slate-700 transition-colors shadow-sm">
-                                    <Share2 size={20} />
-                                </div>
-                                <span className="text-[10px] text-gray-500 font-medium">Davet</span>
-                            </a>
-                        )
-                    }
-                </div >
-            </header >
+            </header>
 
             <main className="max-w-2xl mx-auto p-4 space-y-6">
                 {/* Summary Card */}
@@ -416,6 +385,7 @@ export const PersonDetail = () => {
                 isOpen={showCreateModal}
                 onClose={() => setShowCreateModal(false)}
                 initialPhoneNumber={id}
+                initialName={personInfo.name} // Pass the name resolved in PersonDetail
                 targetUser={targetUserObject}
                 onSubmit={async (borrowerId, borrowerName, amount, type, currency, note, dueDate, installments, canBorrowerAddPayment, requestApproval) => {
                     if (!user) return;

@@ -65,15 +65,17 @@ export const createDebt = async (
         const borrowerId = isLending ? finalTargetId : currentUserId;
         const borrowerName = isLending ? targetUserName : currentUserName;
 
-        // CHECK PREFERENCES: Check if the counterparty has auto-approve enabled
+        // CHECK PREFERENCES & FETCH USER DATA
         const counterpartyId = isLending ? borrowerId : lenderId;
 
         let initialStatus: DebtStatus = 'PENDING';
+        let foundUserData: User | null = null;
 
         if (counterpartyId.length > 20) { // Simple check for UID vs Phone
             const counterpartyUser = await getDoc(doc(db, 'users', counterpartyId));
             if (counterpartyUser.exists()) {
                 const userData = counterpartyUser.data() as User;
+                foundUserData = userData; // Store for later use
                 if (userData.preferences?.autoApproveDebt) {
                     initialStatus = 'ACTIVE'; // active = approved
                 }
@@ -87,9 +89,6 @@ export const createDebt = async (
 
         // Calculate amounts
         const remainingAmount = amount - initialPayment;
-        // If initial payment covers everything (unlikely but possible), status might need to be PAID if auto-approved?
-        // But usually down payment is partial. 
-
         // If remaining is 0 and status was ACTIVE, it becomes PAID immediately.
         if (remainingAmount <= 0 && initialStatus === 'ACTIVE') {
             initialStatus = 'PAID';
@@ -100,11 +99,17 @@ export const createDebt = async (
         // Determine Contact Phone for Locking & Auto-Add
         let contactPhone = '';
         if (counterpartyId.length <= 15) {
+            // It's already a phone number
             contactPhone = counterpartyId;
         } else {
-            // If it's a UID, we might need the phone. 
-            // In this flow, check if we started with a phone target.
-            if (cleanTarget && cleanTarget.length <= 15) {
+            // It's a UID.
+            // 1. Try to get phone from actual user profile
+            if (foundUserData && foundUserData.primaryPhoneNumber) {
+                contactPhone = foundUserData.primaryPhoneNumber;
+            }
+            // 2. Fallback: If we started with a phone number input that resolved to this UID, use that.
+            // But ONLY if the original input looked like a phone number.
+            else if ((targetUserId.length <= 15 || targetUserId.startsWith('+')) && cleanTarget) {
                 contactPhone = cleanTarget;
             }
         }
@@ -768,5 +773,36 @@ export const updateDebt = async (debtId: string, data: Partial<Debt>) => {
     } catch (error) {
         console.error("Error updating debt:", error);
         throw error;
+    }
+};
+
+export const fetchLastUsedName = async (userId: string, phoneNumber: string) => {
+    try {
+        const cleanPhone = cleanPhoneNumber(phoneNumber);
+        const q = query(
+            collection(db, 'debts'),
+            where('createdBy', '==', userId),
+            where('lockedPhoneNumber', '==', cleanPhone),
+            orderBy('createdAt', 'desc'),
+            limit(1)
+        );
+
+        const snapshot = await getDocs(q);
+        if (!snapshot.empty) {
+            const data = snapshot.docs[0].data();
+            // If I created it, I am the lender or borrower.
+            // Check which field matches the cleanPhone or if logic differs.
+            // Actually, we store lenderName/borrowerName.
+            // If I am lender, the OTHER party is borrower.
+            if (data.lenderId === userId) {
+                return data.borrowerName;
+            } else {
+                return data.lenderName;
+            }
+        }
+        return null;
+    } catch (error) {
+        console.error("Error fetching last used name:", error);
+        return null;
     }
 };

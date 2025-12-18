@@ -11,7 +11,7 @@ import {
 } from 'firebase/firestore';
 import { db, auth } from './firebase';
 import { RecaptchaVerifier, linkWithPhoneNumber } from 'firebase/auth';
-import { cleanPhone } from '../utils/phoneUtils';
+import { cleanPhone, formatPhoneForDisplay } from '../utils/phoneUtils';
 import { claimLegacyDebts } from './db';
 import type { Debt, DisplayProfile, Contact, User } from '../types';
 
@@ -267,7 +267,8 @@ export const resolveUserDisplay = async (
             initials: getInitials(contact.name),
             isSystemUser: !!systemUser,
             isContact: true,
-            phoneNumber: displayPhone
+            phoneNumber: displayPhone,
+            uid: systemUser?.uid
         };
     }
 
@@ -280,7 +281,8 @@ export const resolveUserDisplay = async (
             initials: getInitials(systemUser.displayName),
             isSystemUser: true,
             isContact: false,
-            phoneNumber: systemUser.primaryPhoneNumber
+            phoneNumber: systemUser.primaryPhoneNumber,
+            uid: systemUser.uid
         };
     }
 
@@ -315,7 +317,7 @@ export const resolveUserDisplay = async (
     // --- PRIORITY 4: RAW FALLBACK ---
     const finalFallback = targetPhone || targetIdentifier || "Unknown";
     return {
-        displayName: formatPhoneNumberPretty(finalFallback),
+        displayName: formatPhoneForDisplay(finalFallback),
         secondaryText: "Bilinmeyen Kullanıcı",
         photoURL: undefined,
         initials: "?",
@@ -335,8 +337,4 @@ const getInitials = (name: string) => {
         .toUpperCase();
 };
 
-// Helper for minimal formatting if utils not available
-const formatPhoneNumberPretty = (phone: string) => {
-    if (!phone) return '';
-    return phone.replace(/(\+\d{2})(\d{3})(\d{3})(\d{2})(\d{2})/, '$1 $2 $3 $4 $5');
-};
+

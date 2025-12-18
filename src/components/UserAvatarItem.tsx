@@ -1,6 +1,7 @@
-
-import { ShieldCheck, BookUser, UserPlus, User as UserIcon } from 'lucide-react';
+import React from 'react';
+import { UserPlus, ShieldCheck } from 'lucide-react';
 import clsx from 'clsx';
+import { Avatar } from './Avatar';
 import type { DisplayProfile } from '../types';
 
 interface UserAvatarItemProps {
@@ -11,33 +12,11 @@ interface UserAvatarItemProps {
 }
 
 export const UserAvatarItem: React.FC<UserAvatarItemProps> = ({ profile, onClick, actionButton, className }) => {
-    const { isSystemUser, isContact, displayName, secondaryText, photoURL } = profile;
+    const { isSystemUser, isContact, displayName, secondaryText, photoURL, uid } = profile;
 
-    // 1. DETERMINING THE USER TYPE & STYLES
-    let borderClass = '';
-    let opacityClass = 'opacity-100';
-    let BadgeIcon = null;
-    let badgeColorClass = '';
-    let defaultAvatarClass = 'bg-gray-200 dark:bg-slate-700 text-gray-400 dark:text-slate-500'; // Default Gray (WhatsApp style)
-
-    if (isSystemUser) {
-        // TYPE 1: SYSTEM USER (Verified)
-        borderClass = 'border-2 border-white ring-2 ring-blue-500 dark:ring-blue-400';
-        BadgeIcon = ShieldCheck;
-        badgeColorClass = 'bg-blue-600 text-white border-white dark:border-slate-800';
-        defaultAvatarClass = 'bg-blue-100 dark:bg-blue-900/50 text-blue-500 dark:text-blue-300';
-    } else if (isContact) {
-        // TYPE 2: SAVED CONTACT (Trusted)
-        borderClass = 'border-2 border-white ring-2 ring-orange-500 dark:ring-orange-400';
-        BadgeIcon = BookUser;
-        badgeColorClass = 'bg-orange-500 text-white border-white dark:border-slate-800';
-        defaultAvatarClass = 'bg-orange-100 dark:bg-orange-900/50 text-orange-500 dark:text-orange-300';
-    } else {
-        // TYPE 3: SHADOW USER (Ghost)
-        borderClass = 'border-2 border-dashed border-slate-300 dark:border-slate-600';
-        opacityClass = 'opacity-80';
-        // No Badge for Shadow
-    }
+    // determine visual status
+    const status = isSystemUser ? 'system' : isContact ? 'contact' : 'none';
+    const opacityClass = (isSystemUser || isContact) ? 'opacity-100' : 'opacity-80';
 
     return (
         <div
@@ -48,29 +27,23 @@ export const UserAvatarItem: React.FC<UserAvatarItemProps> = ({ profile, onClick
                 className
             )}
         >
-            {/* AVATAR CONTAINER */}
-            <div className={clsx("relative shrink-0", opacityClass)}>
-                <div className={clsx(
-                    "w-12 h-12 rounded-full overflow-hidden shadow-sm flex items-center justify-center",
-                    borderClass,
-                    !photoURL && defaultAvatarClass
-                )}>
-                    {photoURL ? (
-                        <img src={photoURL} alt={displayName} className="w-full h-full object-cover" />
-                    ) : (
-                        <UserIcon size={24} strokeWidth={2.5} fill="currentColor" className="opacity-70" />
-                    )}
-                </div>
-
-                {/* BADGE (Absolute Positioned) */}
-                {BadgeIcon && (
-                    <div className={clsx(
-                        "absolute -bottom-1 -right-1 w-5 h-5 rounded-full flex items-center justify-center border-2 shadow-sm text-[10px]",
-                        badgeColorClass
-                    )}>
-                        <BadgeIcon size={12} strokeWidth={3} />
-                    </div>
-                )}
+            {/* SMART AVATAR (Handles Fetch, Colors, Icons) */}
+            <div className={opacityClass}>
+                <Avatar
+                    name={displayName}
+                    photoURL={photoURL}
+                    uid={uid}
+                    size="lg" // UserAvatarItem uses Lg (12/12 = 3rem = 48px)
+                    status={status}
+                    className={ // Reset explicit border here as Avatar has it, but UserAvatarItem had specific logic?
+                        // Actually Avatar logic is now Standard.
+                        // However, UserAvatarItem had "Selectable" visual states.
+                        // Let's rely on standard Avatar, but checking sizes.
+                        // UserAvatarItem old size was w-12 h-12 = 48px. 
+                        // Avatar lg is w-12 h-12. Perfect.
+                        ""
+                    }
+                />
             </div>
 
             {/* TEXT CONTENT */}

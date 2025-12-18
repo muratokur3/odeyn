@@ -82,4 +82,5 @@ export interface DisplayProfile {
     isSystemUser: boolean;    // For badges
     isContact: boolean;       // To toggle "Add to Contact" buttons
     phoneNumber: string;      // The immutable anchor
+    uid?: string;             // The system link for live updates
 }

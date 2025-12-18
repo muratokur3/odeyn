@@ -6,7 +6,7 @@ interface SelectedUserCardProps {
     name: string;
     phoneNumber: string;
     onClear: () => void;
-    status: 'system' | 'contact';
+    status: 'system' | 'contact' | 'none';
 }
 
 export const SelectedUserCard: React.FC<SelectedUserCardProps> = ({ name, phoneNumber, onClear, status }) => {

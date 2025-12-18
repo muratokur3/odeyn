@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { X, Search, ChevronDown, ChevronUp, Book } from 'lucide-react';
+import { X, Search, ChevronDown, ChevronUp, Plus } from 'lucide-react';
 import { Avatar } from './Avatar';
 import { SelectedUserCard } from './SelectedUserCard'; // Import moved to top
 
-import { searchUserByPhone, searchContacts } from '../services/db';
+import { searchUserByPhone, searchContacts, fetchLastUsedName } from '../services/db';
 import { formatCurrency } from '../utils/format';
+import { formatPhoneForDisplay } from '../utils/phoneUtils'; // Added import
 import type { User, Contact, Installment } from '../types';
 import { useAuth } from '../hooks/useAuth';
 import { Timestamp } from 'firebase/firestore';
@@ -28,18 +29,19 @@ interface CreateDebtModalProps {
     ) => Promise<void>;
     initialPhoneNumber?: string;
     targetUser?: User | Contact | null;
+    initialName?: string; // New prop
 }
 
 import { useModal } from '../context/ModalContext';
 
-export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClose, onSubmit, initialPhoneNumber, targetUser }) => {
+export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClose, onSubmit, initialPhoneNumber, targetUser, initialName: propInitialName }) => {
     const { user } = useAuth();
     const { showAlert } = useModal();
 
     // Derived state for initialization
-    const initialName = targetUser
+    const derivedInitialName = targetUser
         ? ('displayName' in targetUser ? targetUser.displayName : targetUser.name)
-        : '';
+        : (propInitialName || '');
 
     // ... [rest unchanged]
 
@@ -51,7 +53,7 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
 
     const [phoneNumber, setPhoneNumber] = useState(initialPhone);
     const [amount, setAmount] = useState('');
-    const [borrowerName, setBorrowerName] = useState(initialName);
+    const [borrowerName, setBorrowerName] = useState(derivedInitialName);
 
     // Search State
     const [foundUser, setFoundUser] = useState<User | null>(
@@ -64,8 +66,11 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
 
     const [loading, setLoading] = useState(false);
 
-    const [searching, setSearching] = useState(false);
-    const [isManualSearch, setIsManualSearch] = useState(false); // New state to override targetUser lock
+    // Flow State
+    const [step, setStep] = useState<'SEARCH' | 'DETAILS'>('SEARCH');
+    const [isShadowUser, setIsShadowUser] = useState(false);
+
+    // const [isManualSearch, setIsManualSearch] = useState(false); // Removed in favor of step
 
     // New Fields
     const [type, setType] = useState<'LENDING' | 'BORROWING'>('LENDING');
@@ -85,9 +90,12 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
     useEffect(() => {
         if (isOpen) {
             setPhoneNumber(initialPhone);
-            setBorrowerName(initialName);
-            setIsManualSearch(false); // Reset manual search mode
+            setBorrowerName(derivedInitialName);
+            // setIsManualSearch(false); 
+
             if (targetUser) {
+                setStep('DETAILS');
+                setIsShadowUser(false);
                 if ('uid' in targetUser) {
                     setFoundUser(targetUser as User);
                     setFoundContact(null);
@@ -95,16 +103,19 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                     setFoundContact(targetUser as Contact);
                     setFoundUser(null);
                 }
+            } else if (propInitialName && initialPhone) {
+                // Shadow User Case from PersonDetail (Raw Phone)
+                setStep('DETAILS');
+                setIsShadowUser(true);
+                setFoundContact(null);
+                setFoundUser(null);
             } else {
-                // Only reset if NOT initial (this ensures manual typing doesn't get messed up if initial props change strangely, 
-                // but mainly targets the bug where it wasn't persisting)
-                // Actually, logic above is enough if targetUser is provided.
+                setStep('SEARCH');
+                setIsShadowUser(false);
             }
 
             // Initialize requestApproval to false (user can manually check if needed)
-            // Previous behavior: Default was strictly logic-based.
-            // We default to false so Auto-Approve works by default unless overridden.
-
+            // ...
 
             // Initialize canBorrowerAddPayment from preference
             if (user?.preferences?.defaultAllowPaymentAddition) {
@@ -114,21 +125,21 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
             }
             setDownPayment('');
         }
-    }, [isOpen, initialPhoneNumber, targetUser, user]);
+    }, [isOpen, initialPhoneNumber, targetUser, user, propInitialName]);
 
-    // Search Effect - Disable if targetUser is set AND not overridden
+    // Search Effect - Disable if NOT in SEARCH step
     useEffect(() => {
-        if (targetUser && !isManualSearch) return; // Skip search if locked to a user and not manually cleared
+        if (step !== 'SEARCH') return;
 
         const search = async () => {
             if (!user || !phoneNumber || phoneNumber.length < 3) {
                 setSearchResults([]);
                 setFoundUser(null);
-                setSearching(false);
+
                 return;
             }
 
-            setSearching(true);
+
             try {
                 // 1. Search Contacts
                 const contacts = await searchContacts(user.uid, phoneNumber);
@@ -146,7 +157,7 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
             } catch (error) {
                 console.error(error);
             } finally {
-                setSearching(false);
+
             }
         };
 
@@ -162,6 +173,8 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
         setBorrowerName(contact.name);
         setSearchResults([]);
         setFoundUser(null);
+        setStep('DETAILS');
+        setIsShadowUser(false);
     };
 
     const handleSelectUser = (sysUser: User) => {
@@ -170,6 +183,34 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
         setBorrowerName(sysUser.displayName || '');
         setSearchResults([]);
         setFoundContact(null);
+        setStep('DETAILS');
+        setIsShadowUser(false);
+    };
+
+    const handleSelectNewNumber = async (rawPhone: string) => {
+        // Ghost Memory Logic
+        // We use the raw input for locking
+        // User prompt says: "Create new record for [Formatted Phone]"
+
+        setPhoneNumber(rawPhone); // Keep input for now, will be cleaned on submit
+        setFoundContact(null);
+        setFoundUser(null);
+        setSearchResults([]);
+
+        setStep('DETAILS');
+        setIsShadowUser(true);
+        setLoading(true);
+
+        // Fetch Last Used Name
+        if (user) {
+            const ghostName = await fetchLastUsedName(user.uid, rawPhone);
+            if (ghostName) {
+                setBorrowerName(ghostName);
+            } else {
+                setBorrowerName('');
+            }
+        }
+        setLoading(false);
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -200,10 +241,22 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
             finalBorrowerName = borrowerName || foundUser.displayName;
         }
 
+        // Fallback: If name empty, use formatted phone or raw phone
+        if (!finalBorrowerName) {
+            finalBorrowerName = formatPhoneForDisplay(finalBorrowerId);
+        }
+
+        /* Validation Removed per user request
         if (!finalBorrowerName) {
             showAlert("Bilgi", "Lütfen bir isim girin veya kayıtlı bir kullanıcı seçin.", "warning");
             return;
         }
+        const digits = finalBorrowerName.replace(/\D/g, '');
+        if (digits.length > 7 && (digits.length / finalBorrowerName.length > 0.5)) {
+             showAlert("Uyarı", "İsim alanı telefon numarası olamaz. Lütfen gerçek bir isim giriniz.", "warning");
+             return;
+        }
+        */
 
         setLoading(true);
         try {
@@ -271,8 +324,8 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-            <div className="bg-surface rounded-2xl w-full max-w-sm shadow-xl animate-in fade-in zoom-in duration-200 h-[85vh] flex flex-col border border-slate-700">
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm pb-20 md:pb-4">
+            <div className="bg-surface rounded-2xl w-full max-w-sm shadow-xl animate-in fade-in zoom-in duration-200 h-auto max-h-[80dvh] flex flex-col border border-slate-700">
                 <div className="flex justify-between items-center p-6 pb-2 flex-none">
                     <h2 className="text-xl font-bold text-text-primary">Yeni İşlem Ekle</h2>
                     <button onClick={onClose} className="p-2 hover:bg-slate-700/50 rounded-full">
@@ -308,117 +361,115 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
 
                         {/* Type Toggle */}
 
-                        <div>
-                            <label className="block text-sm font-medium text-text-secondary mb-1">
-                                {type === 'LENDING' ? 'Kime Veriyorsun?' : 'Kimden Alıyorsun?'}
-                            </label>
+                        {/* Flow Control */}
+                        {step === 'DETAILS' ? (
+                            <SelectedUserCard
+                                name={foundContact?.name || foundUser?.displayName || (isShadowUser ? borrowerName : '')} // If shadow, use input name (partially correct, actually name is below)
+                                // Actually for shadow user, SelectedUserCard might show just Phone if name is empty, or "Yeni Kişi"
+                                // Let's refine: If shadow, we show the Phone in card, and "Yeni Kişi" or "Bilinmeyen" as name?
+                                // Prompt says: "Show SelectedUserCard... Show separate Name Input below"
 
-                            {/* Selected User Display */}
-                            {(foundContact || foundUser) ? (
-                                <SelectedUserCard
-                                    name={foundContact?.name || foundUser?.displayName || ''}
-                                    phoneNumber={foundContact?.phoneNumber || foundUser?.phoneNumber || ''}
-                                    status={foundUser ? 'system' : 'contact'}
-                                    onClear={() => {
-                                        setFoundContact(null);
-                                        setFoundUser(null);
-                                        setPhoneNumber('');
-                                        setBorrowerName('');
-                                        setIsManualSearch(true); // Enable manual search
-                                    }}
-                                />
-                            ) : (
-                                /* Search Input */
-                                <div className="relative">
-                                    <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
-                                        <Search size={18} className="text-gray-400" />
-                                    </div>
-                                    <input
-                                        type="text"
-                                        value={phoneNumber}
-                                        onChange={(e) => {
-                                            setPhoneNumber(e.target.value);
-                                            setFoundContact(null); // Reset selection on type
-                                            setFoundUser(null);
-                                        }}
-                                        className="w-full pl-10 pr-12 py-3 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary focus:ring-2 focus:ring-blue-900/50 outline-none transition-all"
-                                        placeholder="İsim veya Telefon Ara..."
-                                        required
-                                    />
-                                    {searching && (
-                                        <div className="absolute inset-y-0 right-12 pr-3 flex items-center pointer-events-none">
-                                            <div className="animate-spin h-4 w-4 border-2 border-blue-500 rounded-full border-t-transparent"></div>
-                                        </div>
-                                    )}
-                                    <button
-                                        type="button"
-                                        className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-blue-500 transition-colors"
-                                        onClick={() => {
-                                            const input = document.querySelector<HTMLInputElement>('input[placeholder="İsim veya Telefon Ara..."]');
-                                            if (input) input.focus();
-                                        }}
-                                    >
-                                        <Book size={20} />
-                                    </button>
+                                // For Shadow User:
+                                // Name = borrowerName (which is being edited) OR "Kayıtsız Kişi"
+                                phoneNumber={phoneNumber}
+                                status={foundUser ? 'system' : (foundContact ? 'contact' : 'none')}
+                                onClear={() => {
+                                    setFoundContact(null);
+                                    setFoundUser(null);
+                                    setPhoneNumber('');
+                                    setBorrowerName('');
+                                    setStep('SEARCH');
+                                    setIsShadowUser(false);
+                                }}
+                            />
+                        ) : (
+                            /* Unified Search Input */
+                            <div className="relative">
+                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                    <Search size={18} className="text-gray-400" />
                                 </div>
-                            )}
-
-                            {/* Search Results Dropdown */}
-                            {!foundContact && !foundUser && (searchResults.length > 0 || (foundUser && !foundContact)) && (
-                                <div className="mt-2 bg-surface border border-border rounded-xl shadow-lg overflow-hidden max-h-48 overflow-y-auto absolute w-[calc(100%-4rem)] z-20">
-                                    {searchResults.map(contact => (
-                                        <div
-                                            key={contact.id}
-                                            onClick={() => handleSelectContact(contact)}
-                                            className="p-3 hover:bg-blue-50 dark:hover:bg-slate-800 cursor-pointer flex items-center gap-3 border-b border-gray-50 dark:border-slate-800 last:border-0"
-                                        >
-                                            <Avatar
-                                                name={contact.name}
-                                                size="sm"
-                                                status={contact.linkedUserId ? 'system' : 'contact'}
-                                            />
-                                            <div>
-                                                <p className="text-sm font-semibold text-text-primary">{contact.name}</p>
-                                                <p className="text-xs text-text-secondary">{contact.phoneNumber} (Rehber)</p>
-                                            </div>
-                                        </div>
-                                    ))}
-
-                                    {foundUser && !searchResults.some(c => c.phoneNumber === (foundUser as User).phoneNumber) && (
-                                        <div
-                                            onClick={() => handleSelectUser(foundUser as User)}
-                                            className="p-3 hover:bg-green-50 dark:hover:bg-green-900/20 cursor-pointer flex items-center gap-3 border-t border-gray-100 dark:border-slate-800"
-                                        >
-                                            <Avatar
-                                                name={(foundUser as User).displayName || ''}
-                                                photoURL={(foundUser as User).photoURL || undefined}
-                                                size="sm"
-                                                status="system"
-                                            />
-                                            <div>
-                                                <p className="text-sm font-semibold text-text-primary">{(foundUser as User).displayName}</p>
-                                                <p className="text-xs text-green-600 dark:text-green-400">Sistem Kullanıcısı</p>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
-                            )}
-                        </div>
-
-                        {/* Name Input - HIDDEN if user selected */}
-                        {!foundContact && !foundUser && (
-                            <div className="animate-in fade-in slide-in-from-top-2 duration-200">
-                                <label className="block text-sm font-medium text-text-secondary mb-1">İsim</label>
                                 <input
                                     type="text"
-                                    value={borrowerName}
-                                    onChange={(e) => setBorrowerName(e.target.value)}
-                                    className="w-full px-4 py-3 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary focus:ring-2 focus:ring-blue-900/50 outline-none transition-all"
-                                    placeholder="İsim Giriniz"
-                                    required={!foundUser && !foundContact}
+                                    value={phoneNumber}
+                                    onChange={(e) => {
+                                        setPhoneNumber(e.target.value);
+                                        // Reset outcomes
+                                        setFoundContact(null);
+                                        setFoundUser(null);
+                                    }}
+                                    className="w-full pl-10 pr-12 py-3 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary focus:ring-2 focus:ring-blue-900/50 outline-none transition-all"
+                                    placeholder="İsim veya Telefon Ara..."
+                                    autoFocus
                                 />
+
+                                {/* Search Results Dropdown */}
+                                {(searchResults.length > 0 || foundUser || (phoneNumber.replace(/\D/g, '').length >= 3)) && (
+                                    <div className="mt-2 bg-surface border border-border rounded-xl shadow-lg overflow-hidden max-h-60 overflow-y-auto absolute w-full z-20">
+                                        {/* Contacts */}
+                                        {searchResults.map(contact => (
+                                            <div
+                                                key={contact.id}
+                                                onClick={() => handleSelectContact(contact)}
+                                                className="p-3 hover:bg-blue-50 dark:hover:bg-slate-800 cursor-pointer flex items-center gap-3 border-b border-gray-50 dark:border-slate-800 last:border-0"
+                                            >
+                                                <Avatar
+                                                    name={contact.name}
+                                                    size="sm"
+                                                    status={contact.linkedUserId ? 'system' : 'contact'}
+                                                />
+                                                <div>
+                                                    <p className="text-sm font-semibold text-text-primary">{contact.name}</p>
+                                                    <p className="text-xs text-text-secondary">{contact.phoneNumber} (Rehber)</p>
+                                                </div>
+                                            </div>
+                                        ))}
+
+                                        {/* System User Match */}
+                                        {foundUser && !searchResults.some(c => c.phoneNumber === (foundUser as User).phoneNumber) && (
+                                            <div
+                                                onClick={() => handleSelectUser(foundUser as User)}
+                                                className="p-3 hover:bg-green-50 dark:hover:bg-green-900/20 cursor-pointer flex items-center gap-3 border-t border-gray-100 dark:border-slate-800"
+                                            >
+                                                <Avatar
+                                                    name={(foundUser as User).displayName || ''}
+                                                    photoURL={(foundUser as User).photoURL || undefined}
+                                                    size="sm"
+                                                    status="system"
+                                                />
+                                                <div>
+                                                    <p className="text-sm font-semibold text-text-primary">{(foundUser as User).displayName}</p>
+                                                    <p className="text-xs text-green-600 dark:text-green-400">Sistem Kullanıcısı</p>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Create New Entry Row */}
+                                        {phoneNumber.replace(/\D/g, '').length >= 10 && !foundUser && !searchResults.some(c => c.phoneNumber.includes(phoneNumber.replace(/\D/g, ''))) && (
+                                            <div
+                                                onClick={() => handleSelectNewNumber(phoneNumber)}
+                                                className="p-3 hover:bg-blue-50 dark:hover:bg-slate-800 cursor-pointer flex items-center gap-3 border-t border-gray-100 dark:border-slate-800"
+                                            >
+                                                <div className="w-8 h-8 rounded-full bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-text-secondary">
+                                                    <Plus size={16} /> {/* Need to import Plus */}
+                                                </div>
+                                                <div>
+                                                    <p className="text-sm font-semibold text-text-primary">Yeni Kişi Oluştur</p>
+                                                    <p className="text-xs text-text-secondary">{formatPhoneForDisplay(phoneNumber)}</p>
+                                                </div>
+                                            </div>
+                                        )}
+
+                                        {/* Empty State */}
+                                        {searchResults.length === 0 && !foundUser && phoneNumber.length > 0 && phoneNumber.replace(/\D/g, '').length < 10 && (
+                                            <div className="p-4 text-center text-text-secondary text-sm">
+                                                Sonuç bulunamadı. Yeni numara için en az 10 hane girin.
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
                             </div>
                         )}
+
 
                         <div className="flex gap-3">
                             <div className="flex-1">
