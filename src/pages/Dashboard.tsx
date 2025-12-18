@@ -19,9 +19,6 @@ import { formatDistanceToNow } from 'date-fns';
 import { tr } from 'date-fns/locale';
 
 // Types
-type FilterType = 'ALL' | 'RECEIVABLES' | 'PAYABLES';
-type TimeFilter = 'ALL' | 'THIS_WEEK' | 'THIS_MONTH';
-
 interface ContactSummary {
     id: string; // The unique identifier for the contact (User ID or Phone Number)
     name: string;
@@ -39,7 +36,6 @@ export const Dashboard = () => {
     const { user } = useAuth();
     const navigate = useNavigate();
 
-    const [showFilters, setShowFilters] = useState(false);
     const [showNotifications, setShowNotifications] = useState(false);
     const { notifications } = useNotifications();
     // const { isContact } = useContacts(); // Unused
@@ -47,8 +43,6 @@ export const Dashboard = () => {
     const [editingDebt, setEditingDebt] = useState<Debt | null>(null);
 
     // State
-    const [filterType, setFilterType] = useState<FilterType>('ALL');
-    const [timeFilter, setTimeFilter] = useState<TimeFilter>('ALL');
     const [rates, setRates] = useState<CurrencyRates | null>(null);
 
     useEffect(() => {
@@ -168,23 +162,7 @@ export const Dashboard = () => {
             } as ContactSummary;
         }).filter(c => Math.abs(c.netBalance) > 0.01);
 
-        // 3. Filters (Time & Type)
-        const now = new Date();
-        if (timeFilter === 'THIS_WEEK') {
-            const oneWeekAgo = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-            summaries = summaries.filter(c => c.lastActivity >= oneWeekAgo);
-        } else if (timeFilter === 'THIS_MONTH') {
-            const oneMonthAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-            summaries = summaries.filter(c => c.lastActivity >= oneMonthAgo);
-        }
-
-        if (filterType === 'RECEIVABLES') {
-            summaries = summaries.filter(c => c.netBalance > 0);
-        } else if (filterType === 'PAYABLES') {
-            summaries = summaries.filter(c => c.netBalance < 0);
-        }
-
-        // 4. Sorting
+        // 3. Sorting
         summaries.sort((a, b) => b.lastActivity.getTime() - a.lastActivity.getTime());
 
         // 5. Calculate Grand Total in TRY
@@ -203,7 +181,7 @@ export const Dashboard = () => {
             grandTotalInTRY
         };
 
-    }, [dashboardDebts, user, rates, filterType, timeFilter]);
+    }, [dashboardDebts, user, rates]);
 
     const { contactSummaries, totalsByCurrency, grandTotalInTRY } = useMemoResult;
     // Use the incoming requests directly from the hook
@@ -376,45 +354,6 @@ export const Dashboard = () => {
             {/* Main Content Area */}
             <main className="px-4 space-y-4 mt-4">
 
-                {/* Filters */}
-                <div className="flex flex-col gap-3">
-                    <div className="flex p-1 bg-white dark:bg-slate-800 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700">
-                        <button
-                            onClick={() => setFilterType('ALL')}
-                            className={clsx(
-                                "flex-1 py-2.5 rounded-xl text-sm font-bold transition-all",
-                                filterType === 'ALL'
-                                    ? "bg-gray-100 text-gray-900 dark:bg-slate-700 dark:text-white shadow-sm"
-                                    : "text-gray-500 hover:text-gray-700 dark:text-gray-400"
-                            )}
-                        >
-                            Tümü
-                        </button>
-                        <button
-                            onClick={() => setFilterType('RECEIVABLES')}
-                            className={clsx(
-                                "flex-1 py-2.5 rounded-xl text-sm font-bold transition-all",
-                                filterType === 'RECEIVABLES'
-                                    ? "bg-green-50 text-green-700 dark:bg-green-900/20 dark:text-green-400 shadow-sm"
-                                    : "text-gray-500 hover:text-gray-700 dark:text-gray-400"
-                            )}
-                        >
-                            Alacaklar
-                        </button>
-                        <button
-                            onClick={() => setFilterType('PAYABLES')}
-                            className={clsx(
-                                "flex-1 py-2.5 rounded-xl text-sm font-bold transition-all",
-                                filterType === 'PAYABLES'
-                                    ? "bg-red-50 text-red-700 dark:bg-red-900/20 dark:text-red-400 shadow-sm"
-                                    : "text-gray-500 hover:text-gray-700 dark:text-gray-400"
-                            )}
-                        >
-                            Verecekler
-                        </button>
-                    </div>
-                </div>
-
                 {/* Incoming Requests Section (Separate from Contact List) */}
                 {incomingRequests.length > 0 && (
                     <div className="mb-6 space-y-3 animate-in slide-in-from-top-4 fade-in">
@@ -440,34 +379,6 @@ export const Dashboard = () => {
                                 <ArrowRight size={18} className="text-orange-400" />
                             </div>
                         )}
-                    </div>
-                )}
-
-                {/* Contact List Title Removed */}
-                <div className="flex items-center justify-end px-1 pt-2">
-                    <button
-                        onClick={() => setShowFilters(!showFilters)}
-                        className="text-xs font-medium text-blue-600 bg-blue-50 px-2 py-1 rounded-lg"
-                    >
-                        {showFilters ? 'Gizle' : 'Filtrele'}
-                    </button>
-                </div>
-
-                {/* Advanced Filters Panel - Mostly Time */}
-                {showFilters && (
-                    <div className="bg-white dark:bg-slate-800 p-4 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-700 animate-in slide-in-from-top-2">
-                        <div className="space-y-1">
-                            <label className="text-xs font-medium text-gray-500 ml-1">Son İşlem Zamanı</label>
-                            <select
-                                value={timeFilter}
-                                onChange={(e) => setTimeFilter(e.target.value as TimeFilter)}
-                                className="w-full bg-gray-50 dark:bg-slate-900 border-0 rounded-xl px-3 py-3 text-sm text-gray-800 dark:text-gray-200 ring-1 ring-gray-200 dark:ring-slate-700 focus:ring-2 focus:ring-blue-500"
-                            >
-                                <option value="ALL">Tüm Zamanlar</option>
-                                <option value="THIS_WEEK">Bu Hafta İşlem Yaptıklarım</option>
-                                <option value="THIS_MONTH">Bu Ay İşlem Yaptıklarım</option>
-                            </select>
-                        </div>
                     </div>
                 )}
 

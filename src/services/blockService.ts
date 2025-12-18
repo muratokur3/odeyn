@@ -6,13 +6,10 @@ import {
     getDoc,
     getDocs,
     query,
-    where,
     serverTimestamp,
-    limit,
     Timestamp
 } from 'firebase/firestore';
 import { db } from './firebase';
-import type { User } from '../types';
 
 export interface BlockRecord {
     blockedUid: string;
