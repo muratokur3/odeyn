@@ -325,7 +325,7 @@ export const addContact = async (currentUserId: string, name: string, phoneNumbe
         const contactsRef = collection(db, 'users', currentUserId, 'contacts');
 
         // Check if phone number already exists (Try strict clean first)
-        let q = query(contactsRef, where('phoneNumber', '==', cleanPhone));
+        const q = query(contactsRef, where('phoneNumber', '==', cleanPhone));
         let querySnapshot = await getDocs(q);
 
         // Double check: If strict failed, maybe stored as non-standard? 
