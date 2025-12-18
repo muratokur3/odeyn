@@ -361,9 +361,10 @@ export const addContact = async (currentUserId: string, name: string, phoneNumbe
         // Check if this phone corresponds to a system user
         let finalLinkedUserId = linkedUserId || null;
         if (!finalLinkedUserId) {
-            const systemUser = await searchUserByPhone(cleanPhone);
-            if (systemUser) {
-                finalLinkedUserId = systemUser.uid;
+            const { resolvePhoneToUid } = await import('./identity');
+            const resolvedUid = await resolvePhoneToUid(cleanPhone);
+            if (resolvedUid) {
+                finalLinkedUserId = resolvedUid;
             }
         }
 

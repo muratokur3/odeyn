@@ -4,8 +4,7 @@ import { Lock, MessageSquare, Loader2, ArrowLeft } from 'lucide-react';
 import { auth } from '../services/firebase';
 import { RecaptchaVerifier, type ConfirmationResult } from 'firebase/auth';
 import { PhoneInput } from '../components/PhoneInput';
-import { loginWithPhoneAndPassword, startPhoneLogin, ensureUserDocument } from '../services/auth';
-import { searchUserByPhone } from '../services/db';
+import { loginWithPhoneAndPassword, startPhoneLogin, ensureUserDocument, checkUserExists } from '../services/auth';
 import { useModal } from '../context/ModalContext';
 import clsx from 'clsx';
 
@@ -57,8 +56,8 @@ export const Login = () => {
         setLoading(true);
         try {
             // Check existence for SMS Login to prevent auto-registration or clarify flow
-            const existingUser = await searchUserByPhone(phone);
-            if (!existingUser) {
+            const exists = await checkUserExists(phone);
+            if (!exists) {
                 showAlert("Kayıt Bulunamadı", "Bu numarada bir kayıt yok. Lütfen kayıt olun.", "warning");
                 return;
             }
