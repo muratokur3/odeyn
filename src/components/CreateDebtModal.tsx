@@ -325,38 +325,38 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
     };
 
     return (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm pb-20 md:pb-4">
-            <div className="bg-surface rounded-2xl w-full max-w-sm shadow-xl animate-in fade-in zoom-in duration-200 h-auto max-h-[80dvh] flex flex-col border border-slate-700">
-                <div className="flex justify-between items-center p-6 pb-2 flex-none">
-                    <h2 className="text-xl font-bold text-text-primary">Yeni İşlem Ekle</h2>
-                    <button onClick={onClose} className="p-2 hover:bg-slate-700/50 rounded-full">
-                        <X size={20} className="text-text-secondary" />
+        <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 backdrop-blur-sm pb-20 md:pb-4">
+            <div className="bg-surface rounded-3xl w-full max-w-md mx-4 shadow-2xl animate-in fade-in zoom-in duration-200 h-auto max-h-[85dvh] flex flex-col border border-slate-700/50">
+                <div className="flex justify-between items-center p-6 pb-4 flex-none border-b border-slate-800/50">
+                    <h2 className="text-2xl font-bold text-text-primary">Yeni İşlem</h2>
+                    <button onClick={onClose} className="p-3 hover:bg-slate-700/50 rounded-full transition-colors active:scale-95">
+                        <X size={24} className="text-text-secondary" />
                     </button>
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
-                    <form id="create-debt-form" onSubmit={handleSubmit} className="space-y-4">
+                    <form id="create-debt-form" onSubmit={handleSubmit} className="space-y-6">
                         {/* Type Toggle */}
-                        <div className="flex p-1 bg-background rounded-xl border border-slate-700">
+                        <div className="flex p-1.5 bg-background rounded-2xl border border-slate-700">
                             <button
                                 type="button"
                                 onClick={() => setType('LENDING')}
                                 className={clsx(
-                                    "flex-1 py-2 rounded-lg text-sm font-medium transition-all",
-                                    type === 'LENDING' ? "bg-surface text-green-500 shadow-sm" : "text-text-secondary hover:text-text-primary"
+                                    "flex-1 py-3.5 rounded-xl text-base font-semibold transition-all active:scale-95",
+                                    type === 'LENDING' ? "bg-surface text-green-500 shadow-sm ring-1 ring-black/5" : "text-text-secondary hover:text-text-primary"
                                 )}
                             >
-                                Borç Veriyorum
+                                Borç Verdim
                             </button>
                             <button
                                 type="button"
                                 onClick={() => setType('BORROWING')}
                                 className={clsx(
-                                    "flex-1 py-2 rounded-lg text-sm font-medium transition-all",
-                                    type === 'BORROWING' ? "bg-surface text-red-500 shadow-sm" : "text-text-secondary hover:text-text-primary"
+                                    "flex-1 py-3.5 rounded-xl text-base font-semibold transition-all active:scale-95",
+                                    type === 'BORROWING' ? "bg-surface text-red-500 shadow-sm ring-1 ring-black/5" : "text-text-secondary hover:text-text-primary"
                                 )}
                             >
-                                Borç Alıyorum
+                                Borç Aldım
                             </button>
                         </div>
 
@@ -393,8 +393,8 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                                         setFoundContact(null);
                                         setFoundUser(null);
                                     }}
-                                    className="w-full pl-10 pr-12 py-3 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary focus:ring-2 focus:ring-blue-900/50 outline-none transition-all"
-                                    placeholder="İsim veya Telefon Ara..."
+                                    className="w-full pl-11 pr-4 py-4 rounded-xl border border-slate-700 bg-background text-text-primary text-base focus:border-primary focus:ring-2 focus:ring-blue-900/50 outline-none transition-all placeholder:text-slate-500"
+                                    placeholder="Kişi veya Telefon Ara..."
                                     autoFocus
                                 />
 
@@ -468,44 +468,51 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                         )}
 
 
-                        <div className="flex gap-3">
+                        <div className="flex flex-col sm:flex-row gap-5">
                             <div className="flex-1">
-                                <label className="block text-sm font-medium text-text-secondary mb-1">Tutar</label>
-                                <input
-                                    type="number"
-                                    value={amount}
-                                    onChange={(e) => setAmount(e.target.value)}
-                                    min={0}
-                                    step="0.01"
-                                    className="w-full px-4 py-3 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary focus:ring-2 focus:ring-blue-900/50 outline-none transition-all text-lg font-semibold"
-                                    placeholder="0.00"
-                                    required
-                                />
+                                <label className="block text-base font-semibold text-text-secondary mb-2 ml-1">Tutar</label>
+                                <div className="relative">
+                                    <input
+                                        type="number"
+                                        value={amount}
+                                        onChange={(e) => setAmount(e.target.value)}
+                                        min={0}
+                                        step="0.01"
+                                        className="w-full px-4 py-4 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary focus:ring-4 focus:ring-blue-500/10 outline-none transition-all text-xl font-bold tracking-wide placeholder:font-normal placeholder:text-slate-600"
+                                        placeholder="0.00"
+                                        required
+                                    />
+                                </div>
                             </div>
-                            <div className="w-1/3">
-                                <label className="block text-sm font-medium text-text-secondary mb-1">Para Birimi</label>
-                                <select
-                                    value={currency}
-                                    onChange={(e) => setCurrency(e.target.value)}
-                                    className="w-full px-4 py-3 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary focus:ring-2 focus:ring-blue-900/50 outline-none transition-all"
-                                >
-                                    <option value="TRY">TRY</option>
-                                    <option value="USD">USD</option>
-                                    <option value="EUR">EUR</option>
-                                    <option value="GOLD">Altın (Gr)</option>
-                                </select>
+                            <div className="w-full sm:w-1/3">
+                                <label className="block text-base font-semibold text-text-secondary mb-2 ml-1">Para Birimi</label>
+                                <div className="relative">
+                                    <select
+                                        value={currency}
+                                        onChange={(e) => setCurrency(e.target.value)}
+                                        className="w-full px-4 py-4 rounded-xl border border-slate-700 bg-background text-text-primary text-base font-medium focus:border-primary focus:ring-4 focus:ring-blue-500/10 outline-none transition-all appearance-none"
+                                    >
+                                        <option value="TRY">TRY (₺)</option>
+                                        <option value="USD">USD ($)</option>
+                                        <option value="EUR">EUR (€)</option>
+                                        <option value="GOLD">Altın (Gr)</option>
+                                    </select>
+                                    <div className="absolute inset-y-0 right-4 flex items-center pointer-events-none text-text-secondary">
+                                        <ChevronDown size={20} />
+                                    </div>
+                                </div>
                             </div>
                         </div>
 
-                        {/* Note Field - Moved Here */}
+                        {/* Note Field */}
                         <div>
-                            <label className="block text-sm font-medium text-text-secondary mb-1">Not</label>
+                            <label className="block text-base font-semibold text-text-secondary mb-2 ml-1">Not (Opsiyonel)</label>
                             <textarea
                                 value={note}
                                 onChange={(e) => setNote(e.target.value)}
-                                rows={2}
-                                className="w-full px-4 py-3 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary focus:ring-2 focus:ring-blue-900/50 outline-none transition-all resize-none"
-                                placeholder="Borç ile ilgili not..."
+                                rows={3}
+                                className="w-full px-4 py-4 rounded-xl border border-slate-700 bg-background text-text-primary text-base focus:border-primary focus:ring-4 focus:ring-blue-500/10 outline-none transition-all resize-none placeholder:text-slate-600"
+                                placeholder="Örn: Yemek ücreti..."
                             />
                         </div>
 
@@ -515,24 +522,21 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                             <button
                                 type="button"
                                 onClick={() => setShowDetails(!showDetails)}
-                                className="flex items-center gap-2 text-sm text-blue-600 font-medium hover:text-blue-700 transition-colors w-full justify-center py-2"
+                                className="flex items-center justify-between w-full p-4 bg-slate-50 dark:bg-slate-800/50 rounded-xl text-blue-600 dark:text-blue-400 font-semibold hover:bg-slate-100 dark:hover:bg-slate-800 transition-all active:scale-[0.98]"
                             >
-                                {showDetails ? (
-                                    <>Daha Az Detay <ChevronUp size={16} /></>
-                                ) : (
-                                    <>Taksit, Vade ve Diğer Detaylar <ChevronDown size={16} /></>
-                                )}
+                                <span>Detaylı Ayarlar</span>
+                                {showDetails ? <ChevronUp size={20} /> : <ChevronDown size={20} />}
                             </button>
 
                             {showDetails && (
-                                <div className="space-y-4 pt-2 animate-in fade-in slide-in-from-top-2 duration-200 mt-2">
+                                <div className="space-y-5 pt-4 animate-in fade-in slide-in-from-top-2 duration-200">
                                     {/* Installment Toggle */}
                                     <div className={clsx(
-                                        "p-4 rounded-xl border transition-all",
+                                        "p-5 rounded-2xl border transition-all",
                                         isInstallment ? "bg-blue-50/50 border-blue-200 dark:bg-blue-900/10 dark:border-blue-800" : "bg-background border-slate-700"
                                     )}>
                                         <div className="flex items-center justify-between">
-                                            <span className="text-sm font-medium text-text-primary">Taksitlendir</span>
+                                            <span className="text-base font-semibold text-text-primary">Taksitlendir</span>
                                             <Toggle
                                                 checked={isInstallment}
                                                 onChange={(val) => {
@@ -545,40 +549,40 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                                         </div>
 
                                         {isInstallment && (
-                                            <div className="mt-4 space-y-3 animate-in fade-in slide-in-from-top-1 border-t border-slate-200 dark:border-slate-700 pt-3">
+                                            <div className="mt-4 space-y-4 animate-in fade-in slide-in-from-top-1 border-t border-slate-200 dark:border-slate-700 pt-4">
                                                 {/* Down Payment */}
                                                 <div>
-                                                    <label className="block text-xs font-medium text-text-secondary mb-1">Peşinat (Opsiyonel)</label>
+                                                    <label className="block text-sm font-semibold text-text-secondary mb-2">Peşinat (Opsiyonel)</label>
                                                     <input
                                                         type="number"
                                                         value={downPayment}
                                                         onChange={(e) => setDownPayment(e.target.value)}
                                                         min={0}
                                                         max={parseFloat(amount) || 0}
-                                                        className="w-full px-3 py-2 rounded-lg border border-slate-600 bg-surface/50 text-text-primary text-sm focus:border-primary outline-none"
+                                                        className="w-full px-4 py-3 rounded-xl border border-slate-600 bg-surface/50 text-text-primary text-base focus:border-primary outline-none"
                                                         placeholder="0.00"
                                                     />
                                                 </div>
 
-                                                <div className="flex gap-3">
+                                                <div className="flex flex-col sm:flex-row gap-4">
                                                     <div className="flex-1">
-                                                        <label className="block text-xs font-medium text-text-secondary mb-1">Taksit Sayısı</label>
+                                                        <label className="block text-sm font-semibold text-text-secondary mb-2">Taksit Sayısı</label>
                                                         <input
                                                             type="number"
                                                             value={installmentCount}
                                                             onChange={(e) => setInstallmentCount(parseInt(e.target.value))}
                                                             min={2}
                                                             max={24}
-                                                            className="w-full px-3 py-2 rounded-lg border border-slate-600 bg-surface/50 text-text-primary text-sm focus:border-primary outline-none"
+                                                            className="w-full px-4 py-3 rounded-xl border border-slate-600 bg-surface/50 text-text-primary text-base focus:border-primary outline-none"
                                                         />
                                                     </div>
                                                     <div className="flex-1">
-                                                        <label className="block text-xs font-medium text-text-secondary mb-1">İlk Taksit Tarihi</label>
+                                                        <label className="block text-sm font-semibold text-text-secondary mb-2">İlk Taksit Tarihi</label>
                                                         <input
                                                             type="date"
                                                             value={dueDate}
                                                             onChange={(e) => setDueDate(e.target.value)}
-                                                            className="w-full px-3 py-2 rounded-lg border border-slate-600 bg-surface/50 text-text-primary text-sm focus:border-primary outline-none"
+                                                            className="w-full px-4 py-3 rounded-xl border border-slate-600 bg-surface/50 text-text-primary text-base focus:border-primary outline-none"
                                                         />
                                                     </div>
                                                 </div>
@@ -598,8 +602,8 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                                     </div>
 
                                     {/* Payment Permission Toggle */}
-                                    <div className="flex items-center justify-between p-4 bg-background rounded-xl border border-slate-700">
-                                        <span className="text-sm font-medium text-text-primary">Karşı taraf ödeme ekleyebilsin</span>
+                                    <div className="flex items-center justify-between p-5 bg-background rounded-2xl border border-slate-700">
+                                        <span className="text-base font-semibold text-text-primary">Karşı taraf ödeme ekleyebilir</span>
                                         <Toggle
                                             checked={canBorrowerAddPayment}
                                             onChange={setCanBorrowerAddPayment}
@@ -613,12 +617,12 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                     </form>
                 </div>
 
-                <div className="p-4 border-t border-slate-800 bg-surface rounded-b-2xl flex-none z-10 w-full">
+                <div className="p-6 border-t border-slate-800/50 bg-surface rounded-b-3xl flex-none z-10 w-full pb-8 md:pb-6">
                     <button
                         type="submit"
                         form="create-debt-form"
                         disabled={loading || !amount || (!foundUser && !foundContact && !borrowerName)}
-                        className="w-full bg-primary text-white py-3 rounded-xl font-semibold hover:bg-blue-600 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-500/20"
+                        className="w-full bg-primary text-white py-4 rounded-2xl text-lg font-bold hover:bg-blue-600 active:scale-[0.98] transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-xl shadow-blue-600/20 flex items-center justify-center gap-2"
                     >
                         {loading ? 'İşleniyor...' : 'Kaydet'}
                     </button>
