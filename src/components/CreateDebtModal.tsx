@@ -8,6 +8,7 @@ import { formatCurrency } from '../utils/format';
 import { formatPhoneForDisplay } from '../utils/phoneUtils'; // Added import
 import type { User, Contact, Installment } from '../types';
 import { useAuth } from '../hooks/useAuth';
+import { Toggle } from './Toggle';
 import { Timestamp } from 'firebase/firestore';
 import clsx from 'clsx';
 
@@ -532,22 +533,15 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                                     )}>
                                         <div className="flex items-center justify-between">
                                             <span className="text-sm font-medium text-text-primary">Taksitlendir</span>
-                                            <div
-                                                onClick={() => {
-                                                    setIsInstallment(!isInstallment);
-                                                    if (!isInstallment) setInstallmentCount(2);
+                                            <Toggle
+                                                checked={isInstallment}
+                                                onChange={(val) => {
+                                                    setIsInstallment(val);
+                                                    if (val) setInstallmentCount(2);
                                                     else setInstallmentCount(1);
                                                 }}
-                                                className={clsx(
-                                                    "w-12 h-6 rounded-full p-1 transition-colors cursor-pointer",
-                                                    isInstallment ? "bg-primary" : "bg-slate-700"
-                                                )}
-                                            >
-                                                <div className={clsx(
-                                                    "w-4 h-4 bg-white rounded-full transition-transform shadow-sm",
-                                                    isInstallment ? "translate-x-6" : "translate-x-0"
-                                                )} />
-                                            </div>
+                                                label=""
+                                            />
                                         </div>
 
                                         {isInstallment && (
@@ -606,18 +600,11 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                                     {/* Payment Permission Toggle */}
                                     <div className="flex items-center justify-between p-4 bg-background rounded-xl border border-slate-700">
                                         <span className="text-sm font-medium text-text-primary">Karşı taraf ödeme ekleyebilsin</span>
-                                        <div
-                                            onClick={() => setCanBorrowerAddPayment(!canBorrowerAddPayment)}
-                                            className={clsx(
-                                                "w-12 h-6 rounded-full p-1 transition-colors cursor-pointer",
-                                                canBorrowerAddPayment ? "bg-primary" : "bg-slate-700"
-                                            )}
-                                        >
-                                            <div className={clsx(
-                                                "w-4 h-4 bg-white rounded-full transition-transform shadow-sm",
-                                                canBorrowerAddPayment ? "translate-x-6" : "translate-x-0"
-                                            )} />
-                                        </div>
+                                        <Toggle
+                                            checked={canBorrowerAddPayment}
+                                            onChange={setCanBorrowerAddPayment}
+                                            label=""
+                                        />
                                     </div>
 
                                 </div>
