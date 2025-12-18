@@ -22,5 +22,16 @@ service cloud.firestore {
         allow create: if request.auth != null && request.auth.uid in get(/databases/$(database)/documents/debts/$(debtId)).data.participants;
       }
     }
+
+    match /phone_registry/{hashedPhone} {
+      // Public lookup for existence check (by hashed phone number)
+      allow get: if true;
+      // Only authenticated users can register their phone
+      // And they can only register a mapping to their own UID.
+      // We also prevent overwriting existing entries to avoid hijacking.
+      allow create: if request.auth != null && request.resource.data.uid == request.auth.uid;
+      // Allow update only if the user owns the existing entry (prevents hijacking)
+      allow update: if request.auth != null && resource.data.uid == request.auth.uid;
+    }
   }
 }

@@ -13,6 +13,7 @@ import { doc, setDoc, serverTimestamp, getDoc, updateDoc } from 'firebase/firest
 import { auth, db } from './firebase';
 import { claimLegacyDebts } from './db';
 import { cleanPhone as cleanPhoneNumber } from '../utils/phoneUtils';
+import { hashPhone } from '../utils/hash';
 
 const EMAIL_DOMAIN = '@debtdert.local';
 
@@ -125,7 +126,8 @@ export const ensureUserDocument = async (user: User) => {
 
             // Register in Registry
             if (clean) {
-                const regRef = doc(db, 'phone_registry', clean);
+                const hashedPhone = await hashPhone(clean);
+                const regRef = doc(db, 'phone_registry', hashedPhone);
                 await setDoc(regRef, {
                     uid: user.uid,
                     verifiedAt: serverTimestamp()
@@ -149,7 +151,8 @@ export const ensureUserDocument = async (user: User) => {
 
             // Register all owned phones
             for (const p of phones) {
-                const regRef = doc(db, 'phone_registry', p);
+                const hashedPhone = await hashPhone(p);
+                const regRef = doc(db, 'phone_registry', hashedPhone);
                 const regDoc = await getDoc(regRef);
                 if (!regDoc.exists()) {
                     await setDoc(regRef, {
@@ -172,20 +175,16 @@ export const logoutUser = async () => {
  * Helper to check if a user document exists (for recovery flow).
  */
 export const checkUserExists = async (_phoneNumber: string): Promise<boolean> => {
-    // This is tricky without admin SDK. We can try to query Firestore by phoneNumber.
-    // Assuming 'users' are readable or we have a public profile collection.
-    // If security rules block listing, this might fail. 
-    // For now, we assume we can query users collection or handle the error.
-    // NOTE: This usually requires a server function or permissive rules.
-    // ALTERNATIVE: Attempt a dummy login or just guide everyone "If you have an account..."
-    // Let's rely on Firestore query if possible.
     try {
-        console.log("Checking existence for:", _phoneNumber);
-        // Since we might not be logged in, this query might fail depending on rules.
-        // We'll skip implementation or assume permissive read for existence checks if allowed.
-        // For this task, we'll return true to be safe and show instruction, or implemented if rules allow.
-        return true;
-    } catch {
+        const clean = cleanPhoneNumber(_phoneNumber);
+        if (!clean) return false;
+
+        const hashedPhone = await hashPhone(clean);
+        const registryRef = doc(db, 'phone_registry', hashedPhone);
+        const docSnap = await getDoc(registryRef);
+        return docSnap.exists();
+    } catch (error) {
+        console.error("Error checking user existence:", error);
         return false;
     }
 };
