@@ -20,6 +20,7 @@ import {
 import { db } from './firebase';
 import type { Debt, DebtStatus, PaymentLog, User, Contact, Installment } from '../types';
 import { cleanPhone as cleanPhoneNumber } from '../utils/phoneUtils';
+import { normalizeDebt } from '../utils/debtUtils';
 
 export const createDebt = async (
     currentUserId: string,
@@ -250,7 +251,7 @@ export const subscribeToUserDebts = (userId: string, callback: (debts: Debt[]) =
     );
 
     return onSnapshot(q, (snapshot) => {
-        const debts = snapshot.docs.map(doc => ({ id: doc.id, ...doc.data() } as Debt));
+        const debts = snapshot.docs.map(doc => normalizeDebt(doc.id, doc.data()));
         callback(debts);
     });
 };
@@ -258,7 +259,7 @@ export const subscribeToUserDebts = (userId: string, callback: (debts: Debt[]) =
 export const subscribeToDebtDetails = (debtId: string, callback: (debt: Debt) => void) => {
     return onSnapshot(doc(db, 'debts', debtId), (doc) => {
         if (doc.exists()) {
-            callback({ id: doc.id, ...doc.data() } as Debt);
+            callback(normalizeDebt(doc.id, doc.data()));
         }
     });
 };

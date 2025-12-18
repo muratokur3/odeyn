@@ -131,11 +131,7 @@ export const Dashboard = () => {
             }
 
             const contact = contactMap.get(otherId)!;
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const dAny = d as any;
-            const debtDate = dAny.created_at ? new Date(dAny.created_at.seconds * 1000) : (d.createdAt?.toDate() || new Date(0));
-            // Fixed property access by casting or checking specific Firestore data structure if needed. 
-            // Assuming d.createdAt is the standard based on Debt type.
+            const debtDate = d.createdAt.toDate();
 
             // Update last activity
             if (debtDate > contact.lastActivity) {
