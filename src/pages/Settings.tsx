@@ -6,27 +6,11 @@ import { restoreDebt, permanentlyDeleteDebt, updateUserPreferences } from '../se
 import { useAuth } from '../hooks/useAuth';
 import type { User } from '../types';
 import { DebtCard } from '../components/DebtCard';
+import { Toggle } from '../components/Toggle';
 import { useModal } from '../context/ModalContext';
 import clsx from 'clsx';
 
 // --- Internal Components ---
-
-const Switch = ({ checked, onChange }: { checked: boolean; onChange: (checked: boolean) => void }) => (
-    <button
-        onClick={() => onChange(!checked)}
-        className={clsx(
-            "relative inline-flex h-7 w-12 items-center rounded-full transition-colors duration-200 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2",
-            checked ? "bg-blue-600" : "bg-gray-200 dark:bg-slate-700"
-        )}
-    >
-        <span
-            className={clsx(
-                "inline-block h-5 w-5 transform rounded-full bg-white transition duration-200 shadow ring-0",
-                checked ? "translate-x-6" : "translate-x-1"
-            )}
-        />
-    </button>
-);
 
 const SettingsRow = ({ icon: Icon, title, description, action, onClick }: {
     icon: React.ElementType;
@@ -211,13 +195,13 @@ export const Settings = () => {
                                 icon={CheckCircle2}
                                 title="Gelen Kayıtları Onayla"
                                 description="Rehberimdeki kişilerin eklediği borçlar otomatik olarak onaylansın."
-                                action={<Switch checked={autoApprove} onChange={(v) => toggleSetting('autoApproveDebt', v, setAutoApprove)} />}
+                                action={<Toggle checked={autoApprove} onChange={(v) => toggleSetting('autoApproveDebt', v, setAutoApprove)} />}
                             />
                             <SettingsRow
                                 icon={Wallet}
                                 title="Ödeme Ekleme İzni"
                                 description="Eklediğim borçlarda varsayılan olarak karşı taraf ödeme girebilsin."
-                                action={<Switch checked={defaultAllowPayment} onChange={(v) => toggleSetting('defaultAllowPaymentAddition', v, setDefaultAllowPayment)} />}
+                                action={<Toggle checked={defaultAllowPayment} onChange={(v) => toggleSetting('defaultAllowPaymentAddition', v, setDefaultAllowPayment)} />}
                             />
                         </div>
 
@@ -229,7 +213,7 @@ export const Settings = () => {
                                 icon={RefreshCw}
                                 title="Rehber Senkronizasyonu"
                                 description="Kişileri eşleştirmek için rehber periyodik olarak taransın."
-                                action={<Switch checked={syncContacts} onChange={(v) => toggleSetting('syncContacts', v, setSyncContacts)} />}
+                                action={<Toggle checked={syncContacts} onChange={(v) => toggleSetting('syncContacts', v, setSyncContacts)} />}
                             />
                         </div>
 
