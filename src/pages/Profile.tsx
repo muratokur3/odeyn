@@ -14,6 +14,7 @@ import { Avatar } from '../components/Avatar';
 import { useNavigate } from 'react-router-dom';
 import { useModal } from '../context/ModalContext';
 import ManagePhones from '../components/ManagePhones'; // New component
+import EmailManager from '../components/EmailManager';
 
 export const Profile = () => {
     const { user } = useAuth();
@@ -162,10 +163,11 @@ export const Profile = () => {
                 </div>
             </div>
 
-            {/* --- SECTION B: MANAGE PHONES --- */}
-            <div className="px-4 mb-6">
+            {/* --- SECTION B: CONTACT INFO --- */}
+            <div className="px-4 mb-6 space-y-4">
                  {/* Replaced old phone list with new component */}
                  <ManagePhones />
+                 <EmailManager />
             </div>
 
             {/* --- SECTION C: SETTINGS LIST --- */}
