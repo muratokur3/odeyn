@@ -17,6 +17,7 @@ import { EditDebtModal } from '../components/EditDebtModal';
 import { updateDebt } from '../services/db';
 import { formatDistanceToNow } from 'date-fns';
 import { tr } from 'date-fns/locale';
+import { FeedbackWidget } from '../components/FeedbackWidget';
 
 // Types
 interface ContactSummary {
@@ -233,6 +234,8 @@ export const Dashboard = () => {
                     </button>
                 </div>
             </div>
+
+            <FeedbackWidget />
 
             {/* HERO CARDS - HORIZONTAL SCROLL */}
             <div className="mb-4 overflow-hidden">
