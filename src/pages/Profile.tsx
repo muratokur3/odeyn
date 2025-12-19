@@ -1,21 +1,19 @@
-import { useState, useRef, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { useTheme } from '../context/ThemeContext';
 import { logoutUser } from '../services/auth';
 import { updateUserProfile } from '../services/profile';
 import { uploadProfileImage } from '../services/storage';
-import { startAddPhoneVerification, confirmAddPhone, finalizeAddPhone, removePhone, setPrimaryPhone } from '../services/identity';
+// import { startAddPhoneVerification, confirmAddPhone, finalizeAddPhone, removePhone, setPrimaryPhone } from '../services/identity'; // Replaced with new component/service
 import {
-    Settings, Phone, Camera, Loader2, Mail,
+    Settings, Camera, Loader2,
     Save, ChevronRight, Moon, Sun,
-    ShieldCheck, HelpCircle, Plus, Trash2
+    ShieldCheck, HelpCircle
 } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
 import { useNavigate } from 'react-router-dom';
-import clsx from 'clsx';
 import { useModal } from '../context/ModalContext';
-import { RecaptchaVerifier } from 'firebase/auth'; // Import for type
-import { auth } from '../services/firebase'; // Direct import for Recaptcha
+import ManagePhones from '../components/ManagePhones'; // New component
 
 export const Profile = () => {
     const { user } = useAuth();
@@ -33,16 +31,7 @@ export const Profile = () => {
     });
 
     const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-    const fileInputRef = useRef<HTMLInputElement>(null);
-
-    // Phone Management State
-    const [isAddingPhone, setIsAddingPhone] = useState(false);
-    const [newPhone, setNewPhone] = useState('');
-    const [otpCode, setOtpCode] = useState('');
-    const [verificationId, setVerificationId] = useState<any>(null);
-    const [phoneLoading, setPhoneLoading] = useState(false);
-    const recaptchaContainerRef = useRef<HTMLDivElement>(null);
-    const appVerifierRef = useRef<RecaptchaVerifier | null>(null);
+    const fileInputRef = React.useRef<HTMLInputElement>(null);
 
     // Initial Data Load
     useEffect(() => {
@@ -54,19 +43,6 @@ export const Profile = () => {
         }
     }, [user, isEditing]);
 
-    // Recaptcha Init
-    useEffect(() => {
-        if (!appVerifierRef.current && recaptchaContainerRef.current) {
-            try {
-                appVerifierRef.current = new RecaptchaVerifier(auth, recaptchaContainerRef.current, {
-                    'size': 'invisible',
-                    'callback': () => { }
-                });
-            } catch (e) {
-                console.error("Recaptcha Init Error:", e);
-            }
-        }
-    }, [isAddingPhone]); // Re-init if modal opens? usually once is enough but container ref matters.
 
     const handleFileSelect = async (e: React.ChangeEvent<HTMLInputElement>) => {
         if (e.target.files && e.target.files[0] && user) {
@@ -129,70 +105,8 @@ export const Profile = () => {
         setPreviewUrl(null);
     };
 
-    // --- Phone Management ---
-
-    const handleAddPhoneStart = async () => {
-        if (!newPhone) return;
-        setPhoneLoading(true);
-        try {
-            if (!appVerifierRef.current) throw new Error("Recaptcha not ready");
-            const result = await startAddPhoneVerification(newPhone, appVerifierRef.current);
-            setVerificationId(result);
-            showAlert("Onay Kodu", "Telefonuna SMS gönderildi.", "success");
-        } catch (error: any) {
-            console.error(error);
-            showAlert("Hata", error.message || "SMS gönderilemedi.", "error");
-        } finally {
-            setPhoneLoading(false);
-        }
-    };
-
-    const handleVerifyOtp = async () => {
-        if (!verificationId || !otpCode || !newPhone) return;
-        setPhoneLoading(true);
-        try {
-            await confirmAddPhone(verificationId, otpCode);
-            await finalizeAddPhone(newPhone); // Update DB
-            showAlert("Başarılı", "Telefon numarası eklendi!", "success");
-            setNewPhone('');
-            setOtpCode('');
-            setVerificationId(null);
-            setIsAddingPhone(false);
-            window.location.reload(); // Refresh to show new state
-        } catch (error: any) {
-            console.error(error);
-            showAlert("Hata", error.message || "Doğrulama başarısız.", "error");
-        } finally {
-            setPhoneLoading(false);
-        }
-    };
-
-    const handleRemovePhone = async (phone: string) => {
-        if (!confirm(`${phone} numarasını silmek istediğinize emin misiniz?`)) return;
-        try {
-            await removePhone(phone);
-            showAlert("Silindi", "Telefon numarası kaldırıldı.", "success");
-            window.location.reload();
-        } catch (error: any) {
-            showAlert("Hata", error.message, "error");
-        }
-    };
-
-    const handleSetPrimary = async (phone: string) => {
-        try {
-            await setPrimaryPhone(phone);
-            window.location.reload();
-        } catch (error: any) {
-            showAlert("Hata", error.message, "error");
-        }
-    };
-
-    const phoneList = user?.phoneNumbers || (user?.phoneNumber ? [user.phoneNumber] : []);
-
     return (
         <div className="min-h-screen bg-gray-50 dark:bg-slate-950 pb-32 relative">
-            {/* Invisible Recaptcha */}
-            <div ref={recaptchaContainerRef}></div>
 
             {/* --- SECTION A: IDENTITY CARD (HEADER) --- */}
             <div className="relative bg-gradient-to-b from-blue-50 to-purple-50 dark:from-slate-900 dark:to-slate-900/50 pt-12 pb-8 rounded-b-[2.5rem] shadow-sm mb-6">
@@ -248,104 +162,14 @@ export const Profile = () => {
                 </div>
             </div>
 
-            {/* --- SECTION B: CONTACT INFO LIST --- */}
+            {/* --- SECTION B: MANAGE PHONES --- */}
             <div className="px-4 mb-6">
-                <div className="flex items-center justify-between mb-2 px-1">
-                    <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider">İletişim Bilgileri</h3>
-                    <button
-                        onClick={() => setIsAddingPhone(true)}
-                        className="text-xs font-bold text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 px-2 py-1 rounded-lg flex items-center gap-1"
-                    >
-                        <Plus size={12} />
-                        Numara Ekle
-                    </button>
-                </div>
-
-                <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 overflow-hidden">
-
-                    {/* Phone List */}
-                    {phoneList.map((phone, idx) => {
-                        const isPrimary = phone === user?.primaryPhoneNumber || (phoneList.length === 1);
-                        return (
-                            <div key={idx} className="flex items-center p-4 border-b border-gray-50 dark:border-slate-800 last:border-0 relative">
-                                <div className={clsx(
-                                    "w-10 h-10 rounded-full flex items-center justify-center shrink-0",
-                                    isPrimary ? "bg-emerald-50 dark:bg-emerald-900/20 text-emerald-600 dark:text-emerald-400" : "bg-gray-100 dark:bg-slate-800 text-gray-400"
-                                )}>
-                                    <Phone size={20} />
-                                </div>
-                                <div className="ml-4 flex-1">
-                                    <div className="flex items-center gap-2">
-                                        <span className="font-medium text-gray-900 dark:text-white">
-                                            {phone}
-                                        </span>
-                                        {isPrimary && (
-                                            <span className="text-[10px] font-bold text-emerald-600 dark:text-emerald-400 bg-emerald-50 dark:bg-emerald-900/20 px-2 py-0.5 rounded-full">
-                                                Ana Numara
-                                            </span>
-                                        )}
-                                    </div>
-                                    <div className="flex gap-4 mt-1">
-                                        {!isPrimary && (
-                                            <button
-                                                onClick={() => handleSetPrimary(phone)}
-                                                className="text-[10px] font-medium text-gray-400 hover:text-blue-500"
-                                            >
-                                                Ana Numara Yap
-                                            </button>
-                                        )}
-                                    </div>
-                                </div>
-                                {!isPrimary && (
-                                    <button
-                                        onClick={() => handleRemovePhone(phone)}
-                                        className="p-2 text-gray-400 hover:text-red-500 transition-colors"
-                                    >
-                                        <Trash2 size={16} />
-                                    </button>
-                                )}
-                            </div>
-                        );
-                    })}
-
-                    {/* Email Row */}
-                    <div className="flex items-center p-4 border-t border-gray-50 dark:border-slate-800">
-                        <div className="w-10 h-10 rounded-full bg-violet-50 dark:bg-violet-900/20 flex items-center justify-center text-violet-600 dark:text-violet-400 shrink-0">
-                            <Mail size={20} />
-                        </div>
-                        <div className="ml-4 flex-1">
-                            <span className="text-xs text-gray-400 block mb-0.5">E-Posta</span>
-                            {isEditing ? (
-                                <input
-                                    type="email"
-                                    value={formData.email}
-                                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                    className="w-full bg-transparent border-b border-gray-200 dark:border-slate-700 py-0.5 focus:outline-none focus:border-violet-500 font-medium dark:text-white"
-                                    placeholder="email@ornek.com"
-                                />
-                            ) : (
-                                <span className="font-medium text-gray-900 dark:text-white truncate block max-w-[200px]">
-                                    {user?.email || user?.recoveryEmail || 'Belirtilmemiş'}
-                                </span>
-                            )}
-                        </div>
-                        {!isEditing && (
-                            <button
-                                onClick={() => setIsEditing(true)}
-                                className="text-violet-600 font-medium text-sm hover:text-violet-700 ml-2"
-                            >
-                                Düzenle
-                            </button>
-                        )}
-                    </div>
-
-                </div>
+                 {/* Replaced old phone list with new component */}
+                 <ManagePhones />
             </div>
 
             {/* --- SECTION C: SETTINGS LIST --- */}
             <div className="px-4 mb-8">
-                {/* ... (Existing Settings) ... */}
-                {/* To save tokens, I'll compress this section if needed, but for replacement accuracy I'll keep it standard */}
                 <h3 className="text-xs font-semibold text-gray-400 uppercase tracking-wider mb-2 ml-1">Uygulama Ayarları</h3>
                 <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 overflow-hidden divide-y divide-gray-50 dark:divide-slate-800">
                     <button onClick={toggleTheme} className="w-full flex items-center justify-between p-4 hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors">
@@ -398,61 +222,6 @@ export const Profile = () => {
                     <p className="text-center text-xs text-gray-300 dark:text-slate-700 mt-4">v1.0.5 • DebtDert Inc.</p>
                 </div>
             )}
-
-            {/* --- MODAL: ADD PHONE --- */}
-            {isAddingPhone && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm animate-in fade-in">
-                    <div className="bg-white dark:bg-slate-900 rounded-3xl p-6 w-full max-w-sm shadow-2xl">
-                        <h2 className="text-xl font-bold mb-4 text-center dark:text-white">Numara Ekle</h2>
-
-                        {!verificationId ? (
-                            <div className="space-y-4">
-                                <p className="text-sm text-gray-500 text-center">Ekleyeceğiniz numaranın size ait olduğunu doğrulamamız gerekiyor.</p>
-                                <input
-                                    type="tel"
-                                    value={newPhone}
-                                    onChange={(e) => setNewPhone(e.target.value)}
-                                    placeholder="+90 555 123 4567"
-                                    className="w-full p-3 rounded-xl bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                                <div className="flex gap-3 pt-2">
-                                    <button onClick={() => setIsAddingPhone(false)} className="flex-1 py-3 text-gray-500 font-bold bg-gray-100 dark:bg-slate-800 rounded-xl">İptal</button>
-                                    <button
-                                        onClick={handleAddPhoneStart}
-                                        disabled={!newPhone || phoneLoading}
-                                        className="flex-[2] py-3 bg-blue-600 text-white font-bold rounded-xl flex justify-center items-center"
-                                    >
-                                        {phoneLoading ? <Loader2 className="animate-spin" /> : "SMS Gönder"}
-                                    </button>
-                                </div>
-                            </div>
-                        ) : (
-                            <div className="space-y-4">
-                                <p className="text-sm text-gray-500 text-center">{newPhone} numarasına gönderilen kodu giriniz.</p>
-                                <input
-                                    type="text"
-                                    value={otpCode}
-                                    onChange={(e) => setOtpCode(e.target.value)}
-                                    placeholder="123456"
-                                    maxLength={6}
-                                    className="w-full p-3 text-center text-2xl tracking-widest rounded-xl bg-gray-50 dark:bg-slate-800 border border-gray-200 dark:border-slate-700 focus:outline-none focus:ring-2 focus:ring-blue-500"
-                                />
-                                <div className="flex gap-3 pt-2">
-                                    <button onClick={() => { setVerificationId(null); setOtpCode(''); }} className="flex-1 py-3 text-gray-500 font-bold bg-gray-100 dark:bg-slate-800 rounded-xl">Geri</button>
-                                    <button
-                                        onClick={handleVerifyOtp}
-                                        disabled={otpCode.length < 6 || phoneLoading}
-                                        className="flex-[2] py-3 bg-green-600 text-white font-bold rounded-xl flex justify-center items-center"
-                                    >
-                                        {phoneLoading ? <Loader2 className="animate-spin" /> : "Doğrula"}
-                                    </button>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                </div>
-            )}
         </div>
     );
 };
-

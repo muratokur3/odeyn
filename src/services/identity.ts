@@ -153,6 +153,8 @@ export const removePhone = async (phoneNumber: string) => {
         }
 
         // Update User
+        // Use direct array update logic within transaction context
+        // We use full replace because we calculated new list
         transaction.update(userRef, {
             phoneNumbers: newPhones,
             primaryPhoneNumber: newPrimary
