@@ -1,22 +1,24 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { UserAvatarItem } from './UserAvatarItem';
 import { formatCurrency } from '../utils/format';
 import clsx from 'clsx';
 import type { DisplayProfile } from '../types';
 
 interface ContactRowProps {
+    id: string; // Added id for memoization
     name: string;
     lastActivityDate?: Date;
     lastActionSnippet: string;
     netBalance: number; // Positive = Receivable, Negative = Payable
     currency: string;
-    onClick: () => void;
+    onClick: (id: string, contact: { name: string, linkedUserId?: string }) => void;
     status?: 'none' | 'system' | 'contact';
     photoURL?: string;
     linkedUserId?: string;
 }
 
-export const ContactRow: React.FC<ContactRowProps> = ({
+export const ContactRow: React.FC<ContactRowProps> = React.memo(({
+    id,
     name,
     lastActionSnippet,
     netBalance,
@@ -43,6 +45,10 @@ export const ContactRow: React.FC<ContactRowProps> = ({
         uid: linkedUserId
     };
 
+    const handleClick = useCallback(() => {
+        onClick(id, { name, linkedUserId });
+    }, [id, name, linkedUserId, onClick]);
+
     const BalanceInfo = (
         <div className="flex flex-col items-end">
             <span className={clsx(
@@ -68,9 +74,11 @@ export const ContactRow: React.FC<ContactRowProps> = ({
     return (
         <UserAvatarItem
             profile={profile}
-            onClick={onClick}
+            onClick={handleClick}
             actionButton={BalanceInfo}
             className="p-4 rounded-2xl bg-white dark:bg-slate-800 border border-gray-100 dark:border-slate-700 shadow-sm active:scale-[0.99] hover:bg-gray-50 dark:hover:bg-slate-750"
         />
     );
-};
+});
+
+ContactRow.displayName = 'ContactRow';

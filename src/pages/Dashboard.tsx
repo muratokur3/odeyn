@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useCallback } from 'react';
 import { useDebts } from '../hooks/useDebts';
 import { useAuth } from '../hooks/useAuth';
 import { useContactName } from '../hooks/useContactName';
@@ -194,6 +194,16 @@ export const Dashboard = () => {
         setToggledCards(prev => ({ ...prev, [currency]: !prev[currency] }));
     };
 
+    // Stable click handler for ContactRow to prevent re-renders
+    const handleContactClick = useCallback((id: string, contactData: { name: string, linkedUserId?: string }) => {
+        navigate(`/person/${id}`, {
+            state: {
+                name: contactData.name,
+                id: contactData.linkedUserId || id
+            }
+        });
+    }, [navigate]);
+
     if (loading) return <div className="flex justify-center items-center h-screen text-lg text-text-primary">Yükleniyor...</div>;
 
     return (
@@ -387,16 +397,12 @@ export const Dashboard = () => {
                     {contactSummaries.map((contact) => (
                         <ContactRow
                             key={contact.id}
+                            id={contact.id}
                             name={contact.name}
                             netBalance={contact.netBalance}
                             currency={contact.currency}
                             lastActionSnippet={contact.lastActionSnippet}
-                            onClick={() => navigate(`/person/${contact.id}`, {
-                                state: {
-                                    name: contact.name,
-                                    id: contact.linkedUserId || contact.id
-                                }
-                            })}
+                            onClick={handleContactClick}
                             status={contact.status}
                             photoURL={undefined}
                             linkedUserId={contact.linkedUserId}

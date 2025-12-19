@@ -11,7 +11,7 @@ interface UserAvatarItemProps {
     className?: string;
 }
 
-export const UserAvatarItem: React.FC<UserAvatarItemProps> = ({ profile, onClick, actionButton, className }) => {
+export const UserAvatarItem: React.FC<UserAvatarItemProps> = React.memo(({ profile, onClick, actionButton, className }) => {
     const { isSystemUser, isContact, displayName, secondaryText, photoURL, uid } = profile;
 
     // determine visual status
@@ -78,4 +78,7 @@ export const UserAvatarItem: React.FC<UserAvatarItemProps> = ({ profile, onClick
             </div>
         </div>
     );
-};
+});
+
+// Add display name for debugging
+UserAvatarItem.displayName = 'UserAvatarItem';
