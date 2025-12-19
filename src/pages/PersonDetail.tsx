@@ -79,11 +79,12 @@ export const PersonDetail = () => {
         } else {
             const confirmed = await showConfirm(
                 "Kullanıcıyı Engelle",
-                "Bu kullanıcıyı engellemek istediğinize emin misiniz? Size yeni borç isteği gönderemeyecek.",
+                "Bu kişiyi engellemek istiyor musunuz? Mevcut borçlar silinmez ancak yeni işlem yapılamaz.",
                 "warning"
             );
             if (confirmed) {
-                await blockUser(user.uid, targetUid);
+                // Pass the person's name to the blockUser function
+                await blockUser(user.uid, targetUid, personInfo.name);
                 setIsBlocked(true);
                 showAlert("Engellendi", "Kullanıcı engellendi.", "success");
             }
@@ -336,12 +337,22 @@ export const PersonDetail = () => {
                         </a>
 
                         {/* Primary Action: Create Debt */}
+                        {!isBlocked && ( // Hide if blocked? No, prompt says disable submission, but doesn't explicitly say hide button. But logic: "Disable interaction".
                         <button
                             onClick={() => setShowCreateModal(true)}
                             className="w-10 h-10 rounded-full bg-primary text-white shadow-lg shadow-blue-500/30 flex items-center justify-center hover:bg-blue-600 active:scale-95 transition-all"
                         >
                             <Plus size={20} className="stroke-[3]" />
                         </button>
+                        )}
+                         {isBlocked && (
+                             <button
+                                disabled
+                                className="w-10 h-10 rounded-full bg-gray-400 text-white cursor-not-allowed flex items-center justify-center"
+                            >
+                                <Ban size={20} className="stroke-[3]" />
+                            </button>
+                        )}
 
                         {/* More Options Menu */}
                         <div className="relative">
@@ -394,6 +405,16 @@ export const PersonDetail = () => {
             </header>
 
             <main className="max-w-2xl mx-auto p-4 space-y-6">
+                {/* Blocked Badge */}
+                {isBlocked && (
+                    <div className="bg-orange-50 dark:bg-orange-900/20 p-4 rounded-xl border border-orange-200 dark:border-orange-800 flex items-center gap-3">
+                         <Ban className="text-orange-600 shrink-0" size={20} />
+                         <p className="text-sm text-orange-800 dark:text-orange-200">
+                             Bu kullanıcı engellendi. Yeni işlem yapamazsınız ancak geçmiş kayıtlar tutulur.
+                         </p>
+                    </div>
+                )}
+
                 {/* Summary Card */}
                 <div className="bg-surface p-6 rounded-2xl shadow-sm border border-border">
                     <p className="text-sm text-text-secondary mb-1 text-center">Net Durum (TRY Karşılığı)</p>
@@ -429,6 +450,7 @@ export const PersonDetail = () => {
                                 debt={debt}
                                 currentUserId={user?.uid || ''}
                                 onClick={() => navigate(`/debt/${debt.id}`)}
+                                disabled={isBlocked} // Pass blocked status to disable interactions
                             />
                         ))
                     ) : (

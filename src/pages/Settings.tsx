@@ -244,7 +244,7 @@ export const Settings = () => {
                                 icon={UserX}
                                 title="Engellenen Kullanıcılar"
                                 description="Engellenmiş kişi listesini yönet."
-                                onClick={() => showAlert("Yakında", "Engellenen kullanıcılar sayfası yakında eklenecek.", "info")}
+                                onClick={() => navigate('/settings/blocked')}
                             />
                         </div>
 

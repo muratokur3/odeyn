@@ -3,7 +3,7 @@ import { useContactName } from '../hooks/useContactName';
 import type { Debt } from '../types';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
-import { CheckCheck, Clock } from 'lucide-react';
+import { CheckCheck, Clock, Ban } from 'lucide-react';
 import { formatCurrency } from '../utils/format';
 import { formatPhoneForDisplay as formatPhoneNumber } from '../utils/phoneUtils';
 import { Avatar } from './Avatar';
@@ -14,9 +14,10 @@ interface DebtCardProps {
     currentUserId: string;
     onClick: () => void;
     otherPartyStatus?: 'none' | 'system' | 'contact';
+    disabled?: boolean; // New prop for blocked state
 }
 
-export const DebtCard: React.FC<DebtCardProps> = ({ debt, currentUserId, onClick, otherPartyStatus = 'none' }) => {
+export const DebtCard: React.FC<DebtCardProps> = ({ debt, currentUserId, onClick, otherPartyStatus = 'none', disabled = false }) => {
     // Live Name Resolution (Scenario 4: Update Propagation)
     // We prioritize the Contact Book name over the Debt Snapshot name.
     const { resolveName } = useContactName();
@@ -89,12 +90,15 @@ export const DebtCard: React.FC<DebtCardProps> = ({ debt, currentUserId, onClick
             ? "bg-green-50/50 border-green-100 dark:bg-green-900/10 dark:border-green-800"
             : "bg-red-50/50 border-red-100 dark:bg-red-900/10 dark:border-red-800";
 
+    // Override color if disabled/blocked? Maybe just opacity or grayscale
+    const finalBgColor = disabled ? "bg-gray-100 border-gray-200 dark:bg-slate-800 dark:border-slate-700 opacity-80" : cardBgColor;
+
     return (
         <div
             onClick={onClick}
             className={clsx(
                 "p-4 rounded-2xl border active:scale-[0.98] transition-all cursor-pointer relative",
-                cardBgColor
+                finalBgColor
             )}
         >
             <div className="flex items-center gap-4">
@@ -102,7 +106,7 @@ export const DebtCard: React.FC<DebtCardProps> = ({ debt, currentUserId, onClick
                 <Avatar
                     name={finalDisplayName}
                     size="md"
-                    className="shadow-sm bg-white"
+                    className={clsx("shadow-sm bg-white", disabled && "grayscale")}
                     status={otherPartyStatus}
                     uid={linkedUserId || (otherId.length > 20 ? otherId : undefined)}
                 />
@@ -110,13 +114,14 @@ export const DebtCard: React.FC<DebtCardProps> = ({ debt, currentUserId, onClick
                 {/* Main Content */}
                 <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-start mb-1">
-                        <h3 className="text-lg font-bold text-gray-900 dark:text-white truncate">
+                        <h3 className={clsx("text-lg font-bold text-gray-900 dark:text-white truncate", disabled && "line-through text-gray-500")}>
                             {finalDisplayName}
                         </h3>
                         {/* Tutar - KOCAMAN */}
                         <div className={clsx(
                             "text-lg font-bold tracking-tight",
-                            isPaid ? "text-gray-400 line-through" : (isLender ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400")
+                            isPaid ? "text-gray-400 line-through" : (isLender ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"),
+                            disabled && "opacity-50"
                         )}>
                             {formatCurrency(debt.remainingAmount, debt.currency)}
                         </div>
@@ -125,7 +130,7 @@ export const DebtCard: React.FC<DebtCardProps> = ({ debt, currentUserId, onClick
                     <div className="flex justify-between items-end">
                         <div className="flex flex-col gap-1">
                             {/* İnsan Diliyle Açıklama */}
-                            <p className={clsx("text-sm font-medium", isLender ? "text-green-600" : "text-red-600")}>
+                            <p className={clsx("text-sm font-medium", isLender ? "text-green-600" : "text-red-600", disabled && "text-gray-500")}>
                                 {isPaid ? "Hesap Kapandı" : (isLender ? "Alacaklısın" : "Borçlusun")}
                             </p>
 
@@ -141,7 +146,11 @@ export const DebtCard: React.FC<DebtCardProps> = ({ debt, currentUserId, onClick
 
                         {/* Durum İkonları */}
                         <div>
-                            {isPending ? (
+                            {disabled ? (
+                                <div className="text-gray-400" title="Engellendi">
+                                    <Ban size={20} />
+                                </div>
+                            ) : isPending ? (
                                 <div className="flex items-center gap-1 bg-yellow-100 text-yellow-700 px-2 py-1 rounded-lg text-xs font-bold">
                                     <Clock size={14} />
                                     <span>Onay Bekliyor</span>
@@ -155,7 +164,7 @@ export const DebtCard: React.FC<DebtCardProps> = ({ debt, currentUserId, onClick
                     </div>
 
                     {/* Pending Actions */}
-                    {isPending && debt.createdBy !== currentUserId && (
+                    {isPending && debt.createdBy !== currentUserId && !disabled && (
                         <div className="mt-3 flex gap-2 pt-3 border-t border-black/5">
                             <button
                                 onClick={(e) => handleResponse(e, 'REJECTED')}

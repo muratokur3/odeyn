@@ -4,26 +4,33 @@ import { doc, onSnapshot } from 'firebase/firestore';
 import { auth, db } from '../services/firebase';
 import { ensureUserDocument } from '../services/auth';
 import { registerSession, monitorSession, signOutUser } from '../services/session';
+import { subscribeToBlockedUsers } from '../services/blockService';
+import type { BlockRecord } from '../services/blockService';
 import type { User } from '../types';
 
 export const useAuth = () => {
     const [user, setUser] = useState<User | null>(null);
     const [loading, setLoading] = useState(true);
+    const [blockedUsers, setBlockedUsers] = useState<BlockRecord[]>([]);
 
     useEffect(() => {
         let unsubscribeSnapshot: (() => void) | null = null;
         let unsubscribeSession: (() => void) | null = null;
+        let unsubscribeBlocked: (() => void) | null = null;
 
         const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
-            // Clean up previous snapshot listener
+            // Clean up previous listeners
             if (unsubscribeSnapshot) {
                 unsubscribeSnapshot();
                 unsubscribeSnapshot = null;
             }
-            // Clean up previous session listener
             if (unsubscribeSession) {
                 unsubscribeSession();
                 unsubscribeSession = null;
+            }
+            if (unsubscribeBlocked) {
+                unsubscribeBlocked();
+                unsubscribeBlocked = null;
             }
 
             if (firebaseUser) {
@@ -42,6 +49,7 @@ export const useAuth = () => {
                     console.error("Auth ensure doc error", e);
                 }
 
+                // Subscribe to User Data
                 const userRef = doc(db, 'users', firebaseUser.uid);
                 unsubscribeSnapshot = onSnapshot(userRef, (docSnap) => {
                     if (docSnap.exists()) {
@@ -54,8 +62,15 @@ export const useAuth = () => {
                     console.error("User snapshot error:", error);
                     setLoading(false);
                 });
+
+                // Subscribe to Blocked Users
+                unsubscribeBlocked = subscribeToBlockedUsers(firebaseUser.uid, (blocked) => {
+                    setBlockedUsers(blocked);
+                });
+
             } else {
                 setUser(null);
+                setBlockedUsers([]);
                 setLoading(false);
             }
         });
@@ -68,8 +83,11 @@ export const useAuth = () => {
             if (unsubscribeSession) {
                 unsubscribeSession();
             }
+            if (unsubscribeBlocked) {
+                unsubscribeBlocked();
+            }
         };
     }, []);
 
-    return { user, loading };
+    return { user, loading, blockedUsers };
 };

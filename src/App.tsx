@@ -6,6 +6,7 @@ import { DebtDetail } from './pages/DebtDetail';
 import { Contacts } from './pages/Contacts';
 import { Profile } from './pages/Profile';
 import { Settings } from './pages/Settings';
+import { BlockedUsers } from './pages/BlockedUsers'; // Added
 import { QuickDial } from './pages/QuickDial';
 import { Tools } from './pages/Tools';
 import { PersonDetail } from './pages/PersonDetail';
@@ -53,6 +54,7 @@ function App() {
                   <Route path="/person/:id" element={<PersonDetail />} />
                   <Route path="/contacts" element={<Contacts />} />
                   <Route path="/settings" element={<Settings />} />
+                  <Route path="/settings/blocked" element={<BlockedUsers />} /> {/* Added Route */}
                   <Route path="/pending-requests" element={<PendingRequests />} />
                 </Route>
               </Routes>

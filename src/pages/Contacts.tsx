@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { getContacts, addContact, deleteContact, updateContact, createDebt, batchAddContacts } from '../services/db';
 import type { Contact } from '../types';
-import { Search, ArrowLeft, Wallet, X } from 'lucide-react';
+import { Search, ArrowLeft, Wallet, X, Ban } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { SwipeableItem } from '../components/SwipeableItem';
 import { Avatar } from '../components/Avatar';
@@ -14,7 +14,7 @@ import { ImportContactsButton } from '../components/ImportContactsButton';
 import { useModal } from '../context/ModalContext';
 
 export const Contacts = () => {
-    const { user } = useAuth();
+    const { user, blockedUsers } = useAuth(); // Get blocked users
     const navigate = useNavigate();
     const location = useLocation();
     const { showAlert, showConfirm } = useModal();
@@ -216,6 +216,11 @@ export const Contacts = () => {
         c.phoneNumber.includes(searchTerm)
     );
 
+    // Helper to check if contact is blocked
+    const isContactBlocked = (contact: Contact) => {
+        return contact.linkedUserId && blockedUsers.some(b => b.blockedUid === contact.linkedUserId);
+    };
+
     return (
         <div className="min-h-full bg-background transition-colors duration-200">
             {/* Header */}
@@ -259,52 +264,72 @@ export const Contacts = () => {
                     <div className="text-center py-10 text-text-secondary">Yükleniyor...</div>
                 ) : filteredContacts.length > 0 ? (
                     <div className="bg-surface rounded-xl shadow-sm border border-border divide-y divide-border overflow-hidden transition-colors duration-200">
-                        {filteredContacts.map(contact => (
-                            <SwipeableItem
-                                key={contact.id}
-                                onSwipeLeft={() => handleDeleteContact(contact.id)}
-                                onSwipeRight={() => openEditModal(contact)}
-                                className="mb-0"
-                            >
-                                <div className="p-4 flex items-center justify-between hover:bg-background/50 transition-colors">
-                                    <div
-                                        onClick={() => navigate(`/person/${contact.phoneNumber}`)}
-                                        className="flex items-center gap-3 cursor-pointer flex-1"
-                                    >
-                                        <div className="w-10 h-10 flex items-center justify-center">
-                                            <Avatar
-                                                name={contact.name}
-                                                size="md"
-                                                status={contact.linkedUserId ? 'system' : 'contact'}
-                                                className="shadow-sm"
-                                                uid={contact.linkedUserId}
-                                            />
-                                        </div>
-                                        <div>
-                                            <h3 className="font-semibold text-text-primary">
-                                                {contact.name}
-                                            </h3>
-                                            <div className="flex items-center gap-2">
-                                                <p className="text-sm text-text-secondary">{formatPhoneNumber(contact.phoneNumber)}</p>
+                        {filteredContacts.map(contact => {
+                            const blocked = isContactBlocked(contact);
+                            return (
+                                <SwipeableItem
+                                    key={contact.id}
+                                    onSwipeLeft={() => handleDeleteContact(contact.id)}
+                                    onSwipeRight={() => openEditModal(contact)}
+                                    className="mb-0"
+                                >
+                                    <div className="p-4 flex items-center justify-between hover:bg-background/50 transition-colors">
+                                        <div
+                                            onClick={() => navigate(`/person/${contact.phoneNumber}`)}
+                                            className="flex items-center gap-3 cursor-pointer flex-1"
+                                        >
+                                            <div className="w-10 h-10 flex items-center justify-center relative">
+                                                <Avatar
+                                                    name={contact.name}
+                                                    size="md"
+                                                    status={contact.linkedUserId ? 'system' : 'contact'}
+                                                    className={blocked ? "grayscale opacity-70" : "shadow-sm"}
+                                                    uid={contact.linkedUserId}
+                                                />
+                                                {blocked && (
+                                                    <div className="absolute -bottom-1 -right-1 bg-surface rounded-full p-0.5 border border-border">
+                                                        <Ban size={12} className="text-red-500" />
+                                                    </div>
+                                                )}
+                                            </div>
+                                            <div>
+                                                <div className="flex items-center gap-2">
+                                                    <h3 className={`font-semibold ${blocked ? 'text-gray-500 line-through decoration-red-500/50' : 'text-text-primary'}`}>
+                                                        {contact.name}
+                                                    </h3>
+                                                    {blocked && <span className="text-[10px] font-bold text-red-500 bg-red-100 dark:bg-red-900/30 px-1.5 py-0.5 rounded">Engelli</span>}
+                                                </div>
+                                                <div className="flex items-center gap-2">
+                                                    <p className="text-sm text-text-secondary">{formatPhoneNumber(contact.phoneNumber)}</p>
+                                                </div>
                                             </div>
                                         </div>
+                                        <div className="flex items-center gap-1 pl-2">
+                                            {/* Quick Debt Creation Button */}
+                                            {blocked ? (
+                                                <button
+                                                    disabled
+                                                    className="w-10 h-10 rounded-full bg-gray-100 dark:bg-slate-800 text-gray-400 flex items-center justify-center cursor-not-allowed"
+                                                >
+                                                    <Ban size={20} />
+                                                </button>
+                                            ) : (
+                                                <button
+                                                    onClick={(e) => {
+                                                        e.stopPropagation();
+                                                        setSelectedContactForDebt(contact);
+                                                        setShowDebtModal(true);
+                                                    }}
+                                                    className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 flex items-center justify-center hover:scale-110 active:scale-95 transition-transform"
+                                                >
+                                                    <Wallet size={20} />
+                                                </button>
+                                            )}
+                                        </div>
                                     </div>
-                                    <div className="flex items-center gap-1 pl-2">
-                                        {/* Quick Debt Creation Button */}
-                                        <button
-                                            onClick={(e) => {
-                                                e.stopPropagation();
-                                                setSelectedContactForDebt(contact);
-                                                setShowDebtModal(true);
-                                            }}
-                                            className="w-10 h-10 rounded-full bg-blue-100 dark:bg-blue-900/20 text-blue-600 dark:text-blue-400 flex items-center justify-center hover:scale-110 active:scale-95 transition-transform"
-                                        >
-                                            <Wallet size={20} />
-                                        </button>
-                                    </div>
-                                </div>
-                            </SwipeableItem>
-                        ))}
+                                </SwipeableItem>
+                            );
+                        })}
                     </div>
                 ) : (
                     <div className="text-center py-10 text-text-secondary">

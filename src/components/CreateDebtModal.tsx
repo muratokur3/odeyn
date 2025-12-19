@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Search, ChevronDown, ChevronUp, Plus } from 'lucide-react';
+import { X, Search, ChevronDown, ChevronUp, Plus, Ban } from 'lucide-react';
 import { Avatar } from './Avatar';
 import { SelectedUserCard } from './SelectedUserCard'; // Import moved to top
 
@@ -36,7 +36,7 @@ interface CreateDebtModalProps {
 import { useModal } from '../context/ModalContext';
 
 export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClose, onSubmit, initialPhoneNumber, targetUser, initialName: propInitialName }) => {
-    const { user } = useAuth();
+    const { user, blockedUsers } = useAuth(); // Destructure blockedUsers
     const { showAlert } = useModal();
 
     // Derived state for initialization
@@ -87,6 +87,9 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
     const [installmentCount, setInstallmentCount] = useState(1);
     const [downPayment, setDownPayment] = useState('');
 
+    // Blocked check
+    const [isTargetBlocked, setIsTargetBlocked] = useState(false);
+
     // Reset/Init when opening
     useEffect(() => {
         if (isOpen) {
@@ -128,6 +131,23 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
         }
     }, [isOpen, initialPhoneNumber, targetUser, user, propInitialName]);
 
+    // Check blocked status whenever foundUser or foundContact changes
+    useEffect(() => {
+        let targetUid = '';
+        if (foundUser) {
+            targetUid = foundUser.uid;
+        } else if (foundContact && foundContact.linkedUserId) {
+            targetUid = foundContact.linkedUserId;
+        }
+
+        if (targetUid && blockedUsers.some(b => b.blockedUid === targetUid)) {
+            setIsTargetBlocked(true);
+        } else {
+            setIsTargetBlocked(false);
+        }
+    }, [foundUser, foundContact, blockedUsers]);
+
+
     // Search Effect - Disable if NOT in SEARCH step
     useEffect(() => {
         if (step !== 'SEARCH') return;
@@ -144,13 +164,30 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
             try {
                 // 1. Search Contacts
                 const contacts = await searchContacts(user.uid, phoneNumber);
-                setSearchResults(contacts);
+                // Filter out blocked users if they are linked?
+                // The requirements say: "Filter out users present in the blockedUsers collection. They should NOT appear in the autocomplete list"
+                // However, contacts are local. Linked users are the issue.
+                // We should probably show them but marked as blocked?
+                // "Filter out users present in the blockedUsers collection" implies strict filtering from the list.
+                // Let's filter linked blocked users from the list if possible, or mark them.
+                // But let's follow the requirement: Filter OUT.
+
+                const filteredContacts = contacts.filter(c =>
+                    !c.linkedUserId || !blockedUsers.some(b => b.blockedUid === c.linkedUserId)
+                );
+
+                setSearchResults(filteredContacts);
 
                 // 2. Search System Users (only if full phone number)
                 if (phoneNumber.length >= 10) {
                     const sysUser = await searchUserByPhone(phoneNumber);
                     if (sysUser && sysUser.uid !== user.uid) {
-                        setFoundUser(sysUser);
+                        // Check if blocked
+                        if (blockedUsers.some(b => b.blockedUid === sysUser.uid)) {
+                            setFoundUser(null); // Don't show blocked system users
+                        } else {
+                            setFoundUser(sysUser);
+                        }
                     } else {
                         setFoundUser(null);
                     }
@@ -164,7 +201,7 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
 
         const timeoutId = setTimeout(search, 500);
         return () => clearTimeout(timeoutId);
-    }, [phoneNumber, user, targetUser]);
+    }, [phoneNumber, user, targetUser, blockedUsers]);
 
     if (!isOpen) return null;
 
@@ -218,6 +255,12 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
         e.preventDefault();
         if (!user) return;
 
+        // Final Block Check before submission
+        if (isTargetBlocked) {
+            showAlert("Engellendi", "Engellediğiniz bir kullanıcıya işlem yapamazsınız.", "error");
+            return;
+        }
+
         const numAmount = parseFloat(amount);
         const numDownPayment = parseFloat(downPayment) || 0;
 
@@ -246,18 +289,6 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
         if (!finalBorrowerName) {
             finalBorrowerName = formatPhoneForDisplay(finalBorrowerId);
         }
-
-        /* Validation Removed per user request
-        if (!finalBorrowerName) {
-            showAlert("Bilgi", "Lütfen bir isim girin veya kayıtlı bir kullanıcı seçin.", "warning");
-            return;
-        }
-        const digits = finalBorrowerName.replace(/\D/g, '');
-        if (digits.length > 7 && (digits.length / finalBorrowerName.length > 0.5)) {
-             showAlert("Uyarı", "İsim alanı telefon numarası olamaz. Lütfen gerçek bir isim giriniz.", "warning");
-             return;
-        }
-        */
 
         setLoading(true);
         try {
@@ -319,6 +350,18 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
 
         } catch (error) {
             console.error(error);
+            // Error handling from service (e.g. backend block check)
+            if (error instanceof Error) {
+                // Check if the error message is generic
+                // The prompt asked: "Show a generic error: 'Bu kullanıcı gizlilik ayarları nedeniyle işlem kabul etmiyor.'"
+                // The service throws "Cannot create debt. User is blocked or has blocked you."
+                // I should intercept this error in the UI.
+                if (error.message.includes("blocked")) {
+                    showAlert("İşlem Başarısız", "Bu kullanıcı gizlilik ayarları nedeniyle işlem kabul etmiyor.", "error");
+                } else {
+                     showAlert("Hata", "İşlem kaydedilirken bir hata oluştu.", "error");
+                }
+            }
         } finally {
             setLoading(false);
         }
@@ -335,6 +378,14 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
+                    {/* Blocked Warning */}
+                    {isTargetBlocked && (
+                        <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800 flex items-center gap-2">
+                             <Ban className="text-red-600" size={18} />
+                             <p className="text-sm text-red-700 dark:text-red-300 font-medium">Bu kullanıcı engellendiği için işlem yapılamaz.</p>
+                        </div>
+                    )}
+
                     <form id="create-debt-form" onSubmit={handleSubmit} className="space-y-4">
                         {/* Type Toggle */}
                         <div className="flex p-1 bg-background rounded-xl border border-slate-700">
@@ -477,7 +528,8 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                                     onChange={(e) => setAmount(e.target.value)}
                                     min={0}
                                     step="0.01"
-                                    className="w-full px-4 py-3 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary focus:ring-2 focus:ring-blue-900/50 outline-none transition-all text-lg font-semibold"
+                                    disabled={isTargetBlocked}
+                                    className="w-full px-4 py-3 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary focus:ring-2 focus:ring-blue-900/50 outline-none transition-all text-lg font-semibold disabled:opacity-50 disabled:cursor-not-allowed"
                                     placeholder="0.00"
                                     required
                                 />
@@ -487,7 +539,8 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                                 <select
                                     value={currency}
                                     onChange={(e) => setCurrency(e.target.value)}
-                                    className="w-full px-4 py-3 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary focus:ring-2 focus:ring-blue-900/50 outline-none transition-all"
+                                    disabled={isTargetBlocked}
+                                    className="w-full px-4 py-3 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary focus:ring-2 focus:ring-blue-900/50 outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
                                     <option value="TRY">TRY</option>
                                     <option value="USD">USD</option>
@@ -504,7 +557,8 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                                 value={note}
                                 onChange={(e) => setNote(e.target.value)}
                                 rows={2}
-                                className="w-full px-4 py-3 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary focus:ring-2 focus:ring-blue-900/50 outline-none transition-all resize-none"
+                                disabled={isTargetBlocked}
+                                className="w-full px-4 py-3 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary focus:ring-2 focus:ring-blue-900/50 outline-none transition-all resize-none disabled:opacity-50 disabled:cursor-not-allowed"
                                 placeholder="Borç ile ilgili not..."
                             />
                         </div>
@@ -515,7 +569,8 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                             <button
                                 type="button"
                                 onClick={() => setShowDetails(!showDetails)}
-                                className="flex items-center gap-2 text-sm text-blue-600 font-medium hover:text-blue-700 transition-colors w-full justify-center py-2"
+                                disabled={isTargetBlocked}
+                                className="flex items-center gap-2 text-sm text-blue-600 font-medium hover:text-blue-700 transition-colors w-full justify-center py-2 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
                                 {showDetails ? (
                                     <>Daha Az Detay <ChevronUp size={16} /></>
@@ -617,7 +672,7 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                     <button
                         type="submit"
                         form="create-debt-form"
-                        disabled={loading || !amount || (!foundUser && !foundContact && !borrowerName)}
+                        disabled={loading || !amount || (!foundUser && !foundContact && !borrowerName) || isTargetBlocked}
                         className="w-full bg-primary text-white py-3 rounded-xl font-semibold hover:bg-blue-600 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-500/20"
                     >
                         {loading ? 'İşleniyor...' : 'Kaydet'}
