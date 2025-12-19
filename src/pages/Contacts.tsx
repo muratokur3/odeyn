@@ -6,7 +6,7 @@ import { Search, ArrowLeft, Wallet, X } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { SwipeableItem } from '../components/SwipeableItem';
 import { Avatar } from '../components/Avatar';
-import { formatPhoneForDisplay as formatPhoneNumber } from '../utils/phoneUtils';
+import { cleanPhone, formatPhoneForDisplay as formatPhoneNumber } from '../utils/phoneUtils';
 import { CreateDebtModal } from '../components/CreateDebtModal';
 import { PhoneInput } from '../components/PhoneInput';
 import { createDebt } from '../services/db';
@@ -32,6 +32,26 @@ export const Contacts = () => {
     const [name, setName] = useState('');
     const [phone, setPhone] = useState('');
     const [submitting, setSubmitting] = useState(false);
+    const [duplicateContact, setDuplicateContact] = useState<Contact | null>(null);
+
+    useEffect(() => {
+        if (phone) {
+            const cleanedInput = cleanPhone(phone);
+            // Only check if we have a valid-ish phone number (length check implicitly via cleanPhone or just existence)
+            // cleanPhone returns E.164 usually +90... so length > 3
+            if (cleanedInput && cleanedInput.length > 5) {
+                const found = contacts.find(c =>
+                    c.phoneNumber === cleanedInput &&
+                    (!editingContact || c.id !== editingContact.id)
+                );
+                setDuplicateContact(found || null);
+            } else {
+                setDuplicateContact(null);
+            }
+        } else {
+            setDuplicateContact(null);
+        }
+    }, [phone, contacts, editingContact]);
 
     useEffect(() => {
         if (user) {
@@ -147,6 +167,7 @@ export const Contacts = () => {
         setEditingContact(null);
         setName('');
         setPhone('');
+        setDuplicateContact(null);
     };
 
     const filteredContacts = contacts.filter(c =>
@@ -284,12 +305,21 @@ export const Contacts = () => {
                                         required
                                         placeholder="555 123 45 67"
                                     />
+                                    {duplicateContact && (
+                                        <div className="text-red-500 text-sm mt-2 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
+                                            <p>Bu numara zaten rehberinizde <strong>{duplicateContact.name}</strong> adıyla kayıtlı.</p>
+                                        </div>
+                                    )}
                                 </div>
 
                                 <button
                                     type="submit"
-                                    disabled={submitting}
-                                    className="w-full bg-primary text-white py-3 rounded-xl font-semibold hover:bg-blue-600 active:scale-95 transition-all mt-2"
+                                    disabled={submitting || !!duplicateContact}
+                                    className={`w-full py-3 rounded-xl font-semibold transition-all mt-2 ${
+                                        submitting || !!duplicateContact
+                                            ? 'bg-gray-300 dark:bg-slate-700 text-gray-500 cursor-not-allowed'
+                                            : 'bg-primary text-white hover:bg-blue-600 active:scale-95'
+                                    }`}
                                 >
                                     {submitting ? 'Kaydediliyor...' : 'Kaydet'}
                                 </button>
