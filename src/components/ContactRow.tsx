@@ -49,7 +49,7 @@ export const ContactRow: React.FC<ContactRowProps> = React.memo(({
         onClick(id, { name, linkedUserId });
     }, [id, name, linkedUserId, onClick]);
 
-    const BalanceInfo = (
+    const BalanceInfo = React.useMemo(() => (
         <div className="flex flex-col items-end">
             <span className={clsx(
                 "text-lg font-bold tracking-tight",
@@ -69,7 +69,7 @@ export const ContactRow: React.FC<ContactRowProps> = React.memo(({
                 {isReceivable ? "Alacaklısın" : isPayable ? "Borçlusun" : "Ödeşildi"}
             </span>
         </div>
-    );
+    ), [netBalance, currency, isReceivable, isPayable, isSettled]);
 
     return (
         <UserAvatarItem
