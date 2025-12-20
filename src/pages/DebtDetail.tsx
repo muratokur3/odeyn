@@ -147,7 +147,11 @@ export const DebtDetail = () => {
             <header className="bg-surface shadow-sm p-4 sticky top-0 z-40 transition-colors duration-200">
                 <div className="flex items-center justify-between max-w-2xl mx-auto">
                     <div className="flex items-center gap-4">
-                        <button onClick={() => navigate(-1)} className="p-2 hover:bg-background rounded-full transition-colors">
+                        <button
+                            onClick={() => navigate(-1)}
+                            className="p-2 hover:bg-background rounded-full transition-colors"
+                            aria-label="Geri dön"
+                        >
                             <ArrowLeft size={24} className="text-text-secondary" />
                         </button>
                         <div>
@@ -178,21 +182,35 @@ export const DebtDetail = () => {
                     <div className="flex gap-1">
                          {/* Forgive Button (Only Lender can forgive Active Debts) */}
                          {isLender && debt.status !== 'PENDING' && debt.remainingAmount > 0 && !isBlocked && (
-                            <button onClick={handleForgive} className="p-2 text-green-600 hover:bg-green-50 rounded-full" title="Borcu Sil/Hibe Et">
+                            <button
+                                onClick={handleForgive}
+                                className="p-2 text-green-600 hover:bg-green-50 rounded-full"
+                                title="Borcu Sil/Hibe Et"
+                                aria-label="Borcu Sil/Hibe Et"
+                            >
                                 <CheckCircle size={20} />
                             </button>
                         )}
 
                         {/* Edit Button (Creator or allowed) */}
                         {user?.uid === debt.createdBy && debt.status !== 'PAID' && !isBlocked && (
-                            <button onClick={() => setIsEditModalOpen(true)} className="p-2 text-blue-500 hover:bg-blue-50 rounded-full">
+                            <button
+                                onClick={() => setIsEditModalOpen(true)}
+                                className="p-2 text-blue-500 hover:bg-blue-50 rounded-full"
+                                aria-label="Düzenle"
+                            >
                                 <Edit2 size={20} />
                             </button>
                         )}
 
                         {/* Delete/Cancel Button */}
                         {(user?.uid === debt.createdBy || debt.status === 'PENDING') && (
-                            <button onClick={handleDelete} className="p-2 text-red-500 hover:bg-red-50 rounded-full" title={debt.status === 'PENDING' ? 'İptal Et' : 'Arşivle'}>
+                            <button
+                                onClick={handleDelete}
+                                className="p-2 text-red-500 hover:bg-red-50 rounded-full"
+                                title={debt.status === 'PENDING' ? 'İptal Et' : 'Arşivle'}
+                                aria-label={debt.status === 'PENDING' ? 'İptal Et' : 'Arşivle'}
+                            >
                                 {debt.status === 'PENDING' ? <XCircle size={20} /> : <Trash2 size={20} />}
                             </button>
                         )}
