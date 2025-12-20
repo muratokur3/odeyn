@@ -1,3 +1,5 @@
+
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, Trash2, RotateCcw, XCircle } from 'lucide-react';
 import { useDebts } from '../hooks/useDebts';
@@ -27,7 +29,7 @@ export const Trash = () => {
         const confirmed = await showConfirm(
             "Kalıcı Silme",
             "Bu kayıt kalıcı olarak silinecek. Geri alınamaz!",
-            "error" // Danger type
+            "error"
         );
         if (confirmed) {
             await permanentlyDeleteDebt(debtId, user.uid);
@@ -52,10 +54,14 @@ export const Trash = () => {
     };
 
     return (
-        <div className="min-h-screen bg-gray-50 dark:bg-slate-950">
-             <header className="bg-white dark:bg-slate-900 shadow-sm p-4 sticky top-0 z-10 border-b border-gray-100 dark:border-slate-800">
+        <div className="min-h-full bg-gray-50 dark:bg-black pb-10">
+            <header className="bg-white dark:bg-slate-900 shadow-sm p-4 sticky top-0 z-10 border-b border-gray-100 dark:border-slate-800">
                 <div className="flex items-center gap-4 max-w-2xl mx-auto">
-                    <button onClick={() => navigate(-1)} className="p-2 -ml-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full text-gray-900 dark:text-white">
+                    <button
+                        onClick={() => navigate(-1)}
+                        className="p-2 -ml-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full text-gray-900 dark:text-white"
+                        aria-label="Geri dön"
+                    >
                         <ArrowLeft size={24} />
                     </button>
                     <h1 className="text-lg font-bold text-gray-900 dark:text-white">Çöp Kutusu</h1>
@@ -85,7 +91,7 @@ export const Trash = () => {
                             {deletedDebts.map(debt => (
                                 <div key={debt.id} className="relative group rounded-xl overflow-hidden border border-red-100 dark:border-red-900/30">
                                     <div className="opacity-60 pointer-events-none grayscale">
-                                        <DebtCard debt={debt} currentUserId="" onClick={() => { }} />
+                                        <DebtCard debt={debt} currentUserId="" onClick={() => {}} />
                                     </div>
                                     <div className="absolute inset-0 flex items-center justify-center gap-4 bg-white/90 dark:bg-slate-900/90 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm">
                                         <button

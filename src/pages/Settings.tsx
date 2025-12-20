@@ -1,11 +1,9 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Trash2, RotateCcw, XCircle, Clock, CheckCircle2, UserX, ChevronRight, RefreshCw, Wallet, Users, User, Moon, Sun, LogOut } from 'lucide-react';
-import { useDebts } from '../hooks/useDebts';
-import { restoreDebt, permanentlyDeleteDebt, updateUserPreferences } from '../services/db';
+import { ArrowLeft, UserX, ChevronRight, RefreshCw, Wallet, Users, User, Moon, Sun, LogOut, CheckCircle2, Clock, Trash2 } from 'lucide-react';
+import { updateUserPreferences } from '../services/db';
 import { useAuth } from '../hooks/useAuth';
 import type { User as UserType } from '../types';
-import { DebtCard } from '../components/DebtCard';
 import { Toggle } from '../components/Toggle';
 import { useModal } from '../context/ModalContext';
 import { Avatar } from '../components/Avatar';
@@ -13,7 +11,6 @@ import ManagePhones from '../components/ManagePhones';
 import EmailManager from '../components/EmailManager';
 import { useTheme } from '../context/ThemeContext';
 import { logoutUser } from '../services/auth';
-import clsx from 'clsx';
 
 // --- Internal Components ---
 
@@ -26,10 +23,9 @@ const SettingsRow = ({ icon: Icon, title, description, action, onClick }: {
 }) => (
     <div
         onClick={onClick}
-        className={clsx(
-            "flex items-center justify-between p-4",
+        className={`flex items-center justify-between p-4 ${
             onClick ? "cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors active:bg-gray-100" : ""
-        )}
+        }`}
     >
         <div className="flex items-center gap-4 flex-1 min-w-0 pr-4">
             <div className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-400">
@@ -57,12 +53,8 @@ const SectionHeader = ({ title }: { title: string }) => (
 export const Settings = () => {
     const navigate = useNavigate();
     const { user } = useAuth(); // Get current user
-    const { showAlert, showConfirm } = useModal();
-    const { allDebts, loading } = useDebts(true);
-    const deletedDebts = allDebts.filter(d => d.isDeleted);
+    const { showConfirm } = useModal();
     const { theme, toggleTheme } = useTheme();
-
-    const [activeTab, setActiveTab] = useState<'GENERAL' | 'TRASH'>('GENERAL');
 
     // Local State
     const [autoApprove, setAutoApprove] = useState(false);
@@ -74,11 +66,6 @@ export const Settings = () => {
     useEffect(() => {
         if (user) {
             const prefs = user.preferences || {};
-            // Use functional updates or just suppress if strict mode complaints are about setup logic
-            // Ideally we just set state once on mount/user change.
-            // The lint error 'setState synchronously within an effect' is often a warning if it triggers loops,
-            // but here it is dependent on [user].
-            // To fix strict linting, we can check if values differ.
             setAutoApprove((prev) => prefs.autoApproveDebt ?? prev);
             setSyncContacts((prev) => prefs.syncContacts ?? prev);
             setDefaultAllowPayment((prev) => prefs.defaultAllowPaymentAddition ?? prev);
@@ -122,60 +109,6 @@ export const Settings = () => {
     const handleAutoDeleteChange = (val: string) => {
         setAutoDeleteDuration(val);
         localStorage.setItem('autoDeleteDuration', val);
-        if (val !== 'OFF') checkAutoDelete(parseInt(val));
-    };
-
-    // Trash Logic (Real-time updates via useDebts)
-    const handleRestore = async (debtId: string) => {
-        if (!user) return;
-        const confirmed = await showConfirm("Geri Yükle", "Bu kaydı geri yüklemek istediğinize emin misiniz?");
-        if (confirmed) {
-            await restoreDebt(debtId);
-            showAlert("Başarılı", "Kayıt geri yüklendi.", "success");
-        }
-    };
-
-    const handlePermanentDelete = async (debtId: string) => {
-        if (!user) return;
-        const confirmed = await showConfirm(
-            "Kalıcı Silme",
-            "Bu kayıt kalıcı olarak silinecek. Geri alınamaz!",
-            "error" // Danger type
-        );
-        if (confirmed) {
-            await permanentlyDeleteDebt(debtId, user.uid);
-            // await loadDeletedDebts(); // Real-time update handles this
-            showAlert("Silindi", "Kayıt kalıcı olarak silindi.", "success");
-        }
-    };
-
-    const handleCleanDeleted = async () => {
-        if (!deletedDebts.length || !user) return; // check user
-
-        const confirmed = await showConfirm("Temizlik", "Çöp kutusundaki tüm kayıtları kalıcı olarak silmek istiyor musunuz?", "warning");
-        if (!confirmed) return;
-
-        let deletedCount = 0;
-        for (const debt of deletedDebts) {
-            await permanentlyDeleteDebt(debt.id, user.uid);
-            deletedCount++;
-        }
-
-        if (deletedCount > 0) showAlert("Temizlik Tamamlandı", `${deletedCount} adet kayıt kalıcı olarak silindi.`, "success");
-        else showAlert("Bilgi", "Silinecek kayıt bulunamadı.", "info");
-    };
-
-    const checkAutoDelete = async (days: number) => {
-        if (!deletedDebts.length || !user) return; // check user
-        const cutoffDate = new Date(Date.now() - days * 24 * 60 * 60 * 1000);
-        let deletedCount = 0;
-        for (const debt of deletedDebts) {
-            if (debt.deletedAt && debt.deletedAt.toDate() < cutoffDate) {
-                await permanentlyDeleteDebt(debt.id, user.uid);
-                deletedCount++;
-            }
-        }
-        if (deletedCount > 0) showAlert("Otomatik Temizlik", `${deletedCount} adet süresi dolmuş kayıt silindi.`, "info");
     };
 
     const handleLogout = async () => {
@@ -202,218 +135,145 @@ export const Settings = () => {
             </header>
 
             <main className="max-w-2xl mx-auto p-4">
-                {/* Tabs */}
-                <div className="flex p-1 bg-gray-200 dark:bg-slate-800 rounded-xl mb-6">
-                    <button
-                        onClick={() => setActiveTab('GENERAL')}
-                        className={clsx(
-                            "flex-1 py-2 text-sm font-semibold rounded-lg transition-all",
-                            activeTab === 'GENERAL' ? "bg-white dark:bg-slate-700 shadow-sm text-gray-900 dark:text-white" : "text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200"
-                        )}
-                    >
-                        Genel
-                    </button>
-                    <button
-                        onClick={() => setActiveTab('TRASH')}
-                        className={clsx(
-                            "flex-1 py-2 text-sm font-semibold rounded-lg transition-all",
-                            activeTab === 'TRASH' ? "bg-white dark:bg-slate-700 shadow-sm text-red-600 dark:text-red-400" : "text-gray-500 dark:text-slate-400 hover:text-gray-700 dark:hover:text-slate-200"
-                        )}
-                    >
-                        Çöp Kutusu
-                    </button>
+                <div className="space-y-1">
+
+                    {/* User Profile Card */}
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 overflow-hidden p-6 mb-6">
+                        <div className="flex items-center gap-4 mb-6">
+                            <Avatar
+                                name={user?.displayName || ''}
+                                photoURL={user?.photoURL || undefined}
+                                uid={user?.uid}
+                                size="xl"
+                                className="w-20 h-20"
+                                status={user?.phoneNumbers && user.phoneNumbers.length > 0 ? 'system' : 'none'}
+                            />
+                            <div className="flex-1 min-w-0">
+                                <h2 className="text-xl font-bold text-gray-900 dark:text-white truncate">
+                                    {user?.displayName || 'Kullanıcı'}
+                                </h2>
+                                <p className="text-sm text-gray-500 dark:text-slate-400">
+                                    {user?.primaryPhoneNumber || user?.phoneNumber || ''}
+                                </p>
+                            </div>
+                        </div>
+                        
+                        <button
+                            onClick={() => navigate('/profile')}
+                            className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
+                        >
+                            <User size={18} />
+                            Profili Düzenle
+                        </button>
+                        
+                        {/* Account Management */}
+                        <div className="mt-6 space-y-4">
+                            <ManagePhones user={user} />
+                            <EmailManager />
+                        </div>
+                    </div>
+
+                    {/* Group A: Approvals */}
+                    <SectionHeader title="Borç Yönetimi" />
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 overflow-hidden divide-y divide-gray-100 dark:divide-slate-800">
+                        <SettingsRow
+                            icon={CheckCircle2}
+                            title="Gelen Kayıtları Onayla"
+                            description="Rehberimdeki kişilerin eklediği borçlar otomatik olarak onaylansın."
+                            action={<Toggle checked={autoApprove} onChange={(v) => toggleSetting('autoApproveDebt', v, setAutoApprove)} />}
+                        />
+                        <SettingsRow
+                            icon={Wallet}
+                            title="Ödeme Ekleme İzni"
+                            description="Eklediğim borçlarda varsayılan olarak karşı taraf ödeme girebilsin."
+                            action={<Toggle checked={defaultAllowPayment} onChange={(v) => toggleSetting('defaultAllowPaymentAddition', v, setDefaultAllowPayment)} />}
+                        />
+                    </div>
+
+                    {/* Group B: Privacy */}
+                    <SectionHeader title="Gizlilik & Senkronizasyon" />
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 overflow-hidden divide-y divide-gray-100 dark:divide-slate-800">
+
+                        <SettingsRow
+                            icon={RefreshCw}
+                            title="Rehber Senkronizasyonu"
+                            description="Kişileri eşleştirmek için rehber periyodik olarak taransın."
+                            action={<Toggle checked={syncContacts} onChange={(v) => toggleSetting('syncContacts', v, setSyncContacts)} />}
+                        />
+                        <SettingsRow
+                            icon={Users}
+                            title="Rehber Erişimi"
+                            description="Rehberden kişi içe aktarma özelliğini aç/kapat."
+                            action={<Toggle checked={contactAccessEnabled} onChange={handleContactAccessToggle} />}
+                        />
+                    </div>
+
+                    {/* Group C: Blocked */}
+                    <SectionHeader title="Kişiler" />
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 overflow-hidden divide-y divide-gray-100 dark:divide-slate-800">
+                        <SettingsRow
+                            icon={UserX}
+                            title="Engellenen Kullanıcılar"
+                            description="Engellenmiş kişi listesini yönet."
+                            onClick={() => navigate('/settings/blocked')}
+                        />
+                    </div>
+
+                    {/* Group D: Storage */}
+                    <SectionHeader title="Depolama" />
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 overflow-hidden divide-y divide-gray-100 dark:divide-slate-800">
+                        <SettingsRow
+                            icon={Trash2}
+                            title="Çöp Kutusu"
+                            description="Silinen kayıtları görüntüle ve yönet."
+                            onClick={() => navigate('/trash')}
+                        />
+                        <SettingsRow
+                            icon={Clock}
+                            title="Otomatik Temizlik"
+                            description="Çöp kutusundaki kayıtlar bu süreden sonra kalıcı olarak kaldırılır."
+                            action={
+                                <select
+                                    value={autoDeleteDuration}
+                                    onChange={(e) => handleAutoDeleteChange(e.target.value)}
+                                    className="bg-gray-50 dark:bg-slate-800 border-none text-sm font-semibold text-blue-600 dark:text-blue-400 focus:ring-0 rounded-lg py-1 pl-2 pr-8 cursor-pointer"
+                                >
+                                    <option value="OFF">Kapat</option>
+                                    <option value="30">30 Gün</option>
+                                    <option value="60">60 Gün</option>
+                                    <option value="90">90 Gün</option>
+                                </select>
+                            }
+                        />
+                    </div>
+
+                    {/* Group E: Appearance */}
+                    <SectionHeader title="Görünüm" />
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 overflow-hidden">
+                        <SettingsRow
+                            icon={theme === 'dark' ? Moon : Sun}
+                            title="Tema"
+                            description={theme === 'dark' ? 'Karanlık mod aktif' : 'Aydınlık mod aktif'}
+                            action={<Toggle checked={theme === 'dark'} onChange={toggleTheme} />}
+                        />
+                    </div>
+
+                    {/* Logout Button */}
+                    <div className="pt-4">
+                        <button
+                            onClick={handleLogout}
+                            className="w-full py-3 px-4 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
+                        >
+                            <LogOut size={18} />
+                            Çıkış Yap
+                        </button>
+                    </div>
+
+                    {/* Version Info */}
+                    <div className="pt-8 pb-4 text-center">
+                        <p className="text-xs text-gray-400 font-medium">DebtDert v0.1.0 (Beta)</p>
+                    </div>
                 </div>
-
-                {activeTab === 'GENERAL' && (
-                    <div className="space-y-1">
-
-                        {/* User Profile Card */}
-                        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 overflow-hidden p-6 mb-6">
-                            <div className="flex items-center gap-4 mb-6">
-                                <Avatar
-                                    name={user?.displayName || ''}
-                                    photoURL={user?.photoURL || undefined}
-                                    uid={user?.uid}
-                                    size="xl"
-                                    className="w-20 h-20"
-                                    status={user?.phoneNumbers && user.phoneNumbers.length > 0 ? 'system' : 'none'}
-                                />
-                                <div className="flex-1 min-w-0">
-                                    <h2 className="text-xl font-bold text-gray-900 dark:text-white truncate">
-                                        {user?.displayName || 'Kullanıcı'}
-                                    </h2>
-                                    <p className="text-sm text-gray-500 dark:text-slate-400">
-                                        {user?.primaryPhoneNumber || user?.phoneNumber || ''}
-                                    </p>
-                                </div>
-                            </div>
-                            
-                            <button
-                                onClick={() => navigate('/profile')}
-                                className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
-                            >
-                                <User size={18} />
-                                Profili Düzenle
-                            </button>
-                            
-                            {/* Account Management */}
-                            <div className="mt-6 space-y-4">
-                                <ManagePhones user={user} />
-                                <EmailManager />
-                            </div>
-                        </div>
-
-                        {/* Group A: Approvals */}
-                        <SectionHeader title="Borç Yönetimi" />
-                        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 overflow-hidden divide-y divide-gray-100 dark:divide-slate-800">
-                            <SettingsRow
-                                icon={CheckCircle2}
-                                title="Gelen Kayıtları Onayla"
-                                description="Rehberimdeki kişilerin eklediği borçlar otomatik olarak onaylansın."
-                                action={<Toggle checked={autoApprove} onChange={(v) => toggleSetting('autoApproveDebt', v, setAutoApprove)} />}
-                            />
-                            <SettingsRow
-                                icon={Wallet}
-                                title="Ödeme Ekleme İzni"
-                                description="Eklediğim borçlarda varsayılan olarak karşı taraf ödeme girebilsin."
-                                action={<Toggle checked={defaultAllowPayment} onChange={(v) => toggleSetting('defaultAllowPaymentAddition', v, setDefaultAllowPayment)} />}
-                            />
-                        </div>
-
-                        {/* Group B: Privacy */}
-                        <SectionHeader title="Gizlilik & Senkronizasyon" />
-                        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 overflow-hidden divide-y divide-gray-100 dark:divide-slate-800">
-
-                            <SettingsRow
-                                icon={RefreshCw}
-                                title="Rehber Senkronizasyonu"
-                                description="Kişileri eşleştirmek için rehber periyodik olarak taransın."
-                                action={<Toggle checked={syncContacts} onChange={(v) => toggleSetting('syncContacts', v, setSyncContacts)} />}
-                            />
-                            <SettingsRow
-                                icon={Users}
-                                title="Rehber Erişimi"
-                                description="Rehberden kişi içe aktarma özelliğini aç/kapat."
-                                action={<Toggle checked={contactAccessEnabled} onChange={handleContactAccessToggle} />}
-                            />
-                        </div>
-
-                        {/* Group C: Blocked */}
-                        <SectionHeader title="Kişiler" />
-                        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 overflow-hidden">
-                            <SettingsRow
-                                icon={UserX}
-                                title="Engellenen Kullanıcılar"
-                                description="Engellenmiş kişi listesini yönet."
-                                onClick={() => navigate('/settings/blocked')}
-                            />
-                        </div>
-
-                        {/* Group D: Storage */}
-                        <SectionHeader title="Depolama" />
-                        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 overflow-hidden">
-                            <SettingsRow
-                                icon={Clock}
-                                title="Çöp Kutusu Temizliği"
-                                description="Silinen kayıtlar bu süreden sonra kalıcı olarak kaldırılır."
-                                action={
-                                    <select
-                                        value={autoDeleteDuration}
-                                        onChange={(e) => handleAutoDeleteChange(e.target.value)}
-                                        className="bg-gray-50 dark:bg-slate-800 border-none text-sm font-semibold text-blue-600 dark:text-blue-400 focus:ring-0 rounded-lg py-1 pl-2 pr-8 cursor-pointer"
-                                    >
-                                        <option value="OFF">Kapat</option>
-                                        <option value="30">30 Gün</option>
-                                        <option value="60">60 Gün</option>
-                                        <option value="90">90 Gün</option>
-                                    </select>
-                                }
-                            />
-                        </div>
-
-                        {/* Group E: Appearance */}
-                        <SectionHeader title="Görünüm" />
-                        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 overflow-hidden">
-                            <SettingsRow
-                                icon={theme === 'dark' ? Moon : Sun}
-                                title="Tema"
-                                description={theme === 'dark' ? 'Karanlık mod aktif' : 'Aydınlık mod aktif'}
-                                action={<Toggle checked={theme === 'dark'} onChange={toggleTheme} />}
-                            />
-                        </div>
-
-                        {/* Logout Button */}
-                        <div className="pt-4">
-                            <button
-                                onClick={handleLogout}
-                                className="w-full py-3 px-4 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
-                            >
-                                <LogOut size={18} />
-                                Çıkış Yap
-                            </button>
-                        </div>
-
-                        {/* Version Info */}
-                        <div className="pt-8 pb-4 text-center">
-                            <p className="text-xs text-gray-400 font-medium">DebtDert v0.1.0 (Beta)</p>
-                        </div>
-                    </div>
-                )}
-
-                {activeTab === 'TRASH' && (
-                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 p-4 min-h-[50vh]">
-                        {loading ? (
-                            <div className="text-center py-10 text-gray-500">Yükleniyor...</div>
-                        ) : deletedDebts.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center py-16 text-gray-400">
-                                <Trash2 size={48} className="mb-4 opacity-20" />
-                                <p className="text-sm font-medium">Çöp kutusu boş</p>
-                            </div>
-                        ) : (
-                            <div className="space-y-3">
-                                <div className="flex justify-between items-center px-2 pb-2 border-b border-gray-100 dark:border-slate-800">
-                                    <span className="text-xs font-bold text-gray-500 uppercase">Silinen {deletedDebts.length} Kayıt</span>
-                                    <button
-                                        onClick={handleCleanDeleted}
-                                        className="text-xs font-bold text-red-500 hover:text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 px-2 py-1 rounded transition-colors"
-                                    >
-                                        Hepsini Temizle
-                                    </button>
-                                </div>
-                                {deletedDebts.map(debt => (
-                                    <div key={debt.id} className="relative group rounded-xl overflow-hidden border border-red-100 dark:border-red-900/30">
-                                        <div className="opacity-60 pointer-events-none grayscale">
-                                            <DebtCard debt={debt} currentUserId="" onClick={() => { }} />
-                                        </div>
-                                        <div className="absolute inset-0 flex items-center justify-center gap-4 bg-white/90 dark:bg-slate-900/90 opacity-0 group-hover:opacity-100 transition-opacity backdrop-blur-sm">
-                                            <button
-                                                onClick={() => handleRestore(debt.id)}
-                                                className="flex flex-col items-center gap-1 text-green-600 hover:scale-110 transition-transform"
-                                                title="Geri Yükle"
-                                            >
-                                                <div className="p-3 bg-green-100 dark:bg-green-900/30 rounded-full">
-                                                    <RotateCcw size={24} />
-                                                </div>
-                                                <span className="text-[10px] font-bold uppercase">Geri Al</span>
-                                            </button>
-                                            <div className="w-px h-12 bg-gray-200 dark:bg-slate-700" />
-                                            <button
-                                                onClick={() => handlePermanentDelete(debt.id)}
-                                                className="flex flex-col items-center gap-1 text-red-600 hover:scale-110 transition-transform"
-                                                title="Kalıcı Sil"
-                                            >
-                                                <div className="p-3 bg-red-100 dark:bg-red-900/30 rounded-full">
-                                                    <XCircle size={24} />
-                                                </div>
-                                                <span className="text-[10px] font-bold uppercase">Sil</span>
-                                            </button>
-                                        </div>
-                                    </div>
-                                ))}
-                            </div>
-                        )}
-                    </div>
-                )}
             </main>
         </div>
     );

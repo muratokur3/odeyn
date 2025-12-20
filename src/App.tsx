@@ -6,13 +6,14 @@ import { DebtDetail } from './pages/DebtDetail';
 import { Contacts } from './pages/Contacts';
 import { EditProfile } from './pages/EditProfile';
 import { Settings } from './pages/Settings';
-import { BlockedUsers } from './pages/BlockedUsers'; // Added
+import { BlockedUsers } from './pages/BlockedUsers';
 import { QuickDial } from './pages/QuickDial';
 import { Tools } from './pages/Tools';
 import { PersonDetail } from './pages/PersonDetail';
 import { PendingRequests } from './pages/PendingRequests';
 import { Layout } from './components/Layout';
 import { useAuth } from './hooks/useAuth';
+import { Trash } from './pages/Trash';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
@@ -54,7 +55,8 @@ function App() {
                   <Route path="/person/:id" element={<PersonDetail />} />
                   <Route path="/contacts" element={<Contacts />} />
                   <Route path="/settings" element={<Settings />} />
-                  <Route path="/settings/blocked" element={<BlockedUsers />} /> {/* Added Route */}
+                  <Route path="/settings/blocked" element={<BlockedUsers />} />
+                  <Route path="/trash" element={<Trash />} />
                   <Route path="/pending-requests" element={<PendingRequests />} />
                 </Route>
               </Routes>
