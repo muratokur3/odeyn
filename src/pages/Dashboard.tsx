@@ -223,10 +223,18 @@ export const Dashboard = () => {
                     </div>
                 </div>
                 <div className="flex items-center gap-2">
-                    <button onClick={toggleTheme} className="p-2.5 bg-gray-100 dark:bg-slate-700 rounded-full hover:bg-gray-200 transition-colors">
+                    <button
+                        onClick={toggleTheme}
+                        className="p-2.5 bg-gray-100 dark:bg-slate-700 rounded-full hover:bg-gray-200 transition-colors"
+                        aria-label={theme === 'dark' ? "Aydınlık moda geç" : "Karanlık moda geç"}
+                    >
                         {theme === 'dark' ? <Sun size={18} /> : <Moon size={18} />}
                     </button>
-                    <button onClick={() => setShowNotifications(true)} className="p-2.5 bg-gray-100 dark:bg-slate-700 rounded-full relative hover:bg-gray-200 transition-colors">
+                    <button
+                        onClick={() => setShowNotifications(true)}
+                        className="p-2.5 bg-gray-100 dark:bg-slate-700 rounded-full relative hover:bg-gray-200 transition-colors"
+                        aria-label="Bildirimler"
+                    >
                         <Bell size={18} />
                         {notifications.length > 0 && (
                             <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>

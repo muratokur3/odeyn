@@ -169,7 +169,11 @@ export const Settings = () => {
         <div className="min-h-full bg-gray-50 dark:bg-black pb-10">
             <header className="bg-white dark:bg-slate-900 shadow-sm p-4 sticky top-0 z-10 border-b border-gray-100 dark:border-slate-800">
                 <div className="flex items-center gap-4 max-w-2xl mx-auto">
-                    <button onClick={() => navigate(-1)} className="p-2 -ml-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full text-gray-900 dark:text-white">
+                    <button
+                        onClick={() => navigate(-1)}
+                        className="p-2 -ml-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full text-gray-900 dark:text-white"
+                        aria-label="Geri dön"
+                    >
                         <ArrowLeft size={24} />
                     </button>
                     <h1 className="text-lg font-bold text-gray-900 dark:text-white">Ayarlar</h1>
