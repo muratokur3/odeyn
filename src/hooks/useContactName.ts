@@ -1,3 +1,4 @@
+import { useCallback } from 'react';
 import { useContacts } from './useContacts';
 import { formatPhoneForDisplay as formatPhoneNumber } from '../utils/phoneUtils';
 
@@ -11,7 +12,7 @@ interface ContactNameResult {
 export const useContactName = () => {
     const { contacts, contactsMap } = useContacts();
 
-    const resolveName = (identifier: string, fallbackName?: string): ContactNameResult => {
+    const resolveName = useCallback((identifier: string, fallbackName?: string): ContactNameResult => {
         // 1. Check Local Contacts (My Address Book)
         // Identifier could be a Phone (E.164) or a UID. 
         // contactsMap is keyed by E.164 phone number.
@@ -79,7 +80,7 @@ export const useContactName = () => {
             displayName: fallbackName || identifier,
             source: 'user'
         };
-    };
+    }, [contacts, contactsMap]);
 
     return { resolveName };
 };

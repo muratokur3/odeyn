@@ -182,7 +182,7 @@ export const Dashboard = () => {
             grandTotalInTRY
         };
 
-    }, [dashboardDebts, user, rates]);
+    }, [dashboardDebts, user, rates, resolveName]);
 
     const { contactSummaries, totalsByCurrency, grandTotalInTRY } = useMemoResult;
     // Use the incoming requests directly from the hook
