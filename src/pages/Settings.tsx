@@ -1,13 +1,18 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Trash2, RotateCcw, XCircle, Clock, CheckCircle2, UserX, ChevronRight, RefreshCw, Wallet, Users } from 'lucide-react';
+import { ArrowLeft, Trash2, RotateCcw, XCircle, Clock, CheckCircle2, UserX, ChevronRight, RefreshCw, Wallet, Users, User, Moon, Sun, ShieldCheck, LogOut } from 'lucide-react';
 import { useDebts } from '../hooks/useDebts';
 import { restoreDebt, permanentlyDeleteDebt, updateUserPreferences } from '../services/db';
 import { useAuth } from '../hooks/useAuth';
-import type { User } from '../types';
+import type { User as UserType } from '../types';
 import { DebtCard } from '../components/DebtCard';
 import { Toggle } from '../components/Toggle';
 import { useModal } from '../context/ModalContext';
+import { Avatar } from '../components/Avatar';
+import ManagePhones from '../components/ManagePhones';
+import EmailManager from '../components/EmailManager';
+import { useTheme } from '../context/ThemeContext';
+import { logoutUser } from '../services/auth';
 import clsx from 'clsx';
 
 // --- Internal Components ---
@@ -55,6 +60,7 @@ export const Settings = () => {
     const { showAlert, showConfirm } = useModal();
     const { allDebts, loading } = useDebts(true);
     const deletedDebts = allDebts.filter(d => d.isDeleted);
+    const { theme, toggleTheme } = useTheme();
 
     const [activeTab, setActiveTab] = useState<'GENERAL' | 'TRASH'>('GENERAL');
 
@@ -82,7 +88,7 @@ export const Settings = () => {
     }, [user]);
 
     // Persist Helpers
-    const toggleSetting = async (key: keyof NonNullable<User['preferences']>, value: boolean, setter: (val: boolean) => void) => {
+    const toggleSetting = async (key: keyof NonNullable<UserType['preferences']>, value: boolean, setter: (val: boolean) => void) => {
         setter(value); // Optimistic update
         if (user) {
             try {
@@ -172,6 +178,14 @@ export const Settings = () => {
         if (deletedCount > 0) showAlert("Otomatik Temizlik", `${deletedCount} adet süresi dolmuş kayıt silindi.`, "info");
     };
 
+    const handleLogout = async () => {
+        const confirmed = await showConfirm("Çıkış Yap", "Hesabınızdan çıkış yapmak istediğinize emin misiniz?", "warning");
+        if (confirmed) {
+            await logoutUser();
+            navigate('/login');
+        }
+    };
+
     return (
         <div className="min-h-full bg-gray-50 dark:bg-black pb-10">
             <header className="bg-white dark:bg-slate-900 shadow-sm p-4 sticky top-0 z-10 border-b border-gray-100 dark:border-slate-800">
@@ -212,6 +226,48 @@ export const Settings = () => {
 
                 {activeTab === 'GENERAL' && (
                     <div className="space-y-1">
+
+                        {/* User Profile Card */}
+                        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 overflow-hidden p-6 mb-6">
+                            <div className="flex items-center gap-4 mb-6">
+                                <div className="relative">
+                                    <Avatar
+                                        name={user?.displayName || ''}
+                                        photoURL={user?.photoURL || undefined}
+                                        uid={user?.uid}
+                                        size="xl"
+                                        className="w-20 h-20"
+                                    />
+                                    {user?.phoneNumbers && user.phoneNumbers.length > 0 && (
+                                        <div className="absolute -bottom-1 -right-1 bg-blue-600 text-white rounded-full p-1 border-2 border-white dark:border-slate-900">
+                                            <ShieldCheck size={16} strokeWidth={3} />
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <h2 className="text-xl font-bold text-gray-900 dark:text-white truncate">
+                                        {user?.displayName || 'Kullanıcı'}
+                                    </h2>
+                                    <p className="text-sm text-gray-500 dark:text-slate-400">
+                                        {user?.primaryPhoneNumber || user?.phoneNumber || ''}
+                                    </p>
+                                </div>
+                            </div>
+                            
+                            <button
+                                onClick={() => navigate('/profile')}
+                                className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
+                            >
+                                <User size={18} />
+                                Profili Düzenle
+                            </button>
+                            
+                            {/* Account Management */}
+                            <div className="mt-6 space-y-4">
+                                <ManagePhones user={user} />
+                                <EmailManager />
+                            </div>
+                        </div>
 
                         {/* Group A: Approvals */}
                         <SectionHeader title="Borç Yönetimi" />
@@ -279,6 +335,28 @@ export const Settings = () => {
                                     </select>
                                 }
                             />
+                        </div>
+
+                        {/* Group E: Appearance */}
+                        <SectionHeader title="Görünüm" />
+                        <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 overflow-hidden">
+                            <SettingsRow
+                                icon={theme === 'dark' ? Moon : Sun}
+                                title="Tema"
+                                description={theme === 'dark' ? 'Karanlık mod aktif' : 'Aydınlık mod aktif'}
+                                action={<Toggle checked={theme === 'dark'} onChange={toggleTheme} />}
+                            />
+                        </div>
+
+                        {/* Logout Button */}
+                        <div className="pt-4">
+                            <button
+                                onClick={handleLogout}
+                                className="w-full py-3 px-4 bg-red-600 hover:bg-red-700 text-white font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
+                            >
+                                <LogOut size={18} />
+                                Çıkış Yap
+                            </button>
                         </div>
 
                         {/* Version Info */}
