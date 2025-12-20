@@ -4,7 +4,7 @@ import { Register } from './pages/Register';
 import { Dashboard } from './pages/Dashboard';
 import { DebtDetail } from './pages/DebtDetail';
 import { Contacts } from './pages/Contacts';
-import { Profile } from './pages/Profile';
+import { EditProfile } from './pages/EditProfile';
 import { Settings } from './pages/Settings';
 import { BlockedUsers } from './pages/BlockedUsers'; // Added
 import { QuickDial } from './pages/QuickDial';
@@ -47,7 +47,7 @@ function App() {
                   <Route path="/" element={<Dashboard />} />
                   <Route path="/receivables" element={<Dashboard />} />
                   <Route path="/payables" element={<Dashboard />} />
-                  <Route path="/profile" element={<Profile />} />
+                  <Route path="/profile" element={<EditProfile />} />
                   <Route path="/debt/:id" element={<DebtDetail />} />
                   <Route path="/dial" element={<QuickDial />} />
                   <Route path="/tools" element={<Tools />} />

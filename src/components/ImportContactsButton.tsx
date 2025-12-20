@@ -19,7 +19,7 @@ export const ImportContactsButton: React.FC<ImportContactsButtonProps> = ({
 
     const handleImport = async () => {
         if (!isSupported) {
-            alert('Tarayıcınız bu özelliği desteklemiyor.');
+            alert('Tarayıcınız bu özelliği desteklemiyor. Bu özellik sadece desteklenen mobil tarayıcılarda (Chrome Mobile, Samsung Internet vb.) çalışır.');
             return;
         }
 
@@ -77,8 +77,6 @@ export const ImportContactsButton: React.FC<ImportContactsButtonProps> = ({
             setIsLoading(false);
         }
     };
-
-    if (!isSupported) return null;
 
     return (
         <button

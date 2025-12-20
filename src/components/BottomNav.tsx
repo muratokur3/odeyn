@@ -1,4 +1,4 @@
-import { Home, User, BookUser, GripHorizontal, Calculator, Plus } from 'lucide-react';
+import { Home, User, BookUser, GripHorizontal, Calculator, Plus, Settings } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { clsx } from 'clsx';
 import { useState } from 'react';
@@ -55,7 +55,7 @@ export const BottomNav = () => {
             ? { path: '/dial', icon: GripHorizontal, label: 'Hızlı İşlem', isCenter: true }
             : { path: '#create-debt', icon: Plus, label: 'Yeni Ekle', isCenter: true, onClick: () => setShowDebtModal(true) },
         { path: '/contacts', icon: BookUser, label: 'Rehber' },
-        { path: '/profile', icon: User, label: 'Profil' },
+        { path: '/settings', icon: Settings, label: 'Ayarlar' },
     ];
 
     return (
