@@ -19,6 +19,11 @@ Dokunma Hedefleri: Tüm butonlar ve liste elemanları en az 48px yüksekliğinde
 2. Navigasyon ve Düzen
 
 Bottom Navigation: Mobil deneyimde ana menü her zaman altta sabittir (fixed bottom-0). Klavye açıldığında davranışı yönetilmelidir.
+    - Ana Sayfa: Genel bakış ve özet.
+    - Araçlar: Hesap makinesi ve döviz çevirici.
+    - Hızlı İşlem / Ekle: Ortadaki ana aksiyon butonu.
+    - Rehber: Kişi listesi.
+    - Ayarlar: (Eski Profil ve Genel sekmeleri birleştirildi). Kullanıcı profili, hesap ayarları, uygulama tercihleri ve çöp kutusu burada yer alır.
 
 Header & Theme: Üst bar (Header); marka logosunu, Tema Değiştiriciyi (Dark/Light Toggle) ve Bildirim Merkezini (Zil İkonu) içerir.
 
@@ -52,3 +57,11 @@ Tarih: Tarih seçici (DatePicker) mobil uyumlu (Native) olmalıdır.
     Kullanıcı onayları, reddedilen borçlar ve ödeme bildirimleri, sağ üstteki 'Zil' ikonu altında toplanır.
     Okunmamış bildirimler kırmızı bir rozet (badge) ile gösterilir.
     Bildirimler modal içinde listelenir ve tıklandığında ilgili borcun detayına veya işlem ekranına yönlendirir.
+
+6. Ayarlar Ekranı (Unified Settings)
+    Tüm yapılandırma ve profil işlemleri tek bir "Ayarlar" çatısı altında toplanmıştır.
+    - Kullanıcı Kartı: Profil düzenlemeye hızlı erişim.
+    - Hesap: Telefon ve E-posta yönetimi.
+    - Tercihler: Otomatik onay, ödeme izni, rehber senkronizasyonu.
+    - Görünüm: Tema değişimi.
+    - Çöp Kutusu: Silinen kayıtların yönetimi.

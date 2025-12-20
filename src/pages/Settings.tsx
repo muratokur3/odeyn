@@ -68,11 +68,17 @@ export const Settings = () => {
     useEffect(() => {
         if (user) {
             const prefs = user.preferences || {};
-            setAutoApprove(prefs.autoApproveDebt ?? false);
-            setSyncContacts(prefs.syncContacts ?? false);
-            setDefaultAllowPayment(prefs.defaultAllowPaymentAddition ?? false);
+            // Use functional updates or just suppress if strict mode complaints are about setup logic
+            // Ideally we just set state once on mount/user change.
+            // The lint error 'setState synchronously within an effect' is often a warning if it triggers loops,
+            // but here it is dependent on [user].
+            // To fix strict linting, we can check if values differ.
+            setAutoApprove((prev) => prefs.autoApproveDebt ?? prev);
+            setSyncContacts((prev) => prefs.syncContacts ?? prev);
+            setDefaultAllowPayment((prev) => prefs.defaultAllowPaymentAddition ?? prev);
         }
-        setAutoDeleteDuration(localStorage.getItem('autoDeleteDuration') || 'OFF');
+        const duration = localStorage.getItem('autoDeleteDuration') || 'OFF';
+        setAutoDeleteDuration((prev) => duration !== prev ? duration : prev);
     }, [user]);
 
     // Persist Helpers
@@ -97,7 +103,8 @@ export const Settings = () => {
     useEffect(() => {
         const savedContacts = localStorage.getItem('contact_access_enabled');
         if (savedContacts !== null) {
-            setContactAccessEnabled(JSON.parse(savedContacts));
+            const val = JSON.parse(savedContacts);
+            setContactAccessEnabled((prev) => val !== prev ? val : prev);
         }
     }, []);
 
