@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Trash2, RotateCcw, XCircle, Clock, CheckCircle2, UserX, ChevronRight, RefreshCw, Wallet, Users, User, Moon, Sun, ShieldCheck, LogOut } from 'lucide-react';
+import { ArrowLeft, Trash2, RotateCcw, XCircle, Clock, CheckCircle2, UserX, ChevronRight, RefreshCw, Wallet, Users, User, Moon, Sun, LogOut } from 'lucide-react';
 import { useDebts } from '../hooks/useDebts';
 import { restoreDebt, permanentlyDeleteDebt, updateUserPreferences } from '../services/db';
 import { useAuth } from '../hooks/useAuth';
@@ -230,20 +230,14 @@ export const Settings = () => {
                         {/* User Profile Card */}
                         <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 overflow-hidden p-6 mb-6">
                             <div className="flex items-center gap-4 mb-6">
-                                <div className="relative">
-                                    <Avatar
-                                        name={user?.displayName || ''}
-                                        photoURL={user?.photoURL || undefined}
-                                        uid={user?.uid}
-                                        size="xl"
-                                        className="w-20 h-20"
-                                    />
-                                    {user?.phoneNumbers && user.phoneNumbers.length > 0 && (
-                                        <div className="absolute -bottom-1 -right-1 bg-blue-600 text-white rounded-full p-1 border-2 border-white dark:border-slate-900">
-                                            <ShieldCheck size={16} strokeWidth={3} />
-                                        </div>
-                                    )}
-                                </div>
+                                <Avatar
+                                    name={user?.displayName || ''}
+                                    photoURL={user?.photoURL || undefined}
+                                    uid={user?.uid}
+                                    size="xl"
+                                    className="w-20 h-20"
+                                    status={user?.phoneNumbers && user.phoneNumbers.length > 0 ? 'system' : 'none'}
+                                />
                                 <div className="flex-1 min-w-0">
                                     <h2 className="text-xl font-bold text-gray-900 dark:text-white truncate">
                                         {user?.displayName || 'Kullanıcı'}
