@@ -12,6 +12,8 @@ import { PhoneInput } from '../components/PhoneInput';
 import { ImportContactsButton } from '../components/ImportContactsButton';
 import type { Conflict } from '../components/ImportContactsButton';
 import { ConflictResolutionModal } from '../components/ConflictResolutionModal';
+import { ContactModal } from '../components/ContactModal';
+import { Plus } from 'lucide-react';
 
 import { useModal } from '../context/ModalContext';
 
@@ -34,11 +36,8 @@ export const Contacts = () => {
     const [showImportPreview, setShowImportPreview] = useState(false);
     const [showConflictResolution, setShowConflictResolution] = useState(false);
     const [contactAccessEnabled, setContactAccessEnabled] = useState(true);
-
-    const [name, setName] = useState('');
-    const [phone, setPhone] = useState('');
     const [submitting, setSubmitting] = useState(false);
-    const [duplicateContact, setDuplicateContact] = useState<Contact | null>(null);
+    const [initialPhone, setInitialPhone] = useState('');
 
     useEffect(() => {
         const saved = localStorage.getItem('contact_access_enabled');
@@ -152,22 +151,7 @@ export const Contacts = () => {
         setConflicts([]);
     }
 
-    useEffect(() => {
-        if (phone) {
-            const cleanedInput = cleanPhone(phone);
-            if (cleanedInput && cleanedInput.length > 5) {
-                const found = contacts.find(c =>
-                    c.phoneNumber === cleanedInput &&
-                    (!editingContact || c.id !== editingContact.id)
-                );
-                setDuplicateContact(found || null);
-            } else {
-                setDuplicateContact(null);
-            }
-        } else {
-            setDuplicateContact(null);
-        }
-    }, [phone, contacts, editingContact]);
+
 
     useEffect(() => {
         if (user) {
@@ -178,7 +162,7 @@ export const Contacts = () => {
     useEffect(() => {
         const state = location.state as { initialPhone?: string } | null;
         if (state?.initialPhone) {
-            setPhone(state.initialPhone);
+            setInitialPhone(state.initialPhone);
             setShowModal(true);
             window.history.replaceState({}, document.title);
         }
@@ -197,28 +181,7 @@ export const Contacts = () => {
         }
     };
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault();
-        if (!user) return;
 
-        setSubmitting(true);
-        try {
-            if (editingContact) {
-                await updateContact(user.uid, editingContact.id, { name, phoneNumber: phone });
-                showAlert("Başarılı", "Kişi güncellendi.", "success");
-            } else {
-                await addContact(user.uid, name, phone);
-                showAlert("Başarılı", "Kişi eklendi.", "success");
-            }
-            await loadContacts();
-            closeModal();
-        } catch (error) {
-            console.error(error);
-            showAlert("Hata", "İşlem sırasında bir hata oluştu.", "error");
-        } finally {
-            setSubmitting(false);
-        }
-    };
 
     const handleDeleteContact = async (contactId: string) => {
         if (!user) return;
@@ -269,17 +232,12 @@ export const Contacts = () => {
 
     const openEditModal = (contact: Contact) => {
         setEditingContact(contact);
-        setName(contact.name);
-        setPhone(contact.phoneNumber);
         setShowModal(true);
     };
 
     const closeModal = () => {
         setShowModal(false);
         setEditingContact(null);
-        setName('');
-        setPhone('');
-        setDuplicateContact(null);
     };
 
     const filteredContacts = contacts.filter(c =>
@@ -301,12 +259,24 @@ export const Contacts = () => {
                         </button>
                         <h1 className="text-lg font-bold text-text-primary">Rehberim</h1>
                     </div>
-                    {contactAccessEnabled && (
-                        <ImportContactsButton
-                            existingContacts={contacts}
-                            onContactsSelected={handleContactsSelected}
-                        />
-                    )}
+                    <div>
+                        {contactAccessEnabled && (
+                            <ImportContactsButton
+                                existingContacts={contacts}
+                                onContactsSelected={handleContactsSelected}
+                            />
+                        )}
+                        <button
+                            onClick={() => {
+                                setEditingContact(null);
+                                setShowModal(true);
+                            }}
+                            className="ml-2 p-2 bg-primary text-white rounded-full hover:bg-blue-600 transition-colors"
+                        >
+                            <Plus size={20} />
+                        </button>
+                    </div>
+
                 </div>
             </header>
 
@@ -401,62 +371,17 @@ export const Contacts = () => {
                 )}
             </main>
 
-            {showModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                    <div className="bg-surface p-6 rounded-2xl w-full max-w-md relative">
-                        <button
-                            onClick={closeModal}
-                            className="absolute right-4 top-4 p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full transition-colors"
-                        >
-                            <X size={20} />
-                        </button>
-                        <h2 className="text-xl font-bold mb-6 text-text-primary">
-                            {editingContact ? 'Kişiyi Düzenle' : 'Yeni Kişi Ekle'}
-                        </h2>
-                        <form onSubmit={handleSubmit} className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-text-secondary mb-1">
-                                    Ad Soyad
-                                </label>
-                                <input
-                                    type="text"
-                                    value={name}
-                                    onChange={(e) => setName(e.target.value)}
-                                    className="w-full px-4 py-3 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary focus:ring-2 focus:ring-blue-900/50 outline-none transition-all"
-                                    placeholder="Ad Soyad"
-                                    required
-                                />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-text-secondary mb-1">
-                                    Telefon Numarası
-                                </label>
-                                <PhoneInput
-                                    value={phone}
-                                    onChange={setPhone}
-                                    required
-                                    placeholder="555 123 45 67"
-                                />
-                                {duplicateContact && (
-                                    <div className="text-red-500 text-sm mt-2 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
-                                        <p>Bu numara zaten rehberinizde <strong>{duplicateContact.name}</strong> adıyla kayıtlı.</p>
-                                    </div>
-                                )}
-                            </div>
-                            <button
-                                type="submit"
-                                disabled={submitting || !!duplicateContact}
-                                className={`w-full py-3 rounded-xl font-semibold transition-all mt-2 ${submitting || !!duplicateContact
-                                        ? 'bg-gray-300 dark:bg-slate-700 text-gray-500 cursor-not-allowed'
-                                        : 'bg-primary text-white hover:bg-blue-600 active:scale-95'
-                                    }`}
-                            >
-                                {submitting ? 'Kaydediliyor...' : 'Kaydet'}
-                            </button>
-                        </form>
-                    </div>
-                </div>
-            )}
+            <ContactModal
+                isOpen={showModal}
+                onClose={closeModal}
+                contactToEdit={editingContact}
+                initialPhone={initialPhone}
+                initialName=""
+                onSuccess={() => {
+                    loadContacts();
+                    closeModal();
+                }}
+            />
 
             {showImportPreview && (
                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">

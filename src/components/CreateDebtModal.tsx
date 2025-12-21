@@ -11,6 +11,7 @@ import { useAuth } from '../hooks/useAuth';
 import { Toggle } from './Toggle';
 import { Timestamp } from 'firebase/firestore';
 import clsx from 'clsx';
+import { ContactModal } from './ContactModal';
 
 interface CreateDebtModalProps {
     isOpen: boolean;
@@ -89,6 +90,7 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
 
     // Blocked check
     const [isTargetBlocked, setIsTargetBlocked] = useState(false);
+    const [showContactModal, setShowContactModal] = useState(false);
 
     // Reset/Init when opening
     useEffect(() => {
@@ -225,30 +227,19 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
         setIsShadowUser(false);
     };
 
-    const handleSelectNewNumber = async (rawPhone: string) => {
-        // Ghost Memory Logic
-        // We use the raw input for locking
-        // User prompt says: "Create new record for [Formatted Phone]"
+    const handleSelectNewNumber = (rawPhone: string) => {
+        setPhoneNumber(rawPhone);
+        setShowContactModal(true);
+    };
 
-        setPhoneNumber(rawPhone); // Keep input for now, will be cleaned on submit
-        setFoundContact(null);
-        setFoundUser(null);
+    const handleContactCreated = (contact: Contact) => {
+        setFoundContact(contact);
+        setPhoneNumber(contact.phoneNumber);
+        setBorrowerName(contact.name);
         setSearchResults([]);
-
+        setFoundUser(null);
         setStep('DETAILS');
-        setIsShadowUser(true);
-        setLoading(true);
-
-        // Fetch Last Used Name
-        if (user) {
-            const ghostName = await fetchLastUsedName(user.uid, rawPhone);
-            if (ghostName) {
-                setBorrowerName(ghostName);
-            } else {
-                setBorrowerName('');
-            }
-        }
-        setLoading(false);
+        setIsShadowUser(false);
     };
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -276,9 +267,6 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
 
         if (foundContact) {
             finalBorrowerId = foundContact.linkedUserId || foundContact.phoneNumber;
-            // Allow name override: IF user edited the name field, usage logic?
-            // Usually we trust the object, BUT user wants to edit displayed name.
-            // So if borrowerName is set, use it.
             finalBorrowerName = borrowerName || foundContact.name;
         } else if (foundUser) {
             finalBorrowerId = foundUser.uid;
@@ -327,9 +315,6 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                 numDownPayment // Pass Initial Payment
             );
 
-            // 2. Auto-add to Contacts is now handled inside createDebt service globally.
-            // Redundant call removed to prevent duplicates.
-
             onClose();
             // Reset form
             setPhoneNumber('');
@@ -350,16 +335,11 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
 
         } catch (error) {
             console.error(error);
-            // Error handling from service (e.g. backend block check)
             if (error instanceof Error) {
-                // Check if the error message is generic
-                // The prompt asked: "Show a generic error: 'Bu kullanıcı gizlilik ayarları nedeniyle işlem kabul etmiyor.'"
-                // The service throws "Cannot create debt. User is blocked or has blocked you."
-                // I should intercept this error in the UI.
                 if (error.message.includes("blocked")) {
                     showAlert("İşlem Başarısız", "Bu kullanıcı gizlilik ayarları nedeniyle işlem kabul etmiyor.", "error");
                 } else {
-                     showAlert("Hata", "İşlem kaydedilirken bir hata oluştu.", "error");
+                    showAlert("Hata", "İşlem kaydedilirken bir hata oluştu.", "error");
                 }
             }
         } finally {
@@ -381,8 +361,8 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                     {/* Blocked Warning */}
                     {isTargetBlocked && (
                         <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800 flex items-center gap-2">
-                             <Ban className="text-red-600" size={18} />
-                             <p className="text-sm text-red-700 dark:text-red-300 font-medium">Bu kullanıcı engellendiği için işlem yapılamaz.</p>
+                            <Ban className="text-red-600" size={18} />
+                            <p className="text-sm text-red-700 dark:text-red-300 font-medium">Bu kullanıcı engellendiği için işlem yapılamaz.</p>
                         </div>
                     )}
 
@@ -410,8 +390,6 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                                 Borç Alıyorum
                             </button>
                         </div>
-
-                        {/* Type Toggle */}
 
                         {/* Flow Control */}
                         {step === 'DETAILS' ? (
@@ -679,6 +657,14 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                     </button>
                 </div>
             </div >
+
+            <ContactModal
+                isOpen={showContactModal}
+                onClose={() => setShowContactModal(false)}
+                initialPhone={phoneNumber}
+                onSuccess={handleContactCreated}
+                checkDuplicates={false} // Already checked in search, plus we want flow 
+            />
         </div >
     );
 };

@@ -149,7 +149,7 @@ export const Dashboard = () => {
 
         // 2. Convert Map to List & Filter
         const mapEntries = Array.from(contactMap.entries());
-        let summaries = mapEntries.map(([id, data]) => {
+        const summaries = mapEntries.map(([id, data]) => {
             return {
                 id,
                 name: data.name,

@@ -114,7 +114,7 @@ const CalculatorView = () => {
 
 
     const CalcButton = ({ children, type = 'default', className, ...props }: { children: React.ReactNode, type?: 'default' | 'operator' | 'action', className?: string, [key: string]: any }) => {
-        let baseClass = "h-14 sm:h-16 rounded-xl sm:rounded-2xl text-xl sm:text-2xl font-medium shadow-sm active:scale-95 transition-all flex items-center justify-center select-none";
+        const baseClass = "h-14 sm:h-16 rounded-xl sm:rounded-2xl text-xl sm:text-2xl font-medium shadow-sm active:scale-95 transition-all flex items-center justify-center select-none";
 
         let typeClass = "bg-surface text-text-primary hover:bg-slate-100 dark:hover:bg-slate-700/50 border-b-2 border-border";
         if (type === 'operator') typeClass = "bg-orange-500 text-white hover:bg-orange-600 shadow-orange-500/20 shadow-lg border-b-4 border-orange-700 active:border-b-0 active:translate-y-[2px]";
