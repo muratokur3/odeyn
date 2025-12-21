@@ -12,7 +12,7 @@ import EmailManager from '../components/EmailManager';
 import { useTheme } from '../context/ThemeContext';
 import { logoutUser } from '../services/auth';
 
-// --- Internal Components ---
+
 
 const SettingsRow = ({ icon: Icon, title, description, action, onClick }: {
     icon: React.ElementType;
@@ -23,9 +23,8 @@ const SettingsRow = ({ icon: Icon, title, description, action, onClick }: {
 }) => (
     <div
         onClick={onClick}
-        className={`flex items-center justify-between p-4 ${
-            onClick ? "cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors active:bg-gray-100" : ""
-        }`}
+        className={`flex items-center justify-between p-4 ${onClick ? "cursor-pointer hover:bg-gray-50 dark:hover:bg-slate-800/50 transition-colors active:bg-gray-100" : ""
+            }`}
     >
         <div className="flex items-center gap-4 flex-1 min-w-0 pr-4">
             <div className="p-2 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-600 dark:text-slate-400">
@@ -157,7 +156,7 @@ export const Settings = () => {
                                 </p>
                             </div>
                         </div>
-                        
+
                         <button
                             onClick={() => navigate('/profile')}
                             className="w-full py-3 px-4 bg-blue-600 hover:bg-blue-700 text-white font-semibold rounded-xl transition-colors flex items-center justify-center gap-2"
@@ -165,7 +164,7 @@ export const Settings = () => {
                             <User size={18} />
                             Profili Düzenle
                         </button>
-                        
+
                         {/* Account Management */}
                         <div className="mt-6 space-y-4">
                             <ManagePhones user={user} />

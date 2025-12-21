@@ -1,5 +1,6 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { Contact } from '../types';
+import { Check, X, CheckCheck, XCircle } from 'lucide-react';
 
 interface Conflict {
   newContact: Partial<Contact>;
@@ -17,46 +18,70 @@ interface ConflictResolutionModalProps {
 }
 
 export const ConflictResolutionModal = ({ conflicts, onResolve, onCancel }: ConflictResolutionModalProps) => {
-  const [resolutions, setResolutions] = useState<Resolution>({});
+  // Direct pass-through of actions to parent which now handles immediate state updates
+  // No local state needed for 'visibleConflicts' as parent 'conflicts' prop will update
 
   const handleResolutionChange = (phoneNumber: string, resolution: 'update' | 'skip') => {
-    setResolutions(prev => ({ ...prev, [phoneNumber]: resolution }));
+    onResolve({ [phoneNumber]: resolution });
   };
 
-  const handleProcess = () => {
+  const handleBulkAction = (action: 'update' | 'skip') => {
+    const resolutions: Resolution = {};
+    conflicts.forEach(c => {
+      resolutions[c.existingContact.phoneNumber] = action;
+    });
     onResolve(resolutions);
   };
 
+  if (conflicts.length === 0) return null;
+
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-      <div className="bg-surface p-6 rounded-2xl w-full max-w-md max-h-[80vh] flex flex-col relative">
-        <h2 className="text-xl font-bold mb-4 text-text-primary">
-          Çakışan Kişileri Yönet
-        </h2>
+      <div className="bg-surface p-6 rounded-2xl w-full max-w-md max-h-[85vh] flex flex-col relative transition-all duration-200">
+        <div className="flex items-center justify-between mb-4">
+          <h2 className="text-xl font-bold text-text-primary">
+            Çakışan Kişileri Yönet
+          </h2>
+          <div className="text-sm text-text-secondary font-medium bg-gray-100 dark:bg-slate-800 px-2 py-1 rounded">
+            Kalan: {conflicts.length}
+          </div>
+        </div>
 
-        <div className="overflow-y-auto flex-1 space-y-2 mb-4 pr-2">
-          <p className="text-sm text-text-secondary mb-2">
-            Bazı kişiler rehberinizde zaten kayıtlı. Her bir kişi için ne yapmak istediğinizi seçin.
-          </p>
+        <div className="overflow-y-auto flex-1 space-y-3 mb-4 pr-1 min-h-[200px]">
           {conflicts.map(({ newContact, existingContact }) => (
-            <div key={existingContact.phoneNumber} className="p-3 bg-background rounded-lg border border-border">
-              <div className="font-medium text-text-primary mb-2">
-                {newContact.name} ({newContact.phoneNumber})
+            <div key={existingContact.phoneNumber} className="p-4 bg-background rounded-xl border border-border hover:border-blue-200 dark:hover:border-slate-600 transition-colors group">
+              <div className="flex justify-between items-start mb-3">
+                <div>
+                  <h3 className="font-bold text-text-primary text-base">
+                    {newContact.name}
+                  </h3>
+                  <p className="text-sm text-text-secondary font-mono mt-0.5">
+                    {newContact.phoneNumber}
+                  </p>
+                </div>
+                <div className="px-2 py-1 rounded bg-yellow-100 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 text-xs font-bold uppercase tracking-wide">
+                  Çakışma
+                </div>
               </div>
-              <div className="text-sm text-text-secondary mb-2">
-                Mevcut kayıt: {existingContact.name}
+
+              <div className="bg-surface rounded-lg p-2 mb-3 border border-dashed border-border">
+                <p className="text-xs text-text-secondary uppercase font-bold mb-1">Mevcut Kayıt:</p>
+                <p className="text-sm text-text-primary font-medium">{existingContact.name}</p>
               </div>
+
               <div className="flex gap-2">
                 <button
                   onClick={() => handleResolutionChange(existingContact.phoneNumber, 'update')}
-                  className={`px-3 py-1 text-sm font-semibold rounded-md ${resolutions[existingContact.phoneNumber] === 'update' ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-slate-700'}`}
+                  className="flex-1 py-2 rounded-lg bg-blue-600 text-white text-sm font-semibold hover:bg-blue-700 active:scale-95 transition-all flex items-center justify-center gap-1.5 shadow-sm"
                 >
-                  Güncelle
+                  <Check size={16} strokeWidth={3} />
+                  Birleştir
                 </button>
                 <button
                   onClick={() => handleResolutionChange(existingContact.phoneNumber, 'skip')}
-                  className={`px-3 py-1 text-sm font-semibold rounded-md ${resolutions[existingContact.phoneNumber] === 'skip' ? 'bg-blue-600 text-white' : 'bg-gray-200 dark:bg-slate-700'}`}
+                  className="flex-1 py-2 rounded-lg bg-white dark:bg-slate-800 border border-border text-text-primary text-sm font-semibold hover:bg-gray-50 dark:hover:bg-slate-700 active:scale-95 transition-all flex items-center justify-center gap-1.5"
                 >
+                  <X size={16} strokeWidth={3} />
                   Atla
                 </button>
               </div>
@@ -64,18 +89,30 @@ export const ConflictResolutionModal = ({ conflicts, onResolve, onCancel }: Conf
           ))}
         </div>
 
-        <div className="flex gap-3 pt-2">
+        {/* Bottom Actions */}
+        <div className="pt-2 border-t border-border mt-auto space-y-3">
+          <div className="flex gap-2">
+            <button
+              onClick={() => handleBulkAction('update')}
+              className="flex-1 py-3 px-3 rounded-xl bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-sm font-bold hover:bg-blue-200 dark:hover:bg-blue-900/50 transition-colors flex items-center justify-center gap-2"
+            >
+              <CheckCheck size={18} />
+              Hepsini Birleştir
+            </button>
+            <button
+              onClick={() => handleBulkAction('skip')}
+              className="flex-1 py-3 px-3 rounded-xl bg-gray-100 dark:bg-slate-800 text-gray-700 dark:text-gray-300 text-sm font-bold hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors flex items-center justify-center gap-2"
+            >
+              <XCircle size={18} />
+              Hepsini Atla
+            </button>
+          </div>
+
           <button
             onClick={onCancel}
-            className="flex-1 py-3 rounded-xl font-medium border border-border text-text-primary hover:bg-background transition-colors"
+            className="w-full py-2 rounded-lg text-sm font-medium text-text-secondary hover:text-text-primary transition-colors"
           >
             İptal
-          </button>
-          <button
-            onClick={handleProcess}
-            className="flex-1 py-3 rounded-xl font-semibold bg-primary text-white hover:bg-blue-600 active:scale-95 transition-all"
-          >
-            İşlemi Tamamla
           </button>
         </div>
       </div>

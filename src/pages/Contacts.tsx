@@ -60,11 +60,15 @@ export const Contacts = () => {
 
     const handleConflictResolution = async (resolutions: { [key: string]: 'update' | 'skip' }) => {
         if (!user) return;
-        setSubmitting(true);
+
+        // We do NOT set Submitting globally because we want the UI to remain interactive for partial updates
+        // setSubmitting(true);
 
         const toUpdate: { id: string, data: Partial<Contact> }[] = [];
+        const resolvedPhones: string[] = [];
 
         for (const phone in resolutions) {
+            resolvedPhones.push(phone);
             if (resolutions[phone] === 'update') {
                 const conflict = conflicts.find(c => c.existingContact.phoneNumber === phone);
                 if (conflict) {
@@ -74,23 +78,44 @@ export const Contacts = () => {
         }
 
         try {
+            // Apply updates
             for (const update of toUpdate) {
                 await updateContact(user.uid, update.id, update.data);
             }
 
-            if (importedContacts.length > 0) {
-                await handleImportConfirm(false); // Don't reset state yet
+            // If we updated anything, reload contacts to reflect changes in background
+            if (toUpdate.length > 0) {
+                await loadContacts();
             }
 
-            await loadContacts();
-            showAlert("Başarılı", "Kişiler güncellendi ve eklendi.", "success");
+            // Remove resolved items from conflict list
+            setConflicts(prev => {
+                const remaining = prev.filter(c => !resolvedPhones.includes(c.existingContact.phoneNumber));
+
+                // If no conflicts remain, check for pending imports
+                if (remaining.length === 0 && importedContacts.length > 0) {
+                    // All conflicts resolved, proceed to import verification if needed
+                    // Or since the user might have "skipped" everything, we should just check if we need to show the import preview
+                    // For now, let's just show import preview if there are still NEW contacts waiting
+
+                    // We need to delay this slightly or just set the state layout
+                    setTimeout(() => {
+                        if (importedContacts.length > 0) {
+                            setShowConflictResolution(false);
+                            setShowImportPreview(true);
+                        } else {
+                            resetImportState();
+                        }
+                    }, 300);
+                }
+
+                return remaining;
+            });
+
 
         } catch (error) {
             console.error(error);
             showAlert("Hata", "İşlem sırasında bir hata oluştu.", "error");
-        } finally {
-            resetImportState();
-            setSubmitting(false);
         }
     };
 
@@ -421,11 +446,10 @@ export const Contacts = () => {
                             <button
                                 type="submit"
                                 disabled={submitting || !!duplicateContact}
-                                className={`w-full py-3 rounded-xl font-semibold transition-all mt-2 ${
-                                    submitting || !!duplicateContact
+                                className={`w-full py-3 rounded-xl font-semibold transition-all mt-2 ${submitting || !!duplicateContact
                                         ? 'bg-gray-300 dark:bg-slate-700 text-gray-500 cursor-not-allowed'
                                         : 'bg-primary text-white hover:bg-blue-600 active:scale-95'
-                                }`}
+                                    }`}
                             >
                                 {submitting ? 'Kaydediliyor...' : 'Kaydet'}
                             </button>
@@ -435,7 +459,7 @@ export const Contacts = () => {
             )}
 
             {showImportPreview && (
-                 <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
                     <div className="bg-surface p-6 rounded-2xl w-full max-w-md max-h-[80vh] flex flex-col relative">
                         <button
                             onClick={resetImportState}
@@ -445,7 +469,7 @@ export const Contacts = () => {
                         </button>
                         <h2 className="text-xl font-bold mb-4 text-text-primary">Kişileri Onayla</h2>
                         <div className="overflow-y-auto flex-1 space-y-2 mb-4 pr-2">
-                             <p className="text-sm text-text-secondary mb-2">
+                            <p className="text-sm text-text-secondary mb-2">
                                 {importedContacts.length} yeni kişi eklenecek.
                             </p>
                             {importedContacts.map((contact, idx) => (
@@ -476,7 +500,7 @@ export const Contacts = () => {
                             </button>
                         </div>
                     </div>
-                 </div>
+                </div>
             )}
 
             {showConflictResolution && (

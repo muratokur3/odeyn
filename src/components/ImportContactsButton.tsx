@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { Users, Loader2 } from 'lucide-react';
 import type { Contact } from '../types';
 import { cleanPhone } from '../utils/phoneUtils';
+import { useModal } from '../context/ModalContext';
 
 export interface Conflict {
     newContact: Partial<Contact>;
@@ -21,10 +22,15 @@ export const ImportContactsButton: React.FC<ImportContactsButtonProps> = ({
 }) => {
     const [isLoading, setIsLoading] = useState(false);
     const [isSupported] = useState('contacts' in navigator && 'ContactsManager' in window);
+    const { showAlert } = useModal();
 
     const handleImport = async () => {
         if (!isSupported) {
-            alert('Tarayıcınız bu özelliği desteklemiyor. Bu özellik sadece modern mobil tarayıcılarda (örn: Android için Chrome) çalışır ve iOS (Safari/Chrome) üzerinde desteklenmez.');
+            showAlert(
+                'Desteklenmeyen Tarayıcı',
+                'Tarayıcınız bu özelliği desteklemiyor. Bu özellik sadece modern mobil tarayıcılarda (örn: Android için Chrome) çalışır ve iOS (Safari/Chrome) üzerinde desteklenmez.',
+                'warning'
+            );
             return;
         }
 
@@ -81,6 +87,7 @@ export const ImportContactsButton: React.FC<ImportContactsButtonProps> = ({
 
         } catch (error) {
             console.error('Error selecting contacts:', error);
+            // Optional: Handle specific error cases (e.g., user cancellation usually doesn't throw, but depends on browser)
         } finally {
             setIsLoading(false);
         }
