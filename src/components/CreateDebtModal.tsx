@@ -358,7 +358,8 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                 dueDate ? new Date(dueDate) : undefined,
                 generatedInstallments,
                 canBorrowerAddPayment,
-                true, // Always request approval
+                canBorrowerAddPayment,
+                // true, // requestApproval removed
                 numDownPayment // Pass Initial Payment
             );
 

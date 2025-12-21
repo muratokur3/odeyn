@@ -90,31 +90,58 @@ export const Dashboard = () => {
                 totalsByCurrency[currency] = { receivables: 0, payables: 0, net: 0, currency };
             }
 
-            const isActiveForBalance = d.status === 'ACTIVE' || d.status === 'PARTIALLY_PAID' || d.status === 'PENDING';
-            // PENDING included per user rule: "Creator sees it immediately"
+
 
             const isLender = d.lenderId === user.uid;
             const otherId = isLender ? d.borrowerId : d.lenderId;
             const fallbackName = isLender ? d.borrowerName : d.lenderName;
 
+            // STRICT ASYMMETRIC RULES FOR TOTALS:
+
+            // 1. Should we count this debt?
+            let shouldCountReceivable = false;
+            let shouldCountPayable = false;
+
+            // RECEIVABLES (I am Lender): Include ACTIVE, PARTIALLY_PAID, PENDING, REJECTED_BY_RECEIVER, AUTO_HIDDEN
+            if (isLender) {
+                if (d.status === 'ACTIVE' || d.status === 'PARTIALLY_PAID' || d.status === 'PENDING' || d.status === 'REJECTED_BY_RECEIVER' || d.status === 'AUTO_HIDDEN' || d.status === 'APPROVED') {
+                    shouldCountReceivable = true;
+                }
+            }
+            // PAYABLES (I am Borrower): Include ACTIVE, PARTIALLY_PAID, APPROVED. 
+            // EXPLICITLY EXCLUDE: REJECTED_BY_RECEIVER, AUTO_HIDDEN
+            else {
+                if (d.status === 'ACTIVE' || d.status === 'PARTIALLY_PAID' || d.status === 'PENDING' || d.status === 'APPROVED') {
+                    shouldCountPayable = true;
+                }
+            }
+
             // Global Totals
-            if (isActiveForBalance) {
-                if (isLender) {
+            if (shouldCountReceivable || shouldCountPayable) {
+                // Determine direction based on role
+                if (isLender && shouldCountReceivable) {
                     totalsByCurrency[currency].receivables += d.remainingAmount;
                     totalsByCurrency[currency].net += d.remainingAmount;
-                } else {
+                } else if (!isLender && shouldCountPayable) {
                     totalsByCurrency[currency].payables += d.remainingAmount;
                     totalsByCurrency[currency].net -= d.remainingAmount;
                 }
             }
 
-            // Contact Summaries
-            if (!contactMap.has(otherId)) {
-                // Resolve name if possible
-                let displayName = fallbackName;
-                const resolution = resolveName(otherId, fallbackName);
-                if (resolution.displayName) displayName = resolution.displayName;
+            // Contact Summaries (Same logic for individual balances)
+            // Note: If I rejected it, it shouldn't show up in my balance with that person either.
+            if (shouldCountReceivable || shouldCountPayable) {
+                // Initialize contact map if needed (code below)
+            } else {
+                return; // Skip this debt completely if it doesn't count for me
+            }
+            // Resolve name if possible
+            let displayName = fallbackName;
+            const resolution = resolveName(otherId, fallbackName);
+            if (resolution.displayName) displayName = resolution.displayName;
 
+            // Initialize contact entry if it doesn't exist
+            if (!contactMap.has(otherId)) {
                 contactMap.set(otherId, {
                     name: displayName,
                     source: resolution.source, // Store the source
@@ -136,14 +163,12 @@ export const Dashboard = () => {
             }
 
             // Update Contact Balance (Always converted to TRY for unified list)
-            if (isActiveForBalance) {
-                // Rates is guaranteed not null here due to top check
-                const amountInTRY = convertToTRY(d.remainingAmount, currency, rates!);
-                if (isLender) {
-                    contact.balance += amountInTRY;
-                } else {
-                    contact.balance -= amountInTRY;
-                }
+            // Rates is guaranteed not null here due to top check
+            const amountInTRY = convertToTRY(d.remainingAmount, currency, rates!);
+            if (isLender && shouldCountReceivable) {
+                contact.balance += amountInTRY;
+            } else if (!isLender && shouldCountPayable) {
+                contact.balance -= amountInTRY;
             }
         });
 

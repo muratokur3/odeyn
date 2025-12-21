@@ -4,8 +4,8 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useDebts } from '../hooks/useDebts';
 import { useContactName } from '../hooks/useContactName';
-import { ArrowLeft, Phone, MessageCircle, Trash2, Edit2, X, MoreVertical, Ban, UserPlus } from 'lucide-react';
-import { searchUserByPhone, getContacts, updateContact, addContact, deleteContact } from '../services/db';
+import { ArrowLeft, Phone, MessageCircle, Trash2, Edit2, X, MoreVertical, Ban, UserPlus, VolumeX, Volume2 } from 'lucide-react';
+import { searchUserByPhone, getContacts, updateContact, addContact, deleteContact, muteUser, unmuteUser } from '../services/db';
 import { blockUser, isUserBlocked, unblockUser } from '../services/blockService'; // Import block services
 import { Avatar } from '../components/Avatar';
 import { DebtCard } from '../components/DebtCard';
@@ -13,7 +13,7 @@ import { PhoneInput } from '../components/PhoneInput';
 import { formatCurrency } from '../utils/format';
 import { convertToTRY, fetchRates, type CurrencyRates } from '../services/currency';
 import { cleanPhone as cleanPhoneNumber, formatPhoneForDisplay as formatPhoneNumber } from '../utils/phoneUtils';
-import { doc, getDoc } from 'firebase/firestore'; // Added imports
+import { doc, getDoc, onSnapshot } from 'firebase/firestore'; // Added imports
 import { db } from '../services/firebase'; // Added import
 import clsx from 'clsx';
 import { useModal } from '../context/ModalContext';
@@ -42,25 +42,44 @@ export const PersonDetail = () => {
     const [submittingEdit, setSubmittingEdit] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
     const [isBlocked, setIsBlocked] = useState(false); // Block state
+    const [isMuted, setIsMuted] = useState(false);
 
-    // Check block status
+    // Helper to get target UID safely
+    const getTargetUid = () => {
+        if (id && id.length > 20) return id;
+        if (targetUserObject) {
+            if ('uid' in targetUserObject) return targetUserObject.uid;
+            if ('linkedUserId' in targetUserObject && targetUserObject.linkedUserId) return targetUserObject.linkedUserId;
+        }
+        return null;
+    };
+
+    // Check block & mute status
     useEffect(() => {
-        const checkBlock = async () => {
+        const checkStatus = async () => {
             if (!user || !id) return;
-            // We can only block UIDs
-            const targetUid = id.length > 20 ? id : (targetUserObject && 'uid' in targetUserObject ? targetUserObject.uid : null);
+            const targetUid = getTargetUid();
 
             if (targetUid) {
+                // Check Block
                 const blocked = await isUserBlocked(user.uid, targetUid);
                 setIsBlocked(blocked);
+
+                // Check Mute
+                const userRef = doc(db, 'users', user.uid);
+                const userSnap = await getDoc(userRef);
+                if (userSnap.exists()) {
+                    const uData = userSnap.data() as User;
+                    setIsMuted(uData.mutedCreators?.includes(targetUid) || false);
+                }
             }
         };
-        checkBlock();
+        checkStatus();
     }, [user, id, targetUserObject]);
 
     const handleBlockToggle = async () => {
         if (!user) return;
-        const targetUid = id && id.length > 20 ? id : (targetUserObject && 'uid' in targetUserObject ? targetUserObject.uid : null);
+        const targetUid = getTargetUid();
 
         if (!targetUid) {
             showAlert("Uyarı", "Bu kişi sisteme kayıtlı değil, engellenemez. Sadece rehberinizden silebilirsiniz.", "warning");
@@ -85,6 +104,36 @@ export const PersonDetail = () => {
                 await blockUser(user.uid, targetUid, personInfo.name);
                 setIsBlocked(true);
                 showAlert("Engellendi", "Kullanıcı engellendi.", "success");
+            }
+        }
+    };
+
+    const handleMuteToggle = async () => {
+        if (!user) return;
+        const targetUid = getTargetUid();
+
+        if (!targetUid) {
+            showAlert("Uyarı", "Bu kişi sisteme kayıtlı değil, sessize alınamaz.", "warning");
+            return;
+        }
+
+        if (isMuted) {
+            const confirmed = await showConfirm("Sessize Almayı Kaldır", "Bu kullanıcının sessize alma durumunu kaldırmak istiyor musunuz?");
+            if (confirmed) {
+                await unmuteUser(user.uid, targetUid);
+                setIsMuted(false);
+                showAlert("Başarılı", "Kullanıcı artık sessize alınmıyor.", "success");
+            }
+        } else {
+            const confirmed = await showConfirm(
+                "Kullanıcıyı Sessize Al",
+                "Bu kullanıcıyı sessize almak istiyor musunuz? Size eklediği borçları göremeyeceksiniz (Otomatik Gizli), ancak karşı taraf normal eklendiğini sanacak.",
+                "info"
+            );
+            if (confirmed) {
+                await muteUser(user.uid, targetUid);
+                setIsMuted(true);
+                showAlert("Sessize Alındı", "Kullanıcı sessize alındı.", "success");
             }
         }
     };
@@ -248,10 +297,31 @@ export const PersonDetail = () => {
 
             // Check if ID matches or if it's a phone number match (for non-system users)
             // Also check resolvedUid if available (handles case where URL is phone but debt has UID)
-            return otherId === id ||
+            // Base matching logic
+            const isMatch = otherId === id ||
                 cleanOtherId === cleanId ||
                 (d.participants.includes(id)) ||
                 (resolvedUid && otherId === resolvedUid);
+
+            if (!isMatch) return false;
+
+            // ASYMMETRIC VISIBILITY FILTER:
+            // If I am the Creator (Lender or Borrower who created it): Show Everything (Active, Rejected, Hidden)
+            // If I am the Receiver (I did not assign this to myself): Hide Rejected/Hidden
+
+            const amICreator = d.createdBy === user.uid;
+
+            if (amICreator) {
+                // I created it, I see it even if they rejected it.
+                return true;
+            } else {
+                // I am the receiver. 
+                // Exclude if REJECTED_BY_RECEIVER or AUTO_HIDDEN
+                if (d.status === 'REJECTED_BY_RECEIVER' || d.status === 'AUTO_HIDDEN') {
+                    return false;
+                }
+                return true;
+            }
         });
     }, [debts, id, user, resolvedUid]);
 
@@ -272,15 +342,39 @@ export const PersonDetail = () => {
         const cleanId = isUID ? (id || '') : cleanPhoneNumber(id || '');
         let phone = cleanId;
 
-        if (personDebts.length > 0) {
+        // 1. Try to get better phone from targetUserObject (fetched/found user/contact)
+        if (targetUserObject) {
+            if ('primaryPhoneNumber' in targetUserObject && targetUserObject.primaryPhoneNumber) {
+                phone = targetUserObject.primaryPhoneNumber;
+            } else if ('phoneNumber' in targetUserObject && targetUserObject.phoneNumber) {
+                phone = targetUserObject.phoneNumber;
+            }
+        }
+
+        // 2. Fallback to Debt Information
+        if ((!phone || phone.length > 20) && personDebts.length > 0) {
             const first = personDebts[0];
             const isLender = first.lenderId === user?.uid;
-            fallbackName = isLender ? first.borrowerName : first.lenderName;
-            const otherId = isLender ? first.borrowerId : first.lenderId;
-            // If the ID param is a UID, we prefer the phone from the debt record if it looks like a phone
-            if (id && id.length > 20 && otherId.length <= 15) {
-                phone = cleanPhoneNumber(otherId);
+
+            if (!fallbackName) {
+                fallbackName = isLender ? first.borrowerName : first.lenderName;
             }
+
+            // Check lockedPhoneNumber first (most reliable for debt context)
+            if (first.lockedPhoneNumber) {
+                phone = first.lockedPhoneNumber;
+            } else {
+                const otherId = isLender ? first.borrowerId : first.lenderId;
+                // If the ID param is a UID, we prefer the phone from the debt record if it looks like a phone
+                if (id && id.length > 20 && otherId.length <= 15) {
+                    phone = cleanPhoneNumber(otherId);
+                }
+            }
+        }
+
+        // 3. Navigation State Fallback (Lowest priority for phone, but high for name?)
+        if ((!phone || phone.length > 20) && locationState?.phone) {
+            phone = locationState.phone;
         }
 
         // Local override if we just edited (optimistic UI)
@@ -297,7 +391,7 @@ export const PersonDetail = () => {
             name: displayName,
             phone: phone.length > 20 ? '' : phone
         };
-    }, [personDebts, user, id, contactId, editName, editPhone, resolveName]);
+    }, [personDebts, user, id, contactId, editName, editPhone, resolveName, targetUserObject, location.state]);
 
     // Calculate Totals with this person
     const totals = useMemo(() => {
@@ -394,33 +488,20 @@ export const PersonDetail = () => {
                                 <>
                                     <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)}></div>
                                     <div className="absolute right-0 top-full mt-2 w-48 bg-surface rounded-xl shadow-xl border border-border z-20 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+
+                                        {/* 1. Edit / Add (Context Dependent) */}
                                         {contactId ? (
-                                            <>
-                                                <button
-                                                    onClick={() => { setShowEditModal(true); setShowMenu(false); }}
-                                                    className="w-full text-left px-4 py-3 text-sm font-medium text-text-primary hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2"
-                                                >
-                                                    <Edit2 size={16} /> Düzenle
-                                                </button>
-                                                <div className="h-px bg-border my-0"></div>
-                                                <button
-                                                    onClick={() => { handleBlockToggle(); setShowMenu(false); }}
-                                                    className="w-full text-left px-4 py-3 text-sm font-medium text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/10 flex items-center gap-2"
-                                                >
-                                                    <Ban size={16} /> {isBlocked ? 'Engeli Kaldır' : 'Kullanıcıyı Engelle'}
-                                                </button>
-                                                <button
-                                                    onClick={() => { handleDelete(); setShowMenu(false); }}
-                                                    className="w-full text-left px-4 py-3 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/10 flex items-center gap-2"
-                                                >
-                                                    <Trash2 size={16} /> Kişiyi Sil
-                                                </button>
-                                            </>
+                                            <button
+                                                onClick={() => { setShowEditModal(true); setShowMenu(false); }}
+                                                className="w-full text-left px-4 py-3 text-sm font-medium text-text-primary hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2"
+                                            >
+                                                <Edit2 size={16} /> Düzenle
+                                            </button>
                                         ) : (
                                             <button
                                                 onClick={() => {
-                                                    setEditName(personInfo.name); // Pre-fill name
-                                                    setEditPhone(personInfo.phone || ''); // Pre-fill phone
+                                                    setEditName(personInfo.name);
+                                                    setEditPhone(personInfo.phone || '');
                                                     setShowEditModal(true);
                                                     setShowMenu(false);
                                                 }}
@@ -428,6 +509,37 @@ export const PersonDetail = () => {
                                             >
                                                 <UserPlus size={16} /> Rehbere Ekle
                                             </button>
+                                        )}
+
+                                        <div className="h-px bg-border my-0"></div>
+
+                                        {/* 2. Universal Actions (Mute & Block) */}
+                                        <button
+                                            onClick={() => { handleMuteToggle(); setShowMenu(false); }}
+                                            className="w-full text-left px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 dark:hover:bg-slate-700 flex items-center gap-2"
+                                        >
+                                            {isMuted ? <Volume2 size={16} /> : <VolumeX size={16} />}
+                                            {isMuted ? 'Sessize Almayı Kaldır' : 'Sessize Al'}
+                                        </button>
+
+                                        <button
+                                            onClick={() => { handleBlockToggle(); setShowMenu(false); }}
+                                            className="w-full text-left px-4 py-3 text-sm font-medium text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/10 flex items-center gap-2"
+                                        >
+                                            <Ban size={16} /> {isBlocked ? 'Engeli Kaldır' : 'Kullanıcıyı Engelle'}
+                                        </button>
+
+                                        {/* 3. Delete (Contact Only) */}
+                                        {contactId && (
+                                            <>
+                                                <div className="h-px bg-border my-0"></div>
+                                                <button
+                                                    onClick={() => { handleDelete(); setShowMenu(false); }}
+                                                    className="w-full text-left px-4 py-3 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/10 flex items-center gap-2"
+                                                >
+                                                    <Trash2 size={16} /> Kişiyi Sil
+                                                </button>
+                                            </>
                                         )}
                                     </div>
                                 </>

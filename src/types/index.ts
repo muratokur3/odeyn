@@ -10,6 +10,7 @@ export interface User {
     email?: string;
     recoveryEmail?: string;
     photoURL?: string;
+    mutedCreators?: string[]; // IDs of users whose debts are auto-hidden (Silent Mute)
     preferences?: {
         autoApproveDebt?: boolean;
         requireApproval?: boolean;
@@ -33,7 +34,7 @@ export interface Contact {
     createdAt: Timestamp;
 }
 
-export type DebtStatus = 'PENDING' | 'ACTIVE' | 'PARTIALLY_PAID' | 'PAID' | 'REJECTED' | 'HIDDEN';
+export type DebtStatus = 'PENDING' | 'ACTIVE' | 'PARTIALLY_PAID' | 'PAID' | 'REJECTED' | 'HIDDEN' | 'REJECTED_BY_RECEIVER' | 'AUTO_HIDDEN' | 'APPROVED';
 
 export interface Installment {
     id: string;
@@ -64,6 +65,10 @@ export interface Debt {
     canBorrowerAddPayment?: boolean;
     allow_counterparty_edit?: boolean;
     lockedPhoneNumber?: string; // Immutable E.164 phone number for recovery/display
+
+    // New fields for Unilateral Logic
+    rejectedAt?: Timestamp;
+    isMuted?: boolean;
 }
 
 export type PaymentLogType = 'INITIAL_CREATION' | 'PAYMENT' | 'NOTE_ADDED' | 'PAYMENT_DECLARATION';

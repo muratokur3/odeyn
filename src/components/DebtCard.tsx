@@ -67,13 +67,15 @@ export const DebtCard: React.FC<DebtCardProps> = ({ debt, currentUserId, onClick
 
     const isPaid = debt.status === 'PAID';
     const isPending = debt.status === 'PENDING';
-
+    const isRejectedByReceiver = debt.status === 'REJECTED_BY_RECEIVER';
+    const isAutoHidden = debt.status === 'AUTO_HIDDEN';
+    const isActive = debt.status === 'ACTIVE';
 
     const totalInstallments = debt.installments?.length || 0;
     const paidInstallments = debt.installments?.filter(i => i.isPaid).length || 0;
     const hasInstallments = totalInstallments > 0;
 
-    const handleResponse = async (e: React.MouseEvent, status: 'ACTIVE' | 'REJECTED') => {
+    const handleResponse = async (e: React.MouseEvent, status: 'ACTIVE' | 'REJECTED' | 'REJECTED_BY_RECEIVER') => {
         e.stopPropagation();
         try {
             await respondToDebtRequest(debt.id, status, currentUserId);
@@ -84,11 +86,14 @@ export const DebtCard: React.FC<DebtCardProps> = ({ debt, currentUserId, onClick
     };
 
     // Kartın Rengi: Alacaksa Yeşilimsi, Borçsa Kırmızımsı
+    // Rejected by receiver should be dim red/gray
     const cardBgColor = isPaid
         ? "bg-gray-50 border-gray-200 opacity-70"
-        : isLender
-            ? "bg-green-50/50 border-green-100 dark:bg-green-900/10 dark:border-green-800"
-            : "bg-red-50/50 border-red-100 dark:bg-red-900/10 dark:border-red-800";
+        : isRejectedByReceiver
+            ? "bg-red-50 border-red-200 opacity-80 decoration-slice"
+            : isLender
+                ? "bg-green-50/50 border-green-100 dark:bg-green-900/10 dark:border-green-800"
+                : "bg-red-50/50 border-red-100 dark:bg-red-900/10 dark:border-red-800";
 
     // Override color if disabled/blocked? Maybe just opacity or grayscale
     const finalBgColor = disabled ? "bg-gray-100 border-gray-200 dark:bg-slate-800 dark:border-slate-700 opacity-80" : cardBgColor;
@@ -106,7 +111,7 @@ export const DebtCard: React.FC<DebtCardProps> = ({ debt, currentUserId, onClick
                 <Avatar
                     name={finalDisplayName}
                     size="md"
-                    className={clsx("shadow-sm bg-white", disabled && "grayscale")}
+                    className={clsx("shadow-sm bg-white", (disabled || isRejectedByReceiver) && "grayscale")}
                     status={otherPartyStatus}
                     uid={linkedUserId || (otherId.length > 20 ? otherId : undefined)}
                 />
@@ -114,13 +119,13 @@ export const DebtCard: React.FC<DebtCardProps> = ({ debt, currentUserId, onClick
                 {/* Main Content */}
                 <div className="flex-1 min-w-0">
                     <div className="flex justify-between items-start mb-1">
-                        <h3 className={clsx("text-lg font-bold text-gray-900 dark:text-white truncate", disabled && "line-through text-gray-500")}>
+                        <h3 className={clsx("text-lg font-bold text-gray-900 dark:text-white truncate", (disabled || isRejectedByReceiver) && "line-through text-gray-500")}>
                             {finalDisplayName}
                         </h3>
                         {/* Tutar - KOCAMAN */}
                         <div className={clsx(
                             "text-lg font-bold tracking-tight",
-                            isPaid ? "text-gray-400 line-through" : (isLender ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"),
+                            isPaid || isRejectedByReceiver ? "text-gray-400 line-through" : (isLender ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"),
                             disabled && "opacity-50"
                         )}>
                             {formatCurrency(debt.remainingAmount, debt.currency)}
@@ -130,8 +135,13 @@ export const DebtCard: React.FC<DebtCardProps> = ({ debt, currentUserId, onClick
                     <div className="flex justify-between items-end">
                         <div className="flex flex-col gap-1">
                             {/* İnsan Diliyle Açıklama */}
-                            <p className={clsx("text-sm font-medium", isLender ? "text-green-600" : "text-red-600", disabled && "text-gray-500")}>
-                                {isPaid ? "Hesap Kapandı" : (isLender ? "Alacaklısın" : "Borçlusun")}
+                            <p className={clsx("text-sm font-medium",
+                                isRejectedByReceiver ? "text-red-500" : (isLender ? "text-green-600" : "text-red-600"),
+                                (disabled) && "text-gray-500"
+                            )}>
+                                {isPaid ? "Hesap Kapandı" :
+                                    isRejectedByReceiver ? "Karşı taraf sildi" :
+                                        (isLender ? "Alacaklısın" : "Borçlusun")}
                             </p>
 
                             <div className="flex items-center gap-2 text-xs text-gray-500">
@@ -150,6 +160,10 @@ export const DebtCard: React.FC<DebtCardProps> = ({ debt, currentUserId, onClick
                                 <div className="text-gray-400" title="Engellendi">
                                     <Ban size={20} />
                                 </div>
+                            ) : isRejectedByReceiver ? (
+                                <div className="text-red-500 font-bold text-xs bg-red-100 px-2 py-1 rounded-lg border border-red-200">
+                                    ❌ Reddedildi
+                                </div>
                             ) : isPending ? (
                                 <div className="flex items-center gap-1 bg-yellow-100 text-yellow-700 px-2 py-1 rounded-lg text-xs font-bold">
                                     <Clock size={14} />
@@ -160,10 +174,12 @@ export const DebtCard: React.FC<DebtCardProps> = ({ debt, currentUserId, onClick
                                     <CheckCheck size={20} />
                                 </div>
                             ) : null}
+                            {/* Auto Hidden - No icon for creator, looks active. */}
                         </div>
                     </div>
 
-                    {/* Pending Actions */}
+                    {/* ACTIONS */}
+                    {/* 1. Legacy Pending Response (Only if I am receiver and Pending) */}
                     {isPending && debt.createdBy !== currentUserId && !disabled && (
                         <div className="mt-3 flex gap-2 pt-3 border-t border-black/5">
                             <button
@@ -177,6 +193,34 @@ export const DebtCard: React.FC<DebtCardProps> = ({ debt, currentUserId, onClick
                                 className="flex-1 py-2 rounded-xl bg-green-600 text-white font-medium text-sm shadow-sm"
                             >
                                 Onayla
+                            </button>
+                        </div>
+                    )}
+
+                    {/* 2. New Opt-Out (Soft Delete) for Active Debts (Only if I am receiver and Active) */}
+                    {isActive && debt.borrowerId === currentUserId && isLender && !disabled && (
+                        // I am borrower (Receiver), Debt is Lennng (Active). Wait, if type is BORROWING?
+                        // If I am borrower, and lender created it.
+                        // Logic: debt.createdBy != currentUserId.
+                        debt.createdBy !== currentUserId && (
+                            <div className="mt-3 flex gap-2 pt-3 border-t border-black/5">
+                                <button
+                                    onClick={(e) => handleResponse(e, 'REJECTED_BY_RECEIVER')}
+                                    className="w-full py-2 rounded-xl bg-white border border-red-200 text-red-600 font-medium text-sm shadow-sm hover:bg-red-50 transition-colors"
+                                >
+                                    Sil / Reddet
+                                </button>
+                            </div>
+                        )
+                    )}
+                    {/* Also handle case where I am lender but borrower created it (I am receiver of the record) */}
+                    {isActive && debt.lenderId === currentUserId && debt.createdBy !== currentUserId && !disabled && (
+                        <div className="mt-3 flex gap-2 pt-3 border-t border-black/5">
+                            <button
+                                onClick={(e) => handleResponse(e, 'REJECTED_BY_RECEIVER')}
+                                className="w-full py-2 rounded-xl bg-white border border-red-200 text-red-600 font-medium text-sm shadow-sm hover:bg-red-50 transition-colors"
+                            >
+                                Sil / Reddet
                             </button>
                         </div>
                     )}

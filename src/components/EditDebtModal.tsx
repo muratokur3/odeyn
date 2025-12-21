@@ -1,7 +1,8 @@
 import React, { useState, useEffect } from 'react';
 import { X, Calendar, AlertCircle } from 'lucide-react';
 import type { Debt } from '../types';
-import { Timestamp } from 'firebase/firestore';
+import { Timestamp, deleteField } from 'firebase/firestore';
+import { useModal } from '../context/ModalContext';
 
 interface EditDebtModalProps {
     isOpen: boolean;
@@ -9,8 +10,6 @@ interface EditDebtModalProps {
     debt: Debt;
     onUpdate: (debtId: string, data: Partial<Debt>) => Promise<void>;
 }
-
-import { useModal } from '../context/ModalContext';
 
 export const EditDebtModal: React.FC<EditDebtModalProps> = ({ isOpen, onClose, debt, onUpdate }) => {
     const [amount, setAmount] = useState('');
@@ -41,10 +40,16 @@ export const EditDebtModal: React.FC<EditDebtModalProps> = ({ isOpen, onClose, d
         e.preventDefault();
         setLoading(true);
         try {
-            const updates: Partial<Debt> = {
-                note,
-                dueDate: dueDate ? Timestamp.fromDate(new Date(dueDate)) : undefined
+            const updates: any = {
+                note
             };
+
+            if (dueDate) {
+                updates.dueDate = Timestamp.fromDate(new Date(dueDate));
+            } else {
+                // If cleared, remove the field from DB using deleteField()
+                updates.dueDate = deleteField();
+            }
 
             if (!hasPayments) {
                 const numAmount = parseFloat(amount);
@@ -54,6 +59,9 @@ export const EditDebtModal: React.FC<EditDebtModalProps> = ({ isOpen, onClose, d
                     updates.currency = currency;
                 }
             }
+
+            // Remove undefined keys just in case (though we handle dueDate specifically now)
+            Object.keys(updates).forEach(key => updates[key] === undefined && delete updates[key]);
 
             await onUpdate(debt.id, updates);
             onClose();

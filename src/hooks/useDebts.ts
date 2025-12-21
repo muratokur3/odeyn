@@ -30,27 +30,38 @@ export const useDebts = (includeDeleted = false) => {
             // Filter for Dashboard Main List
             const mainList = processed.filter(d => {
                 const isCreator = d.createdBy === user.uid;
-                const isPending = d.status === 'PENDING';
-                const isRejected = d.status === 'REJECTED';
+                const isPending = d.status === 'PENDING'; // Legacy
+                const isRejected = d.status === 'REJECTED'; // Legacy
                 const isPaid = d.status === 'PAID';
 
-                if (isRejected) return false; // Rejected never shows
+                // New Statuses
+                const isRejectedByReceiver = d.status === 'REJECTED_BY_RECEIVER';
+                const isAutoHidden = d.status === 'AUTO_HIDDEN';
+                const isActive = d.status === 'ACTIVE';
+
                 if (isPaid) return false;     // Paid currently hidden from main list per request
 
                 if (isCreator) {
-                    return true; // Creator sees all (Pending & Active)
+                    // CREATOR VIEW (Receivables):
+                    // Shows: ACTIVE, REJECTED_BY_RECEIVER, AUTO_HIDDEN.
+                    // Also Legacy: PENDING, REJECTED, APPROVED.
+                    return isActive || isRejectedByReceiver || isAutoHidden || isPending || isRejected || d.status === 'APPROVED';
                 } else {
-                    // Receiver
-                    if (isPending) return false; // Pending -> Incoming Requests
-                    return true; // Active shows
+                    // RECEIVER VIEW (Payables):
+                    // Shows: ACTIVE ONLY (and Legacy APPROVED).
+                    // EXPLICITLY EXCLUDE: REJECTED_BY_RECEIVER, AUTO_HIDDEN.
+                    // Legacy PENDING is supposedly gone/auto-active, but if exists, prompt says "No Confirmation", so maybe hide or show? 
+                    // Prompt "Calculate My Payables ... status == 'ACTIVE'".
+                    // Let's stick to ACTIVE and APPROVED (Legacy Active). Also PENDING to match calculations.
+                    return isActive || d.status === 'APPROVED' || isPending;
                 }
             });
             setDashboardDebts(mainList);
 
-            // Filter for Incoming Requests
+            // Filter for Incoming Requests (Legacy Support Only)
             const requests = processed.filter(d => {
                 const isCreator = d.createdBy === user.uid;
-                // Only if I am NOT creator and it is PENDING
+                // Only retain this for legacy PENDING items if any
                 return !isCreator && d.status === 'PENDING';
             });
             setIncomingRequests(requests);

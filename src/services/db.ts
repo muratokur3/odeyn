@@ -35,7 +35,7 @@ export const createDebt = async (
     dueDate?: Date,
     installments?: Installment[],
     canBorrowerAddPayment?: boolean,
-    requestApproval?: boolean,
+    // requestApproval removed
     initialPayment: number = 0
 ) => {
     try {
@@ -71,9 +71,6 @@ export const createDebt = async (
         const counterpartyId = isLending ? borrowerId : lenderId;
 
         // BLOCK CHECK:
-        // By this point, if targetUserId was a phone number that belongs to a user,
-        // it has been resolved to a UID in `finalTargetId` (and thus `counterpartyId`).
-        // So checking `counterpartyId.length > 20` covers both "direct UID" and "resolved phone" cases.
         if (counterpartyId.length > 20) {
             const isBlocked = await checkBlockStatus(currentUserId, counterpartyId);
             if (isBlocked) {
@@ -81,32 +78,44 @@ export const createDebt = async (
             }
         }
 
-        let initialStatus: DebtStatus = 'PENDING';
-        let foundUserData: User | null = null;
+        // UNILATERAL LOGIC: Default to ACTIVE.
+        // CHECK IF CREATOR IS MUTED BY TARGET
+        let initialStatus: DebtStatus = 'ACTIVE';
+        let isMuted = false;
 
-        if (counterpartyId.length > 20) { // Simple check for UID vs Phone
-            const counterpartyUser = await getDoc(doc(db, 'users', counterpartyId));
-            if (counterpartyUser.exists()) {
-                const userData = counterpartyUser.data() as User;
-                foundUserData = userData; // Store for later use
-                if (userData.preferences?.autoApproveDebt) {
-                    initialStatus = 'ACTIVE'; // active = approved
+        if (counterpartyId.length > 20) {
+            // Check if I am muted by the target
+            // We use the helper we just added (need to ensure it's available or inline logic)
+            // Since we are inside db.ts, we can call use the logic directly or call the function if it was hoisted.
+            // But createDebt is above isCreatorMutedByTarget. So we must inline or move function up.
+            // Let's inline the check for safety as moving functions in large file is risky for diffs.
+            const targetUserRef = doc(db, 'users', counterpartyId);
+            const targetSnap = await getDoc(targetUserRef);
+            if (targetSnap.exists()) {
+                const targetData = targetSnap.data() as User;
+                if (targetData.mutedCreators?.includes(currentUserId)) {
+                    initialStatus = 'AUTO_HIDDEN';
+                    isMuted = true;
                 }
             }
         }
 
-        // If explicitly requesting approval, force PENDING
-        if (requestApproval) {
-            initialStatus = 'PENDING';
-        }
-
         // Calculate amounts
         const remainingAmount = amount - initialPayment;
-        // If remaining is 0 and status was ACTIVE, it becomes PAID immediately.
-        if (remainingAmount <= 0 && initialStatus === 'ACTIVE') {
+        // If remaining is 0 and status was ACTIVE/AUTO_HIDDEN, it becomes PAID immediately.
+        if (remainingAmount <= 0) {
+            // If fully paid initially, it's just a record.
             initialStatus = 'PAID';
-        } else if (amount > remainingAmount && remainingAmount > 0 && initialStatus === 'ACTIVE') {
+        } else if (amount > remainingAmount && remainingAmount > 0) {
+            // Partial payment at start
+            // Status remains ACTIVE or AUTO_HIDDEN unless defined otherwise.
+            // But if we want to track PARTIALLY_PAID distinct from ACTIVE?
+            // Usually PARTIALLY_PAID is just a UI state derived from amounts, but if status field is used:
             initialStatus = 'PARTIALLY_PAID';
+            // WAIT: If it is AUTO_HIDDEN, it should stay AUTO_HIDDEN even if partially paid?
+            // The requirement says: "If User A is in muted list -> Create with { status: 'AUTO_HIDDEN', isMuted: true }"
+            // Logic: If fully paid, it's history. If debt exists, it's hidden.
+            if (isMuted) initialStatus = 'AUTO_HIDDEN';
         }
 
         // Determine Contact Phone for Locking & Auto-Add
@@ -116,12 +125,22 @@ export const createDebt = async (
             contactPhone = counterpartyId;
         } else {
             // It's a UID.
-            // 1. Try to get phone from actual user profile
+            // 1. Try to get phone from actual user profile (we might need to fetch if not fetched above)
+            // We fetched targetSnap above if ID > 20.
+            let foundUserData: User | null = null;
+            if (counterpartyId.length > 20) {
+                // We fetched it for mute check?
+                // Let's re-use or re-fetch loosely. 
+                // Actually we can just query again or trust the previous block.
+                // Ideally we should have fetched user data once.
+                const uDoc = await getDoc(doc(db, 'users', counterpartyId));
+                if (uDoc.exists()) foundUserData = uDoc.data() as User;
+            }
+
             if (foundUserData && foundUserData.primaryPhoneNumber) {
                 contactPhone = foundUserData.primaryPhoneNumber;
             }
-            // 2. Fallback: If we started with a phone number input that resolved to this UID, use that.
-            // But ONLY if the original input looked like a phone number.
+            // 2. Fallback
             else if ((targetUserId.length <= 15 || targetUserId.startsWith('+')) && cleanTarget) {
                 contactPhone = cleanTarget;
             }
@@ -143,9 +162,10 @@ export const createDebt = async (
             ...(dueDate && { dueDate: Timestamp.fromDate(dueDate) }),
             ...(note && { note }),
             ...(installments && { installments }),
-            ...(installments && { installments }),
             ...(canBorrowerAddPayment && { canBorrowerAddPayment }),
             ...(contactPhone && { lockedPhoneNumber: contactPhone }), // Always lock phone number if available
+            // New Fields
+            ...(isMuted && { isMuted: true })
         };
 
         // Use batch or transaction? 
@@ -284,7 +304,7 @@ export const subscribeToPaymentLogs = (debtId: string, callback: (logs: PaymentL
     });
 };
 
-export const respondToDebtRequest = async (debtId: string, status: 'ACTIVE' | 'REJECTED', performedBy: string) => {
+export const respondToDebtRequest = async (debtId: string, status: 'ACTIVE' | 'REJECTED' | 'REJECTED_BY_RECEIVER', performedBy: string) => {
     try {
         await runTransaction(db, async (transaction) => {
             const debtRef = doc(db, 'debts', debtId);
@@ -295,17 +315,27 @@ export const respondToDebtRequest = async (debtId: string, status: 'ACTIVE' | 'R
             }
 
             // Update debt status
-            transaction.update(debtRef, { status });
+            const updates: any = { status };
+            if (status === 'REJECTED_BY_RECEIVER') {
+                updates.rejectedAt = serverTimestamp();
+            }
+
+            transaction.update(debtRef, updates);
 
             // Add log
             const logRef = doc(collection(db, `debts/${debtId}/logs`));
+            let note = 'Durum güncellendi';
+            if (status === 'ACTIVE') note = 'Borç isteği onaylandı';
+            else if (status === 'REJECTED') note = 'Borç isteği reddedildi';
+            else if (status === 'REJECTED_BY_RECEIVER') note = 'Kayıt silindi/reddedildi (Soft Delete)';
+
             transaction.set(logRef, {
-                type: 'NOTE_ADDED', // Using NOTE_ADDED as a generic type for status change for now, or could add STATUS_CHANGE type
+                type: 'NOTE_ADDED',
                 previousRemaining: debtDoc.data().remainingAmount,
                 newRemaining: debtDoc.data().remainingAmount,
                 performedBy,
                 timestamp: serverTimestamp(),
-                note: status === 'ACTIVE' ? 'Borç isteği onaylandı' : 'Borç isteği reddedildi'
+                note
             });
         });
     } catch (error) {
@@ -801,7 +831,71 @@ export const deletePendingDebt = async (debtId: string, currentUserId: string) =
         await deleteDoc(debtRef);
     } catch (error) {
         console.error("Error deleting pending debt:", error);
+        // Fallback for permission errors
+        if (error instanceof Error && error.message.includes('Missing or insufficient permissions')) {
+            throw new Error("You do not have permission to delete this debt.");
+        }
         throw error;
+    }
+};
+
+// --- Mute / Silent Ignore Features ---
+
+/**
+ * Mutes a user (Silent Ignore).
+ * @param currentUid The user performing the mute.
+ * @param targetUid The user to be muted.
+ */
+export const muteUser = async (currentUid: string, targetUid: string) => {
+    try {
+        const userRef = doc(db, 'users', currentUid);
+        // We use arrayUnion to add to the list
+        const { arrayUnion } = await import('firebase/firestore');
+        await updateDoc(userRef, {
+            mutedCreators: arrayUnion(targetUid)
+        });
+    } catch (error) {
+        console.error("Error muting user:", error);
+        throw error;
+    }
+};
+
+/**
+ * Unmutes a user.
+ * @param currentUid The user performing the unmute.
+ * @param targetUid The user to be unmuted.
+ */
+export const unmuteUser = async (currentUid: string, targetUid: string) => {
+    try {
+        const userRef = doc(db, 'users', currentUid);
+        // We use arrayRemove to remove from the list
+        const { arrayRemove } = await import('firebase/firestore');
+        await updateDoc(userRef, {
+            mutedCreators: arrayRemove(targetUid)
+        });
+    } catch (error) {
+        console.error("Error unmuting user:", error);
+        throw error;
+    }
+};
+
+/**
+ * Checks if a user is muted by another user.
+ * This is effectively checking if targetUid has currentUid in their mutedCreators list.
+ * USE CASE: When I (Creator) create a debt for Target, I need to know if Target has muted ME.
+ */
+export const isCreatorMutedByTarget = async (creatorUid: string, targetUid: string): Promise<boolean> => {
+    try {
+        const userRef = doc(db, 'users', targetUid);
+        const snapshot = await getDoc(userRef);
+        if (snapshot.exists()) {
+            const data = snapshot.data() as User;
+            return data.mutedCreators?.includes(creatorUid) || false;
+        }
+        return false;
+    } catch (error) {
+        console.error("Error checking mute status:", error);
+        return false;
     }
 };
 
@@ -879,7 +973,50 @@ export const permanentlyDeleteDebt = async (debtId: string, currentUserId: strin
 export const updateDebt = async (debtId: string, data: Partial<Debt>) => {
     try {
         const debtRef = doc(db, 'debts', debtId);
-        await updateDoc(debtRef, data);
+
+        const updates = { ...data };
+
+        // BUMP MECHANISM: Check for recovery from AUTO_HIDDEN
+        // Wrapped in try-catch to ensure main update never fails due to this side-effect
+        try {
+            const debtSnap = await getDoc(debtRef);
+            if (debtSnap.exists()) {
+                const currentDebt = debtSnap.data() as Debt;
+
+                // Logic: If currently AUTO_HIDDEN (or isMuted=true), and we are updating it.
+                if (currentDebt.status === 'AUTO_HIDDEN' || currentDebt.isMuted) {
+                    const creatorId = currentDebt.createdBy;
+                    const isLender = currentDebt.lenderId === creatorId;
+                    const targetUserId = isLender ? currentDebt.borrowerId : currentDebt.lenderId;
+
+                    if (targetUserId && targetUserId.length > 20) { // Check if valid UID
+                        // Check permissions safely
+                        try {
+                            const targetRef = doc(db, 'users', targetUserId);
+                            const targetSnap = await getDoc(targetRef);
+
+                            if (targetSnap.exists()) {
+                                const targetData = targetSnap.data() as User;
+                                const isStillMuted = targetData.mutedCreators?.includes(creatorId);
+
+                                if (!isStillMuted) {
+                                    // PRESTO! User is unmuted. Bump the debt.
+                                    updates.status = 'ACTIVE';
+                                    updates.isMuted = false;
+                                }
+                            }
+                        } catch (permError) {
+                            console.warn("Could not check mute status during update (likely permission/privacy):", permError);
+                            // Ignore and proceed with normal update
+                        }
+                    }
+                }
+            }
+        } catch (err) {
+            console.warn("Error in Bump Logic (non-fatal):", err);
+        }
+
+        await updateDoc(debtRef, updates);
     } catch (error) {
         console.error("Error updating debt:", error);
         throw error;
