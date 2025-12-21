@@ -3,10 +3,11 @@ import { X } from 'lucide-react';
 import { Timestamp } from 'firebase/firestore';
 import { PhoneInput } from './PhoneInput';
 import { useAuth } from '../hooks/useAuth'; // Assuming useAuth is available
-import { addContact, updateContact, getContacts } from '../services/db'; // Assuming services are available
+import { addContact, updateContact, getContacts, searchUserByPhone } from '../services/db'; // Assuming services are available
 import { cleanPhone } from '../utils/phoneUtils';
+import { Avatar } from './Avatar';
 import { useModal } from '../context/ModalContext'; // Assuming ModalContext is available
-import type { Contact } from '../types';
+import type { Contact, User } from '../types';
 
 interface ContactModalProps {
     isOpen: boolean;
@@ -35,6 +36,8 @@ export const ContactModal: React.FC<ContactModalProps> = ({
     const [submitting, setSubmitting] = useState(false);
     const [duplicateContact, setDuplicateContact] = useState<Contact | null>(null);
     const [contactsCache, setContactsCache] = useState<Contact[]>([]);
+    const [suggestedUser, setSuggestedUser] = useState<User | null>(null);
+    const [isResolvingUser, setIsResolvingUser] = useState(false);
 
     useEffect(() => {
         if (isOpen) {
@@ -72,6 +75,48 @@ export const ContactModal: React.FC<ContactModalProps> = ({
             setDuplicateContact(null);
         }
     }, [phone, contactsCache, contactToEdit, checkDuplicates]);
+
+    // System User Lookup Effect
+    useEffect(() => {
+        const checkSystemUser = async () => {
+            // Reset if empty or editing
+            if (!phone || contactToEdit) {
+                setSuggestedUser(null);
+                return;
+            }
+
+            const rawInput = phone.replace(/\s/g, '');
+            const cleanedInput = cleanPhone(rawInput);
+            // Check if it's a valid length (e.g. 10 digits w/o country code = 10, or total length 12-13)
+            // cleanPhone returns +90..., so length > 10 is reasonable check
+            // "10 haneli numara(ülke kodu hariç)" -> usually 10 digits + 2/3 country code = 12/13
+            if (cleanedInput && cleanedInput.length >= 10) {
+                // Optimization: Don't search if we already found this specific number
+                if (suggestedUser && (suggestedUser.phoneNumber === cleanedInput || suggestedUser.primaryPhoneNumber === cleanedInput)) return;
+
+                setIsResolvingUser(true);
+                try {
+                    const found = await searchUserByPhone(cleanedInput);
+                    // Don't suggest self
+                    if (found && found.uid !== user?.uid) {
+                        setSuggestedUser(found);
+                    } else {
+                        setSuggestedUser(null);
+                    }
+                } catch (err) {
+                    console.error("User lookup failed", err);
+                    setSuggestedUser(null);
+                } finally {
+                    setIsResolvingUser(false);
+                }
+            } else {
+                setSuggestedUser(null);
+            }
+        };
+
+        const debounce = setTimeout(checkSystemUser, 500);
+        return () => clearTimeout(debounce);
+    }, [phone, user, contactToEdit, suggestedUser?.phoneNumber, suggestedUser?.primaryPhoneNumber]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -154,6 +199,32 @@ export const ContactModal: React.FC<ContactModalProps> = ({
                         {duplicateContact && (
                             <div className="text-red-500 text-sm mt-2 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800">
                                 <p>Bu numara zaten rehberinizde <strong>{duplicateContact.name}</strong> adıyla kayıtlı.</p>
+                            </div>
+                        )}
+
+                        {/* System User Suggestion */}
+                        {suggestedUser && !duplicateContact && (
+                            <div
+                                onClick={() => setName(suggestedUser.displayName)}
+                                className="mt-2 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-xl border border-blue-100 dark:border-blue-800 cursor-pointer hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors group"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <Avatar
+                                        name={suggestedUser.displayName}
+                                        photoURL={suggestedUser.photoURL}
+                                        uid={suggestedUser.uid}
+                                        status="system"
+                                        size="md"
+                                    />
+                                    <div className="flex-1">
+                                        <p className="text-sm text-blue-900 dark:text-blue-100 font-medium">
+                                            Bu numara DebtDert'te kayıtlı!
+                                        </p>
+                                        <p className="text-xs text-blue-700 dark:text-blue-300">
+                                            İsim olarak <strong>{suggestedUser.displayName}</strong> kullanmak için tıklayın.
+                                        </p>
+                                    </div>
+                                </div>
                             </div>
                         )}
                     </div>

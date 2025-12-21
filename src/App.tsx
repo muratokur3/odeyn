@@ -6,7 +6,6 @@ import { DebtDetail } from './pages/DebtDetail';
 import { Contacts } from './pages/Contacts';
 import { Settings } from './pages/Settings';
 import { BlockedUsers } from './pages/BlockedUsers';
-import { QuickDial } from './pages/QuickDial';
 import { Tools } from './pages/Tools';
 import { PersonDetail } from './pages/PersonDetail';
 import { PendingRequests } from './pages/PendingRequests';
@@ -51,7 +50,6 @@ function App() {
                   <Route path="/payables" element={<Dashboard />} />
                   <Route path="/settings/account" element={<AccountSettings />} />
                   <Route path="/debt/:id" element={<DebtDetail />} />
-                  <Route path="/dial" element={<QuickDial />} />
                   <Route path="/tools" element={<Tools />} />
                   <Route path="/person/:id" element={<PersonDetail />} />
                   <Route path="/contacts" element={<Contacts />} />

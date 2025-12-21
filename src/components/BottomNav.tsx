@@ -4,6 +4,7 @@ import { clsx } from 'clsx';
 import { useState } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { CreateDebtModal } from './CreateDebtModal';
+import { ContactModal } from './ContactModal';
 import { createDebt } from '../services/db';
 import { useContactName } from '../hooks/useContactName';
 import { useContacts } from '../hooks/useContacts';
@@ -14,6 +15,7 @@ export const BottomNav = () => {
     const navigate = useNavigate();
     const location = useLocation();
     const [showDebtModal, setShowDebtModal] = useState(false);
+    const [showContactModal, setShowContactModal] = useState(false);
     const { user } = useAuth(); // Need auth for creating debt
     const { contactsMap, contacts } = useContacts();
 
@@ -113,7 +115,14 @@ export const BottomNav = () => {
                 onClick: () => setShowDebtModal(true)
             }
             : (isContacts
-                ? { path: '/dial', icon: GripHorizontal, label: 'Hızlı İşlem', isCenter: true }
+                ? {
+                    path: '#add-contact',
+                    icon: Plus,
+                    label: 'Kişi Ekle',
+                    isCenter: true,
+                    isContactAction: true, // Special flag for Orange styling
+                    onClick: () => setShowContactModal(true)
+                }
                 : { path: '#create-debt', icon: Plus, label: 'Yeni Ekle', isCenter: true, onClick: () => setShowDebtModal(true) }
             ),
         { path: '/contacts', icon: BookUser, label: 'Rehber' },
@@ -144,7 +153,14 @@ export const BottomNav = () => {
                                     <div className={clsx(
                                         "p-4 rounded-full shadow-lg shadow-blue-500/40 text-white hover:scale-105 transition-transform active:scale-95 border-4 border-white dark:border-slate-900",
                                         // @ts-ignore
-                                        item.isContextAction ? "bg-purple-600 shadow-purple-500/40" : "bg-primary shadow-blue-500/40"
+                                        item.isContextAction
+                                            ? "bg-purple-600 shadow-purple-500/40"
+                                            : (
+                                                // @ts-ignore
+                                                item.isContactAction
+                                                    ? "bg-orange-500 shadow-orange-500/40"
+                                                    : "bg-primary shadow-blue-500/40"
+                                            )
                                     )}>
                                         <Icon size={28} />
                                     </div>
@@ -176,6 +192,15 @@ export const BottomNav = () => {
                 initialPhoneNumber={personId}
                 initialName={personName}
                 targetUser={targetUserObject}
+            />
+
+            <ContactModal
+                isOpen={showContactModal}
+                onClose={() => setShowContactModal(false)}
+                onSuccess={() => {
+                    // Maybe refresh contacts or just close?
+                    // Contacts page auto-listens so it should update.
+                }}
             />
         </>
     );

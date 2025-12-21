@@ -321,6 +321,19 @@ export const searchUserByPhone = async (phoneNumber: string): Promise<User | nul
     const uid = await resolvePhoneToUid(cleanPhone);
 
     if (!uid) {
+        // Fallback: Search in users collection directly (for legacy or unsynced data)
+        const q = query(
+            collection(db, 'users'),
+            where('phoneNumbers', 'array-contains', cleanPhone),
+            limit(1)
+        );
+        const snapshot = await getDocs(q);
+
+        if (!snapshot.empty) {
+            const userDoc = snapshot.docs[0];
+            return { uid: userDoc.id, ...userDoc.data() } as User;
+        }
+
         return null;
     }
 
