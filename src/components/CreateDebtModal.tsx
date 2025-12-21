@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, Search, ChevronDown, ChevronUp, Plus, Ban } from 'lucide-react';
+import { X, Search, ChevronDown, ChevronUp, Plus, Ban, RefreshCw } from 'lucide-react';
 import { Avatar } from './Avatar';
 import { SelectedUserCard } from './SelectedUserCard'; // Import moved to top
 
@@ -8,6 +8,7 @@ import { formatCurrency } from '../utils/format';
 import { formatPhoneForDisplay } from '../utils/phoneUtils'; // Added import
 import type { User, Contact, Installment } from '../types';
 import { useAuth } from '../hooks/useAuth';
+import { useContactSync } from '../hooks/useContactSync';
 import { Toggle } from './Toggle';
 import { Timestamp } from 'firebase/firestore';
 import clsx from 'clsx';
@@ -37,13 +38,15 @@ interface CreateDebtModalProps {
 import { useModal } from '../context/ModalContext';
 
 export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClose, onSubmit, initialPhoneNumber, targetUser, initialName: propInitialName }) => {
-    const { user, blockedUsers } = useAuth(); // Destructure blockedUsers
+    const { user, blockedUsers } = useAuth();
     const { showAlert } = useModal();
+    const { syncContacts, dismissSuggestion, userInfo, isSyncing, isSupported } = useContactSync();
 
     // Derived state for initialization
     const derivedInitialName = targetUser
         ? ('displayName' in targetUser ? targetUser.displayName : targetUser.name)
         : (propInitialName || '');
+
 
     // ... [rest unchanged]
 
@@ -434,6 +437,39 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                                 Borç Alıyorum
                             </button>
                         </div>
+
+
+                        {/* Sync Banner */}
+                        {step === 'SEARCH' && isSupported && !userInfo?.settings?.contactSyncEnabled && !userInfo?.settings?.suppressSyncSuggestion && (
+                            <div className="mb-4 p-3 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-xl border border-indigo-100 dark:border-indigo-800 flex flex-col gap-2 animate-in fade-in slide-in-from-top-2">
+                                <div className="flex items-center gap-2">
+                                    <div className="p-1.5 bg-indigo-100 dark:bg-indigo-900/40 rounded-full text-indigo-600 dark:text-indigo-400">
+                                        <RefreshCw size={16} className={isSyncing ? "animate-spin" : ""} />
+                                    </div>
+                                    <p className="text-sm text-indigo-900 dark:text-indigo-200 font-medium">
+                                        Arkadaşlarını kolayca bulmak için rehberini eşle.
+                                    </p>
+                                </div>
+                                <div className="flex gap-2 pl-9">
+                                    <button
+                                        type="button"
+                                        onClick={syncContacts}
+                                        disabled={isSyncing}
+                                        className="text-xs font-bold bg-indigo-600 text-white px-3 py-1.5 rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50"
+                                    >
+                                        {isSyncing ? 'Eşleniyor...' : 'Eşle'}
+                                    </button>
+                                    <button
+                                        type="button"
+                                        onClick={dismissSuggestion}
+                                        disabled={isSyncing}
+                                        className="text-xs font-medium text-indigo-600 dark:text-indigo-400 px-2 py-1.5 hover:bg-indigo-100 dark:hover:bg-indigo-800/30 rounded-lg transition-colors"
+                                    >
+                                        Bir Daha Sorma
+                                    </button>
+                                </div>
+                            </div>
+                        )}
 
                         {/* Flow Control */}
                         {isResolvingInitial ? (

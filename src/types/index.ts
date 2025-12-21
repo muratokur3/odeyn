@@ -13,8 +13,15 @@ export interface User {
     preferences?: {
         autoApproveDebt?: boolean;
         requireApproval?: boolean;
+        /** @deprecated Use settings.contactSyncEnabled instead */
         syncContacts?: boolean;
         defaultAllowPaymentAddition?: boolean;
+    };
+    settings?: {
+        contactSyncEnabled: boolean;
+        contactAccessGranted: boolean;
+        suppressSyncSuggestion: boolean;
+        lastSyncAt?: Timestamp;
     };
 }
 
