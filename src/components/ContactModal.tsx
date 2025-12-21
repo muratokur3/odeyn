@@ -174,20 +174,6 @@ export const ContactModal: React.FC<ContactModalProps> = ({
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div>
                         <label className="block text-sm font-medium text-text-secondary mb-1">
-                            Ad Soyad
-                        </label>
-                        <input
-                            type="text"
-                            value={name}
-                            onChange={(e) => setName(e.target.value)}
-                            className="w-full px-4 py-3 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary focus:ring-2 focus:ring-blue-900/50 outline-none transition-all"
-                            placeholder="Ad Soyad"
-                            required
-                            autoFocus
-                        />
-                    </div>
-                    <div>
-                        <label className="block text-sm font-medium text-text-secondary mb-1">
                             Telefon Numarası
                         </label>
                         <PhoneInput
@@ -227,6 +213,20 @@ export const ContactModal: React.FC<ContactModalProps> = ({
                                 </div>
                             </div>
                         )}
+                    </div>
+
+                    <div>
+                        <label className="block text-sm font-medium text-text-secondary mb-1">
+                            Ad Soyad
+                        </label>
+                        <input
+                            type="text"
+                            value={name}
+                            onChange={(e) => setName(e.target.value)}
+                            className="w-full px-4 py-3 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary focus:ring-2 focus:ring-blue-900/50 outline-none transition-all"
+                            placeholder="Ad Soyad"
+                            required
+                        />
                     </div>
                     <button
                         type="submit"
