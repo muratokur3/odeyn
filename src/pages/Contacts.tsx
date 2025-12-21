@@ -374,16 +374,21 @@ export const Contacts = () => {
                                                                 <Ban size={20} />
                                                             </button>
                                                         ) : (
-                                                            <button
-                                                                onClick={(e) => {
-                                                                    e.stopPropagation();
-                                                                    setSelectedContactForDebt(contact);
-                                                                    setShowDebtModal(true);
-                                                                }}
-                                                                className="p-2.5 rounded-full bg-blue-50 dark:bg-blue-900/10 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
-                                                            >
-                                                                <Wallet size={20} />
-                                                            </button>
+                                                            <div className="flex items-center gap-1">
+
+
+                                                                {/* Wallet Button (Always Visible) */}
+                                                                <button
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        setSelectedContactForDebt(contact);
+                                                                        setShowDebtModal(true);
+                                                                    }}
+                                                                    className="p-2.5 rounded-full bg-blue-50 dark:bg-blue-900/10 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+                                                                >
+                                                                    <Wallet size={20} />
+                                                                </button>
+                                                            </div>
                                                         )}
                                                     </div>
                                                 </div>
