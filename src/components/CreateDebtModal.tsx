@@ -3,7 +3,7 @@ import { X, Search, ChevronDown, ChevronUp, Plus, Ban, RefreshCw } from 'lucide-
 import { Avatar } from './Avatar';
 import { SelectedUserCard } from './SelectedUserCard'; // Import moved to top
 
-import { searchUserByPhone, searchContacts, fetchLastUsedName } from '../services/db';
+import { searchUserByPhone, searchContacts } from '../services/db';
 import { formatCurrency } from '../utils/format';
 import { formatPhoneForDisplay } from '../utils/phoneUtils'; // Added import
 import type { User, Contact, Installment } from '../types';

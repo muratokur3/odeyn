@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
+import { Timestamp } from 'firebase/firestore';
 import { PhoneInput } from './PhoneInput';
 import { useAuth } from '../hooks/useAuth'; // Assuming useAuth is available
 import { addContact, updateContact, getContacts } from '../services/db'; // Assuming services are available
@@ -89,11 +90,9 @@ export const ContactModal: React.FC<ContactModalProps> = ({
                 // Construct the contact object locally since addContact returns ID
                 resultContact = {
                     id: newId,
-                    userId: user.uid,
                     name,
                     phoneNumber: phone,
-                    createdAt: new Date(), // Approximation
-                    updatedAt: new Date(),
+                    createdAt: Timestamp.now(), // Approximation
                     linkedUserId: undefined
                     // We don't know linkedUserId immediately without re-fetching or complex logic,
                     // but for "Create Debt" immediate usage, name and phone are enough.
