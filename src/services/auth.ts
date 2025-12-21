@@ -126,8 +126,7 @@ export const ensureUserDocument = async (user: User) => {
 
             // Register in Registry
             if (clean) {
-                const hashedPhone = await hashPhone(clean);
-                const regRef = doc(db, 'phone_registry', hashedPhone);
+                const regRef = doc(db, 'phone_registry', clean);
                 await setDoc(regRef, {
                     uid: user.uid,
                     verifiedAt: serverTimestamp()
@@ -151,8 +150,7 @@ export const ensureUserDocument = async (user: User) => {
 
             // Register all owned phones
             for (const p of phones) {
-                const hashedPhone = await hashPhone(p);
-                const regRef = doc(db, 'phone_registry', hashedPhone);
+                const regRef = doc(db, 'phone_registry', p);
                 const regDoc = await getDoc(regRef);
                 if (!regDoc.exists()) {
                     await setDoc(regRef, {
@@ -179,8 +177,7 @@ export const checkUserExists = async (_phoneNumber: string): Promise<boolean> =>
         const clean = cleanPhoneNumber(_phoneNumber);
         if (!clean) return false;
 
-        const hashedPhone = await hashPhone(clean);
-        const registryRef = doc(db, 'phone_registry', hashedPhone);
+        const registryRef = doc(db, 'phone_registry', clean);
         const docSnap = await getDoc(registryRef);
         return docSnap.exists();
     } catch (error) {
