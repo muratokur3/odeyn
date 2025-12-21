@@ -1,11 +1,11 @@
 
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useDebts } from '../hooks/useDebts';
 import { useContactName } from '../hooks/useContactName';
-import { ArrowLeft, Phone, MessageCircle, Trash2, Edit2, X, MoreVertical, Ban } from 'lucide-react';
-import { searchUserByPhone, getContacts, updateContact } from '../services/db';
+import { ArrowLeft, Phone, MessageCircle, Trash2, Edit2, X, MoreVertical, Ban, UserPlus } from 'lucide-react';
+import { searchUserByPhone, getContacts, updateContact, addContact, deleteContact } from '../services/db';
 import { blockUser, isUserBlocked, unblockUser } from '../services/blockService'; // Import block services
 import { Avatar } from '../components/Avatar';
 import { DebtCard } from '../components/DebtCard';
@@ -103,17 +103,23 @@ export const PersonDetail = () => {
     */
 
     const handleDelete = async () => {
-        if (!user || !id) return;
+        if (!user || !contactId) return;
+
         const confirmed = await showConfirm(
-            "Kişi Silme",
-            "Bu kişiyi ve geçmişini silmek istediğinize emin misiniz?",
+            "Kişiyi Sil",
+            "Bu kişiyi rehberinizden silmek istediğinize emin misiniz? Geçmiş borç kayıtları silinmez.",
             "warning"
         );
         if (confirmed) {
-            // Deletion logic requires Contact ID. Since we often navigate by phone, 
-            // we'd need to lookup the contact doc by phone first.
-            // For now, only UI is implemented as per safety.
-            showAlert("Bilgi", "Kişi silme işlemi şu an sadece rehber listesinden yapılabilir.", "info");
+            try {
+                await deleteContact(user.uid, contactId);
+                showAlert("Başarılı", "Kişi rehberden silindi.", "success");
+                // Refresh to update UI (will show 'Add to Contacts' button)
+                setTimeout(() => window.location.reload(), 1000);
+            } catch (error) {
+                console.error("Delete contact error:", error);
+                showAlert("Hata", "Silme işlemi sırasında bir sorun oluştu.", "error");
+            }
         }
     };
 
@@ -124,7 +130,6 @@ export const PersonDetail = () => {
 
     // Check if user is registered and find Contact ID
     const [resolvedUid, setResolvedUid] = useState<string | null>(null);
-    const [verifying, setVerifying] = useState(true);
 
     useEffect(() => {
         const checkRegistrationAndContact = async () => {
@@ -164,9 +169,23 @@ export const PersonDetail = () => {
             // 2. Find Contact ID for editing AND for Modal Target
             try {
                 const myContacts = await getContacts(user.uid);
-                foundContactData = myContacts.find(c =>
-                    c.phoneNumber === cleanId || c.phoneNumber === id
-                );
+
+                if (id.length > 20) {
+                    // ID is UID
+                    // 1. Try to find by linkedUserId
+                    foundContactData = myContacts.find(c => c.linkedUserId === id);
+
+                    // 2. If not found, and we found a system user, try to match by their phone number
+                    if (!foundContactData && foundSysUser && foundSysUser.primaryPhoneNumber) {
+                        const userPhone = cleanPhoneNumber(foundSysUser.primaryPhoneNumber);
+                        foundContactData = myContacts.find(c => c.phoneNumber === userPhone);
+                    }
+                } else {
+                    // ID is Phone
+                    foundContactData = myContacts.find(c =>
+                        c.phoneNumber === cleanId || c.phoneNumber === id
+                    );
+                }
 
                 if (foundContactData) {
                     setContactId(foundContactData.id);
@@ -182,8 +201,6 @@ export const PersonDetail = () => {
                 }
             } catch (error) {
                 console.error("Error finding contact:", error);
-            } finally {
-                setVerifying(false);
             }
         };
         checkRegistrationAndContact();
@@ -191,21 +208,29 @@ export const PersonDetail = () => {
 
     const handleEditSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!user || !contactId) return;
+        if (!user) return; // contactId check removed to allow creation
 
         setSubmittingEdit(true);
         try {
-            await updateContact(user.uid, contactId, {
-                name: editName,
-                phoneNumber: editPhone
-            });
+            if (contactId) {
+                // Update existing
+                await updateContact(user.uid, contactId, {
+                    name: editName,
+                    phoneNumber: editPhone
+                });
+                showAlert("Başarılı", "Kişi bilgileri güncellendi.", "success");
+            } else {
+                // Add new contact
+                await addContact(user.uid, editName, editPhone);
+                showAlert("Başarılı", "Kişi rehbere eklendi.", "success");
+            }
+
             setShowEditModal(false);
-            showAlert("Başarılı", "Kişi bilgileri güncellendi.", "success");
-            // window.location.reload(); // Replacing reload with state update would be better but reloading is safe for now
+            // window.location.reload(); 
             setTimeout(() => window.location.reload(), 1500);
         } catch (error) {
             console.error(error);
-            showAlert("Hata", "Güncelleme başarısız oldu.", "error");
+            showAlert("Hata", "İşlem başarısız oldu.", "error");
         } finally {
             setSubmittingEdit(false);
         }
@@ -230,35 +255,7 @@ export const PersonDetail = () => {
         });
     }, [debts, id, user, resolvedUid]);
 
-    // Access Control Check
-    const denyAccessTriggered = useRef(false); // Guard to prevent multi-firing
 
-    useEffect(() => {
-        if (loading || verifying || !user || !id || denyAccessTriggered.current) return;
-
-        // Rules:
-        // 1. If UID -> Allowed (System User)
-        // 2. If Registered via Phone -> Allowed (System User)
-        // 3. If In Contacts -> Allowed
-        // 4. If Has Debt History -> Allowed
-
-        const isUID = id.length > 20;
-        const hasHistory = personDebts.length > 0;
-        const inContacts = !!contactId;
-
-        // "eğer kullanıcı kaydı yok ise uid yok ise ve nuamra ile arama yapılıyor ise"
-        // If NOT UID AND NOT Registered User
-        if (!isUID && !isRegisteredUser) {
-            if (!inContacts && !hasHistory) {
-                denyAccessTriggered.current = true;
-                (async () => {
-                    await showAlert("Sayfa Bulunamadı", "Aradığınız kişi veya kayıt bulunamadı. Ana sayfaya yönlendiriliyorsunuz.", "error");
-                    // Allow modal to close visually before navigating
-                    setTimeout(() => navigate('/'), 100);
-                })();
-            }
-        }
-    }, [loading, verifying, user, id, isRegisteredUser, contactId, personDebts.length, navigate, showAlert]);
 
     const personInfo = useMemo(() => {
         // Determine fallback name and phone from debts if available
@@ -398,33 +395,40 @@ export const PersonDetail = () => {
                                     <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)}></div>
                                     <div className="absolute right-0 top-full mt-2 w-48 bg-surface rounded-xl shadow-xl border border-border z-20 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
                                         {contactId ? (
-                                            <button
-                                                onClick={() => { setShowEditModal(true); setShowMenu(false); }}
-                                                className="w-full text-left px-4 py-3 text-sm font-medium text-text-primary hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2"
-                                            >
-                                                <Edit2 size={16} /> Düzenle
-                                            </button>
+                                            <>
+                                                <button
+                                                    onClick={() => { setShowEditModal(true); setShowMenu(false); }}
+                                                    className="w-full text-left px-4 py-3 text-sm font-medium text-text-primary hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2"
+                                                >
+                                                    <Edit2 size={16} /> Düzenle
+                                                </button>
+                                                <div className="h-px bg-border my-0"></div>
+                                                <button
+                                                    onClick={() => { handleBlockToggle(); setShowMenu(false); }}
+                                                    className="w-full text-left px-4 py-3 text-sm font-medium text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/10 flex items-center gap-2"
+                                                >
+                                                    <Ban size={16} /> {isBlocked ? 'Engeli Kaldır' : 'Kullanıcıyı Engelle'}
+                                                </button>
+                                                <button
+                                                    onClick={() => { handleDelete(); setShowMenu(false); }}
+                                                    className="w-full text-left px-4 py-3 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/10 flex items-center gap-2"
+                                                >
+                                                    <Trash2 size={16} /> Kişiyi Sil
+                                                </button>
+                                            </>
                                         ) : (
                                             <button
-                                                disabled
-                                                className="w-full text-left px-4 py-3 text-sm font-medium text-text-secondary opacity-50 cursor-not-allowed flex items-center gap-2"
+                                                onClick={() => {
+                                                    setEditName(personInfo.name); // Pre-fill name
+                                                    setEditPhone(personInfo.phone || ''); // Pre-fill phone
+                                                    setShowEditModal(true);
+                                                    setShowMenu(false);
+                                                }}
+                                                className="w-full text-left px-4 py-3 text-sm font-medium text-blue-600 hover:bg-blue-50 dark:hover:bg-blue-900/10 flex items-center gap-2"
                                             >
-                                                <Edit2 size={16} /> Düzenle
+                                                <UserPlus size={16} /> Rehbere Ekle
                                             </button>
                                         )}
-                                        <div className="h-px bg-border my-0"></div>
-                                        <button
-                                            onClick={() => { handleBlockToggle(); setShowMenu(false); }}
-                                            className="w-full text-left px-4 py-3 text-sm font-medium text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/10 flex items-center gap-2"
-                                        >
-                                            <Ban size={16} /> {isBlocked ? 'Engeli Kaldır' : 'Kullanıcıyı Engelle'}
-                                        </button>
-                                        <button
-                                            onClick={() => { handleDelete(); setShowMenu(false); }}
-                                            className="w-full text-left px-4 py-3 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/10 flex items-center gap-2"
-                                        >
-                                            <Trash2 size={16} /> Kişiyi Sil
-                                        </button>
                                     </div>
                                 </>
                             )}
@@ -497,7 +501,7 @@ export const PersonDetail = () => {
                         <div className="bg-surface rounded-2xl w-full max-w-sm p-6 shadow-xl animate-in fade-in zoom-in duration-200 border border-slate-700">
                             <div className="flex items-center justify-between mb-4">
                                 <h2 className="text-xl font-bold text-text-primary">
-                                    Kişiyi Düzenle
+                                    {contactId ? "Kişiyi Düzenle" : "Rehbere Ekle"}
                                 </h2>
                                 <button onClick={() => setShowEditModal(false)} className="text-text-secondary hover:text-text-primary">
                                     <X size={24} />
