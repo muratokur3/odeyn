@@ -12,6 +12,7 @@ import { DebtCard } from '../components/DebtCard';
 import { TransactionList } from '../components/TransactionList';
 import { QuickTransactionModal } from '../components/QuickTransactionModal';
 import { CreateDebtModal } from '../components/CreateDebtModal';
+import { UserBalanceHeader } from '../components/UserBalanceHeader';
 import { PhoneInput } from '../components/PhoneInput';
 import { formatCurrency } from '../utils/format';
 import { convertToTRY, fetchRates, type CurrencyRates } from '../services/currency';
@@ -667,30 +668,12 @@ export const PersonDetail = () => {
                     </div>
                 )}
 
-                {/* Summary Card */}
-                <div className="bg-surface p-6 rounded-2xl shadow-sm border border-border">
-                    <p className="text-sm text-text-secondary mb-1 text-center">Net Durum (TRY Karşılığı)</p>
-                    <h2 className={clsx(
-                        "text-3xl font-bold text-center mb-6",
-                        totals.net > 0 ? "text-green-600" : totals.net < 0 ? "text-red-600" : "text-text-secondary"
-                    )}>
-                        {formatCurrency(Math.abs(totals.net), 'TRY')}
-                        <span className="text-sm font-normal text-text-secondary ml-2 block mt-1">
-                            {totals.net > 0 ? "Alacaklısınız" : totals.net < 0 ? "Vereceklisiniz" : "Hesap Denk"}
-                        </span>
-                    </h2>
-
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-green-50 dark:bg-green-900/10 p-3 rounded-xl border border-green-100 dark:border-green-900/20 text-center">
-                            <p className="text-xs text-green-700 dark:text-green-400 mb-1">Toplam Alacak</p>
-                            <p className="font-bold text-green-700 dark:text-green-400">{formatCurrency(totals.receivables, 'TRY')}</p>
-                        </div>
-                        <div className="bg-red-50 dark:bg-red-900/10 p-3 rounded-xl border border-red-100 dark:border-red-900/20 text-center">
-                            <p className="text-xs text-red-700 dark:text-red-400 mb-1">Toplam Verecek</p>
-                            <p className="font-bold text-red-700 dark:text-red-400">{formatCurrency(totals.payables, 'TRY')}</p>
-                        </div>
-                    </div>
-                </div>
+                {/* Multi-Currency Balance Header */}
+                <UserBalanceHeader
+                    transactions={transactions}
+                    specialDebts={personDebts}
+                    currentUserId={user?.uid || ''}
+                />
 
                 {/* ========== SWIPEABLE DUAL-VIEW ARCHITECTURE ========== */}
 
@@ -733,20 +716,6 @@ export const PersonDetail = () => {
                 >
                     {/* View 1: Akış (Stream) */}
                     <div className="snap-start shrink-0 w-full px-1 space-y-4">
-                        {/* Stream Balance Card */}
-                        <div className="bg-gradient-to-br from-purple-50 to-purple-100/50 dark:from-purple-900/20 dark:to-purple-800/10 p-5 rounded-2xl shadow-sm border border-purple-200 dark:border-purple-800">
-                            <p className="text-sm text-purple-700 dark:text-purple-300 mb-1">Basit Bakiye</p>
-                            <h2 className={clsx(
-                                "text-3xl font-bold",
-                                cariBalance > 0 ? "text-green-600" : cariBalance < 0 ? "text-red-600" : "text-text-secondary"
-                            )}>
-                                {formatCurrency(Math.abs(cariBalance), 'TRY')}
-                            </h2>
-                            <p className="text-sm text-purple-600 dark:text-purple-400 mt-1">
-                                {cariBalance > 0 ? "Alacaklısınız" : cariBalance < 0 ? "Vereceklisiniz" : "Hesap Denk"}
-                            </p>
-                        </div>
-
                         {/* Transaction List */}
                         <div className="space-y-3">
                             <h3 className="font-semibold text-text-primary px-1">Cari Akışı</h3>
@@ -777,20 +746,6 @@ export const PersonDetail = () => {
 
                     {/* View 2: Özel İşlemler (Special Transactions) */}
                     <div className="snap-start shrink-0 w-full px-1 space-y-4">
-                        {/* Special Balance Card */}
-                        <div className="bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-900/20 dark:to-blue-800/10 p-5 rounded-2xl shadow-sm border border-blue-200 dark:border-blue-800">
-                            <p className="text-sm text-blue-700 dark:text-blue-300 mb-1">Özel Bakiye</p>
-                            <h2 className={clsx(
-                                "text-3xl font-bold",
-                                specialBalance > 0 ? "text-green-600" : specialBalance < 0 ? "text-red-600" : "text-text-secondary"
-                            )}>
-                                {formatCurrency(Math.abs(specialBalance), 'TRY')}
-                            </h2>
-                            <p className="text-sm text-blue-600 dark:text-blue-400 mt-1">
-                                {specialBalance > 0 ? "Alacaklısınız" : specialBalance < 0 ? "Vereceklisiniz" : "Hesap Denk"}
-                            </p>
-                        </div>
-
                         {/* Debt List */}
                         <div className="space-y-3">
                             <h3 className="font-semibold text-text-primary px-1 flex items-center gap-2">
