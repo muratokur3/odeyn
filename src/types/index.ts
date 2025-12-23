@@ -41,7 +41,10 @@ export interface Contact {
     lastActorId?: string;
 }
 
-export type DebtStatus = 'PENDING' | 'ACTIVE' | 'PARTIALLY_PAID' | 'PAID' | 'REJECTED' | 'HIDDEN' | 'REJECTED_BY_RECEIVER' | 'AUTO_HIDDEN' | 'APPROVED';
+export type DebtStatus = 'PENDING' | 'ACTIVE' | 'PARTIALLY_PAID' | 'PAID' | 'REJECTED' | 'HIDDEN' | 'REJECTED_BY_RECEIVER' | 'AUTO_HIDDEN' | 'APPROVED' | 'ARCHIVED';
+
+// Debt Type for Dual-Layer Architecture
+export type DebtType = 'ONE_TIME' | 'INSTALLMENT' | 'LEDGER';
 
 export interface Installment {
     id: string;
@@ -76,6 +79,9 @@ export interface Debt {
     // New fields for Unilateral Logic
     rejectedAt?: Timestamp;
     isMuted?: boolean;
+
+    // Dual-Layer Architecture
+    type?: DebtType; // Default: 'ONE_TIME', 'LEDGER' for shared stream
 }
 
 export type PaymentLogType = 'INITIAL_CREATION' | 'PAYMENT' | 'NOTE_ADDED' | 'PAYMENT_DECLARATION';

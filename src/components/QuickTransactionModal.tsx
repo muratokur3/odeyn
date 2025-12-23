@@ -5,7 +5,7 @@
 
 import { useState } from 'react';
 import { X, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
-import { addTransaction } from '../services/transactionService';
+import { addLedgerTransaction, getOrCreateLedger } from '../services/transactionService';
 import { useAuth } from '../hooks/useAuth';
 import { useModal } from '../context/ModalContext';
 import clsx from 'clsx';
@@ -14,15 +14,24 @@ import type { TransactionDirection } from '../types';
 interface QuickTransactionModalProps {
     isOpen: boolean;
     onClose: () => void;
-    contactId: string;
+    ledgerId: string | null; // Shared ledger ID
     contactName: string;
+    // For auto-creating ledger if needed
+    userId?: string;
+    userName?: string;
+    otherPartyId?: string;
+    otherPartyName?: string;
 }
 
 export const QuickTransactionModal: React.FC<QuickTransactionModalProps> = ({
     isOpen,
     onClose,
-    contactId,
-    contactName
+    ledgerId,
+    contactName,
+    userId,
+    userName,
+    otherPartyId,
+    otherPartyName
 }) => {
     const { user } = useAuth();
     const { showAlert } = useModal();
@@ -34,7 +43,7 @@ export const QuickTransactionModal: React.FC<QuickTransactionModalProps> = ({
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!user || !contactId) return;
+        if (!user) return;
 
         const numAmount = parseFloat(amount.replace(',', '.'));
         if (isNaN(numAmount) || numAmount <= 0) {
@@ -44,9 +53,20 @@ export const QuickTransactionModal: React.FC<QuickTransactionModalProps> = ({
 
         setSubmitting(true);
         try {
-            await addTransaction(
+            // Get or create ledger if needed
+            let targetLedgerId = ledgerId;
+            if (!targetLedgerId && userId && userName && otherPartyId && otherPartyName) {
+                targetLedgerId = await getOrCreateLedger(userId, userName, otherPartyId, otherPartyName);
+            }
+
+            if (!targetLedgerId) {
+                showAlert("Hata", "Defter bulunamadı.", "error");
+                return;
+            }
+
+            await addLedgerTransaction(
+                targetLedgerId,
                 user.uid,
-                contactId,
                 numAmount,
                 direction,
                 description.trim() || undefined

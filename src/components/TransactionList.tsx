@@ -7,7 +7,7 @@ import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { ArrowUpRight, ArrowDownLeft, Trash2 } from 'lucide-react';
 import { formatCurrency } from '../utils/format';
-import { deleteTransaction } from '../services/transactionService';
+import { deleteLedgerTransaction } from '../services/transactionService';
 import { useAuth } from '../hooks/useAuth';
 import { useModal } from '../context/ModalContext';
 import clsx from 'clsx';
@@ -15,13 +15,13 @@ import type { Transaction } from '../types';
 
 interface TransactionListProps {
     transactions: Transaction[];
-    contactId: string;
+    ledgerId: string; // Shared ledger ID
     onRefresh?: () => void;
 }
 
 export const TransactionList: React.FC<TransactionListProps> = ({
     transactions,
-    contactId
+    ledgerId
 }) => {
     const { user } = useAuth();
     const { showConfirm, showAlert } = useModal();
@@ -37,7 +37,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
         
         if (confirmed) {
             try {
-                await deleteTransaction(user.uid, contactId, txId);
+                await deleteLedgerTransaction(ledgerId, txId);
                 showAlert("Silindi", "İşlem silindi.", "success");
             } catch (error) {
                 console.error(error);

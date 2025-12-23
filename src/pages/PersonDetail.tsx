@@ -22,7 +22,7 @@ import clsx from 'clsx';
 import { useModal } from '../context/ModalContext';
 
 import type { User, Contact } from '../types'; // Added import
-import { useTransactions } from '../hooks/useTransactions';
+import { useLedger } from '../hooks/useLedger';
 
 export const PersonDetail = () => {
     const { id } = useParams<{ id: string }>(); // This can be a userId or a contactId (phone number)
@@ -53,8 +53,9 @@ export const PersonDetail = () => {
     const [isBlocked, setIsBlocked] = useState(false); // Block state
     const [isMuted, setIsMuted] = useState(false);
 
-    // NEW: Transactions Hook (Cari Hesap)
-    const { transactions, loading: txLoading, cariBalance } = useTransactions(user?.uid, contactId || undefined);
+    // Resolved other party info (for ledger)
+    const [resolvedOtherPartyId, setResolvedOtherPartyId] = useState<string | undefined>(undefined);
+    const [resolvedOtherPartyName, setResolvedOtherPartyName] = useState<string>('');
 
 
     // NEW: Handle scroll snap detection
@@ -357,12 +358,15 @@ export const PersonDetail = () => {
         }
     };
 
-    // Filter debts for this person
+    // Filter debts for this person (EXCLUDE LEDGER type - those go to Stream view)
     const personDebts = useMemo(() => {
         if (!debts || !id || !user) return [];
         const cleanId = cleanPhoneNumber(id);
 
         return debts.filter(d => {
+            // EXCLUDE LEDGER type - those are for the Stream view
+            if (d.type === 'LEDGER') return false;
+            
             const isLender = d.lenderId === user.uid;
             const otherId = isLender ? d.borrowerId : d.lenderId;
             const cleanOtherId = cleanPhoneNumber(otherId);
@@ -479,6 +483,22 @@ export const PersonDetail = () => {
             phone: phone.length > 20 ? '' : phone
         };
     }, [personDebts, user, id, contactId, editName, editPhone, resolveName, targetUserObject, location.state]);
+
+    // SHARED LEDGER: Get the ledger ID for this person
+    const otherPartyId = getTargetUid() || id;
+    const { 
+        ledger, 
+        ledgerId, 
+        transactions, 
+        loading: txLoading, 
+        balance: cariBalance,
+        createLedger 
+    } = useLedger(
+        user?.uid,
+        user?.displayName,
+        otherPartyId || undefined,
+        personInfo.name
+    );
 
     // Calculate Totals with this person
     const totals = useMemo(() => {
@@ -732,11 +752,17 @@ export const PersonDetail = () => {
                             <h3 className="font-semibold text-text-primary px-1">Cari Akışı</h3>
                             {txLoading ? (
                                 <div className="text-center py-8 text-text-secondary">Yükleniyor...</div>
-                            ) : (
+                            ) : ledgerId ? (
                                 <TransactionList
                                     transactions={transactions}
-                                    contactId={contactId || ''}
+                                    ledgerId={ledgerId}
                                 />
+                            ) : (
+                                <div className="text-center py-12 text-text-secondary">
+                                    <div className="text-4xl mb-3 opacity-50">💸</div>
+                                    <p className="font-medium">Henüz defter oluşturulmadı</p>
+                                    <p className="text-sm mt-1 opacity-70">İlk işlemi ekleyerek defteri başlatın</p>
+                                </div>
                             )}
                         </div>
 
@@ -816,8 +842,12 @@ export const PersonDetail = () => {
             <QuickTransactionModal
                 isOpen={showQuickTransactionModal}
                 onClose={() => setShowQuickTransactionModal(false)}
-                contactId={contactId || ''}
+                ledgerId={ledgerId}
                 contactName={personInfo.name}
+                userId={user?.uid}
+                userName={user?.displayName}
+                otherPartyId={otherPartyId || undefined}
+                otherPartyName={personInfo.name}
             />
 
             {/* Create Debt Modal (for Özel İşlemler) */}

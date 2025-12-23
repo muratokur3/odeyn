@@ -81,6 +81,15 @@ service cloud.firestore {
         allow read: if request.auth != null && request.auth.uid in get(/databases/$(database)/documents/debts/$(debtId)).data.participants;
         allow create: if request.auth != null && request.auth.uid in get(/databases/$(database)/documents/debts/$(debtId)).data.participants;
       }
+      
+      // LEDGER Transactions subcollection (Shared Cari Hesap)
+      // Both participants have full read/write access for LEDGER type
+      match /transactions/{txId} {
+        allow read: if request.auth != null && request.auth.uid in get(/databases/$(database)/documents/debts/$(debtId)).data.participants;
+        allow create: if request.auth != null && request.auth.uid in get(/databases/$(database)/documents/debts/$(debtId)).data.participants;
+        // Only the creator of the transaction can delete it
+        allow delete: if request.auth != null && resource.data.createdBy == request.auth.uid;
+      }
     }
 
     match /phone_registry/{hashedPhone} {
