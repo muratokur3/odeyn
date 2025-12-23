@@ -103,3 +103,18 @@ export interface DisplayProfile {
     phoneNumber: string;      // The immutable anchor
     uid?: string;             // The system link for live updates
 }
+
+// ======= DUAL-LAYER FINANCIAL ARCHITECTURE =======
+// Cari Hesap (Current Account) - Simple money flow
+export type TransactionDirection = 'OUTGOING' | 'INCOMING';
+
+export interface Transaction {
+    id: string;
+    amount: number;
+    description?: string;
+    direction: TransactionDirection; // OUTGOING = I gave/paid, INCOMING = I took/received
+    createdAt: Timestamp;
+    createdBy: string; // UID of who created this entry
+    type: 'SIMPLE';
+}
+

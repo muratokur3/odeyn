@@ -1,14 +1,16 @@
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useDebts } from '../hooks/useDebts';
 import { useContactName } from '../hooks/useContactName';
-import { ArrowLeft, Phone, MessageCircle, Trash2, Edit2, X, MoreVertical, Ban, UserPlus, VolumeX, Volume2 } from 'lucide-react';
+import { ArrowLeft, Phone, MessageCircle, Trash2, Edit2, X, MoreVertical, Ban, UserPlus, VolumeX, Volume2, FolderOpen, Plus, ChevronRight, ChevronLeft } from 'lucide-react';
 import { searchUserByPhone, getContacts, updateContact, addContact, deleteContact, muteUser, unmuteUser, markContactAsRead } from '../services/db';
 import { blockUser, isUserBlocked, unblockUser } from '../services/blockService'; // Import block services
 import { Avatar } from '../components/Avatar';
 import { DebtCard } from '../components/DebtCard';
+import { TransactionList } from '../components/TransactionList';
+import { QuickTransactionModal } from '../components/QuickTransactionModal';
 import { PhoneInput } from '../components/PhoneInput';
 import { formatCurrency } from '../utils/format';
 import { convertToTRY, fetchRates, type CurrencyRates } from '../services/currency';
@@ -19,6 +21,7 @@ import clsx from 'clsx';
 import { useModal } from '../context/ModalContext';
 
 import type { User, Contact } from '../types'; // Added import
+import { useTransactions } from '../hooks/useTransactions';
 
 export const PersonDetail = () => {
     const { id } = useParams<{ id: string }>(); // This can be a userId or a contactId (phone number)
@@ -38,12 +41,43 @@ export const PersonDetail = () => {
     const [contactId, setContactId] = useState<string | null>(null);
     const [lastReadTimestamp, setLastReadTimestamp] = useState<number | null>(null); // New State
     const [showEditModal, setShowEditModal] = useState(false);
+    const [showQuickTransactionModal, setShowQuickTransactionModal] = useState(false); // NEW: Quick Transaction Modal
+    const [activeViewIndex, setActiveViewIndex] = useState(0); // NEW: 0 = Akış (Stream), 1 = Özel İşlemler (Special)
+    const scrollContainerRef = useRef<HTMLDivElement>(null); // NEW: Scroll container ref
     const [editName, setEditName] = useState('');
     const [editPhone, setEditPhone] = useState('');
     const [submittingEdit, setSubmittingEdit] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
     const [isBlocked, setIsBlocked] = useState(false); // Block state
     const [isMuted, setIsMuted] = useState(false);
+
+    // NEW: Transactions Hook (Cari Hesap)
+    const { transactions, loading: txLoading, cariBalance } = useTransactions(user?.uid, contactId || undefined);
+
+
+    // NEW: Handle scroll snap detection
+    const handleScroll = () => {
+        const container = scrollContainerRef.current;
+        if (!container) return;
+        const scrollLeft = container.scrollLeft;
+        const viewWidth = container.offsetWidth;
+        const newIndex = Math.round(scrollLeft / viewWidth);
+        if (newIndex !== activeViewIndex) {
+            setActiveViewIndex(newIndex);
+        }
+    };
+
+    // NEW: Programmatic scroll to view
+    const scrollToView = (index: number) => {
+        const container = scrollContainerRef.current;
+        if (!container) return;
+        container.scrollTo({
+            left: index * container.offsetWidth,
+            behavior: 'smooth'
+        });
+    };
+
+
 
     // Helper to get target UID safely
     const getTargetUid = () => {
@@ -344,6 +378,21 @@ export const PersonDetail = () => {
         });
     }, [debts, id, user, resolvedUid]);
 
+    // Calculate Special Balance (from debts) - must be after personDebts definition
+    const specialBalance = useMemo(() => {
+        if (!rates || !personDebts.length) return 0;
+        let total = 0;
+        personDebts.forEach(debt => {
+            if (debt.status === 'PAID' || debt.status === 'REJECTED') return;
+            const amountInTRY = convertToTRY(debt.remainingAmount, debt.currency, rates);
+            if (debt.lenderId === user?.uid) {
+                total += amountInTRY;
+            } else {
+                total -= amountInTRY;
+            }
+        });
+        return total;
+    }, [personDebts, rates, user]);
 
 
     const personInfo = useMemo(() => {
@@ -604,39 +653,177 @@ export const PersonDetail = () => {
                     </div>
                 </div>
 
-                {/* Debt List */}
-                <div className="space-y-3">
-                    <h3 className="font-semibold text-text-primary px-1">Hareketler</h3>
-                    {personDebts.length > 0 ? (
-                        personDebts.map(debt => {
-                            const isMyEntry = debt.createdBy === user?.uid;
+                {/* ========== SWIPEABLE DUAL-VIEW ARCHITECTURE ========== */}
 
-                            // Check if it's new (created AFTER my last read time)
-                            // Only highlight if I didn't create it (incoming)
-                            const isNew = !isMyEntry && lastReadTimestamp && debt.createdAt && debt.createdAt.toMillis() > lastReadTimestamp;
+                {/* View Tabs */}
+                <div className="flex items-center justify-center gap-4 mb-4">
+                    <button
+                        onClick={() => scrollToView(0)}
+                        className={clsx(
+                            "px-4 py-2 rounded-full text-sm font-medium transition-all",
+                            activeViewIndex === 0
+                                ? "bg-purple-600 text-white shadow-md"
+                                : "bg-slate-100 dark:bg-slate-800 text-text-secondary hover:bg-slate-200 dark:hover:bg-slate-700"
+                        )}
+                    >
+                        Akış
+                    </button>
+                    <button
+                        onClick={() => scrollToView(1)}
+                        className={clsx(
+                            "px-4 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-1.5",
+                            activeViewIndex === 1
+                                ? "bg-blue-600 text-white shadow-md"
+                                : "bg-slate-100 dark:bg-slate-800 text-text-secondary hover:bg-slate-200 dark:hover:bg-slate-700"
+                        )}
+                    >
+                        <FolderOpen size={14} />
+                        Özel İşlemler
+                        {personDebts.length > 0 && (
+                            <span className="bg-white/20 dark:bg-black/20 px-1.5 py-0.5 rounded text-xs">{personDebts.length}</span>
+                        )}
+                    </button>
+                </div>
 
-                            return (
-                                <div key={debt.id} className={clsx("flex w-full", isMyEntry ? "justify-end" : "justify-start")}>
-                                    <div className="w-[85%]">
-                                        <DebtCard
-                                            debt={debt}
-                                            isNew={!!isNew}
-                                            currentUserId={user?.uid || ''}
-                                            onClick={() => navigate(`/debt/${debt.id}`)}
-                                            disabled={isBlocked}
-                                            variant="chat"
-                                        />
-                                    </div>
-                                </div>
-                            );
-                        })
-                    ) : (
-                        <div className="text-center py-10 text-text-secondary opacity-60">
-                            <p>Henüz kayıtlı işlem yok.</p>
+                {/* Swipeable Container */}
+                <div
+                    ref={scrollContainerRef}
+                    onScroll={handleScroll}
+                    className="flex overflow-x-auto snap-x snap-mandatory scroll-smooth hide-scrollbar"
+                    style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                >
+                    {/* View 1: Akış (Stream) */}
+                    <div className="snap-start shrink-0 w-full px-1 space-y-4">
+                        {/* Stream Balance Card */}
+                        <div className="bg-gradient-to-br from-purple-50 to-purple-100/50 dark:from-purple-900/20 dark:to-purple-800/10 p-5 rounded-2xl shadow-sm border border-purple-200 dark:border-purple-800">
+                            <p className="text-sm text-purple-700 dark:text-purple-300 mb-1">Basit Bakiye</p>
+                            <h2 className={clsx(
+                                "text-3xl font-bold",
+                                cariBalance > 0 ? "text-green-600" : cariBalance < 0 ? "text-red-600" : "text-text-secondary"
+                            )}>
+                                {formatCurrency(Math.abs(cariBalance), 'TRY')}
+                            </h2>
+                            <p className="text-sm text-purple-600 dark:text-purple-400 mt-1">
+                                {cariBalance > 0 ? "Alacaklısınız" : cariBalance < 0 ? "Vereceklisiniz" : "Hesap Denk"}
+                            </p>
                         </div>
-                    )}
+
+                        {/* Transaction List */}
+                        <div className="space-y-3">
+                            <h3 className="font-semibold text-text-primary px-1">Cari Akışı</h3>
+                            {txLoading ? (
+                                <div className="text-center py-8 text-text-secondary">Yükleniyor...</div>
+                            ) : (
+                                <TransactionList
+                                    transactions={transactions}
+                                    contactId={contactId || ''}
+                                />
+                            )}
+                        </div>
+
+                        {/* Swipe Hint (only if there are special transactions) */}
+                        {personDebts.length > 0 && activeViewIndex === 0 && (
+                            <div className="fixed right-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 text-blue-500 opacity-50 animate-pulse pointer-events-none">
+                                <ChevronRight size={24} />
+                                <span className="text-[10px] font-medium rotate-90 origin-center whitespace-nowrap">Özel İşlemler</span>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* View 2: Özel İşlemler (Special Transactions) */}
+                    <div className="snap-start shrink-0 w-full px-1 space-y-4">
+                        {/* Special Balance Card */}
+                        <div className="bg-gradient-to-br from-blue-50 to-blue-100/50 dark:from-blue-900/20 dark:to-blue-800/10 p-5 rounded-2xl shadow-sm border border-blue-200 dark:border-blue-800">
+                            <p className="text-sm text-blue-700 dark:text-blue-300 mb-1">Özel Bakiye</p>
+                            <h2 className={clsx(
+                                "text-3xl font-bold",
+                                specialBalance > 0 ? "text-green-600" : specialBalance < 0 ? "text-red-600" : "text-text-secondary"
+                            )}>
+                                {formatCurrency(Math.abs(specialBalance), 'TRY')}
+                            </h2>
+                            <p className="text-sm text-blue-600 dark:text-blue-400 mt-1">
+                                {specialBalance > 0 ? "Alacaklısınız" : specialBalance < 0 ? "Vereceklisiniz" : "Hesap Denk"}
+                            </p>
+                        </div>
+
+                        {/* Debt List */}
+                        <div className="space-y-3">
+                            <h3 className="font-semibold text-text-primary px-1 flex items-center gap-2">
+                                <FolderOpen size={16} />
+                                Özel İşlemler
+                            </h3>
+                            {personDebts.length > 0 ? (
+                                <div className="space-y-2">
+                                    {personDebts.map(debt => {
+                                        const isMyEntry = debt.createdBy === user?.uid;
+                                        const isNew = !isMyEntry && lastReadTimestamp && debt.createdAt && debt.createdAt.toMillis() > lastReadTimestamp;
+                                        return (
+                                            <div key={debt.id} className={clsx("flex w-full", isMyEntry ? "justify-end" : "justify-start")}>
+                                                <div className="w-[85%]">
+                                                    <DebtCard
+                                                        debt={debt}
+                                                        isNew={!!isNew}
+                                                        currentUserId={user?.uid || ''}
+                                                        onClick={() => navigate(`/debt/${debt.id}`)}
+                                                        disabled={isBlocked}
+                                                        variant="chat"
+                                                    />
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            ) : (
+                                <div className="text-center py-12 text-text-secondary">
+                                    <FolderOpen size={32} className="mx-auto mb-3 opacity-40" />
+                                    <p className="font-medium">Özel işlem yok</p>
+                                    <p className="text-sm mt-1 opacity-70">Taksitli veya karmaşık borçlar burada görünecek</p>
+                                </div>
+                            )}
+                        </div>
+
+                        {/* Back Hint */}
+                        {activeViewIndex === 1 && (
+                            <div className="fixed left-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 text-purple-500 opacity-50 animate-pulse pointer-events-none">
+                                <ChevronLeft size={24} />
+                                <span className="text-[10px] font-medium -rotate-90 origin-center whitespace-nowrap">Akış</span>
+                            </div>
+                        )}
+                    </div>
                 </div>
             </main>
+
+            {/* Context-Aware FAB */}
+            {contactId && !isBlocked && (
+                <button
+                    onClick={() => {
+                        if (activeViewIndex === 0) {
+                            // Stream view -> Quick Transaction
+                            setShowQuickTransactionModal(true);
+                        } else {
+                            // Special view -> Navigate to add debt (or open debt modal)
+                            navigate('/debt/new', { state: { preselectedContact: { id: contactId, name: personInfo.name, phone: personInfo.phone } } });
+                        }
+                    }}
+                    className={clsx(
+                        "fixed bottom-24 right-6 w-14 h-14 rounded-full text-white shadow-xl flex items-center justify-center transition-all active:scale-95 z-40",
+                        activeViewIndex === 0
+                            ? "bg-purple-600 hover:bg-purple-700" // Stream: Purple
+                            : "bg-blue-600 hover:bg-blue-700"     // Special: Blue
+                    )}
+                    title={activeViewIndex === 0 ? "Hızlı İşlem Ekle" : "Özel İşlem Ekle"}
+                >
+                    <Plus size={28} />
+                </button>
+            )}
+
+            {/* Quick Transaction Modal */}
+            <QuickTransactionModal
+                isOpen={showQuickTransactionModal}
+                onClose={() => setShowQuickTransactionModal(false)}
+                contactId={contactId || ''}
+                contactName={personInfo.name}
+            />
 
             {/* Edit Modal */}
             {
