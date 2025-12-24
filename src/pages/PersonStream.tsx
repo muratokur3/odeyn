@@ -8,13 +8,12 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useDebts } from '../hooks/useDebts';
 import { useContactName } from '../hooks/useContactName';
-import { ArrowLeft, Plus, Minus, FolderOpen, ChevronRight, ChevronLeft } from 'lucide-react';
+import { ArrowLeft, FolderOpen, ChevronRight, ChevronLeft } from 'lucide-react';
 import { searchUserByPhone, getContacts, markContactAsRead, createDebt } from '../services/db';
 import { isUserBlocked } from '../services/blockService';
 import { Avatar } from '../components/Avatar';
 import { TransactionList } from '../components/TransactionList';
 import { DebtCard } from '../components/DebtCard';
-import { QuickTransactionModal } from '../components/QuickTransactionModal';
 import { CreateDebtModal } from '../components/CreateDebtModal';
 import { formatCurrency } from '../utils/format';
 import { cleanPhone as cleanPhoneNumber } from '../utils/phoneUtils';
@@ -42,7 +41,6 @@ export const PersonStream = () => {
     const [targetUserObject, setTargetUserObject] = useState<User | Contact | null>(null);
     const [contactId, setContactId] = useState<string | null>(null);
     const [isBlocked, setIsBlocked] = useState(false);
-    const [showQuickModal, setShowQuickModal] = useState(false);
     const [showCreateDebtModal, setShowCreateDebtModal] = useState(false);
     const [activeViewIndex, setActiveViewIndex] = useState(0); // 0 = Stream, 1 = Special Files
     const [resolvedUid, setResolvedUid] = useState<string | null>(null);
@@ -99,6 +97,16 @@ export const PersonStream = () => {
         fetchTarget();
         markContactAsRead(user.uid, id);
     }, [user, id]);
+
+    // Listen for Global FAB Trigger from BottomNav
+    useEffect(() => {
+        const handleFabTrigger = () => {
+            if (isBlocked) return;
+            setShowCreateDebtModal(true);
+        };
+        window.addEventListener('trigger-person-fab-action', handleFabTrigger);
+        return () => window.removeEventListener('trigger-person-fab-action', handleFabTrigger);
+    }, [isBlocked]);
 
     // Person info
     const personInfo = useMemo(() => {
@@ -180,11 +188,11 @@ export const PersonStream = () => {
     }
 
     return (
-        <div className="min-h-screen bg-background flex flex-col">
+        <div className="bg-background flex flex-col h-[calc(100vh-64px)]"> {/* Hard Floor: Anchored to Bottom Nav */}
             {/* Minimalist Header - Clickable to Profile */}
             <header 
                 onClick={() => navigate(`/person/${id}/profile`, { state: { name: personInfo.name, phone: personInfo.phone } })}
-                className="sticky top-0 z-30 bg-surface/95 backdrop-blur-md border-b border-border px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors"
+                className="sticky top-0 z-30 bg-surface/95 backdrop-blur-md border-b border-border px-4 py-3 flex items-center gap-3 cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors shrink-0"
             >
                 <button 
                     onClick={(e) => { e.stopPropagation(); navigate(-1); }}
@@ -212,13 +220,13 @@ export const PersonStream = () => {
 
             {/* Blocked Banner */}
             {isBlocked && (
-                <div className="bg-orange-50 dark:bg-orange-900/20 px-4 py-2 text-center text-sm text-orange-700 dark:text-orange-300">
+                <div className="bg-orange-50 dark:bg-orange-900/20 px-4 py-2 text-center text-sm text-orange-700 dark:text-orange-300 shrink-0">
                     Bu kullanıcı engellenmiş
                 </div>
             )}
 
             {/* View Tabs */}
-            <div className="flex items-center justify-center gap-4 py-2 border-b border-border bg-surface">
+            <div className="flex items-center justify-center gap-4 py-2 border-b border-border bg-surface shrink-0">
                 <button
                     onClick={() => scrollToView(0)}
                     className={clsx(
@@ -254,19 +262,22 @@ export const PersonStream = () => {
             <div
                 ref={scrollContainerRef}
                 onScroll={handleScroll}
-                className="flex-1 flex overflow-x-auto snap-x snap-mandatory scroll-smooth hide-scrollbar"
+                className="flex-1 flex overflow-x-auto overflow-y-hidden snap-x snap-mandatory scroll-smooth"
                 style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
             >
                 {/* View 0: Stream */}
-                <div className="snap-start shrink-0 w-full flex flex-col">
+                <div className="snap-start shrink-0 w-full h-full overflow-hidden">
                     <div 
                         ref={streamRef}
-                        className="flex-1 overflow-y-auto px-4 py-4"
+                        className="h-full overflow-y-auto px-4 py-4"
+                        style={{ scrollbarWidth: 'none' }}
                     >
                         {txLoading ? (
                             <div className="h-full flex items-center justify-center text-text-secondary">Yükleniyor...</div>
                         ) : ledgerId && transactions.length > 0 ? (
-                            <TransactionList transactions={transactions} ledgerId={ledgerId} />
+                            <div className="min-h-full flex flex-col justify-end">
+                                <TransactionList transactions={transactions} ledgerId={ledgerId} />
+                            </div>
                         ) : (
                             <div className="h-full flex flex-col items-center justify-center text-text-secondary">
                                 <div className="text-4xl mb-3 opacity-50">💸</div>
@@ -286,27 +297,30 @@ export const PersonStream = () => {
                 </div>
 
                 {/* View 1: Special Files */}
-                <div className="snap-start shrink-0 w-full overflow-y-auto px-4 py-4">
+                <div className="snap-start shrink-0 w-full h-full overflow-hidden">
+                    <div className="h-full overflow-y-auto px-4 py-4" style={{ scrollbarWidth: 'none' }}>
                     {personDebts.length > 0 ? (
-                        <div className="space-y-2">
-                            {personDebts.map(debt => {
-                                const isMyEntry = debt.createdBy === user?.uid;
-                                const isNew = !isMyEntry && lastReadTimestamp && debt.createdAt && debt.createdAt.toMillis() > lastReadTimestamp;
-                                return (
-                                    <div key={debt.id} className={clsx("flex w-full", isMyEntry ? "justify-end" : "justify-start")}>
-                                        <div className="w-[85%]">
-                                            <DebtCard
-                                                debt={debt}
-                                                isNew={!!isNew}
-                                                currentUserId={user?.uid || ''}
-                                                onClick={() => navigate(`/debt/${debt.id}`)}
-                                                disabled={isBlocked}
-                                                variant="chat"
-                                            />
+                        <div className="min-h-full flex flex-col justify-end">
+                            <div className="space-y-2">
+                                {personDebts.map(debt => {
+                                    const isMyEntry = debt.createdBy === user?.uid;
+                                    const isNew = !isMyEntry && lastReadTimestamp && debt.createdAt && debt.createdAt.toMillis() > lastReadTimestamp;
+                                    return (
+                                        <div key={debt.id} className={clsx("flex w-full", isMyEntry ? "justify-end" : "justify-start")}>
+                                            <div className="w-[85%]">
+                                                <DebtCard
+                                                    debt={debt}
+                                                    isNew={!!isNew}
+                                                    currentUserId={user?.uid || ''}
+                                                    onClick={() => navigate(`/debt/${debt.id}`)}
+                                                    disabled={isBlocked}
+                                                    variant="chat"
+                                                />
+                                            </div>
                                         </div>
-                                    </div>
-                                );
-                            })}
+                                    );
+                                })}
+                            </div>
                         </div>
                     ) : (
                         <div className="h-full flex flex-col items-center justify-center text-text-secondary">
@@ -315,6 +329,7 @@ export const PersonStream = () => {
                             <p className="text-sm opacity-70">Taksitli veya karmaşık borçlar burada görünecek</p>
                         </div>
                     )}
+                    </div> {/* Close inner scrollable div */}
 
                     {/* Back Hint */}
                     {activeViewIndex === 1 && (
@@ -326,49 +341,6 @@ export const PersonStream = () => {
                 </div>
             </div>
 
-            {/* Footer - Context Aware */}
-            {!isBlocked && (
-                <div className="sticky bottom-0 bg-surface border-t border-border px-4 py-3 pb-safe">
-                    {activeViewIndex === 0 ? (
-                        <div className="flex gap-3">
-                            <button
-                                onClick={() => setShowQuickModal(true)}
-                                className="flex-1 flex items-center justify-center gap-2 py-3 bg-green-600 hover:bg-green-700 text-white rounded-xl font-semibold transition-all active:scale-95"
-                            >
-                                <Plus size={20} />
-                                Verdim
-                            </button>
-                            <button
-                                onClick={() => setShowQuickModal(true)}
-                                className="flex-1 flex items-center justify-center gap-2 py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-semibold transition-all active:scale-95"
-                            >
-                                <Minus size={20} />
-                                Aldım
-                            </button>
-                        </div>
-                    ) : (
-                        <button
-                            onClick={() => setShowCreateDebtModal(true)}
-                            className="w-full flex items-center justify-center gap-2 py-3 bg-blue-600 hover:bg-blue-700 text-white rounded-xl font-semibold transition-all active:scale-95"
-                        >
-                            <FolderOpen size={20} />
-                            Özel İşlem Ekle
-                        </button>
-                    )}
-                </div>
-            )}
-
-            {/* Quick Transaction Modal */}
-            <QuickTransactionModal
-                isOpen={showQuickModal}
-                onClose={() => setShowQuickModal(false)}
-                ledgerId={ledgerId}
-                contactName={personInfo.name}
-                userId={user?.uid}
-                userName={user?.displayName}
-                otherPartyId={otherPartyId || undefined}
-                otherPartyName={personInfo.name}
-            />
 
             {/* Create Debt Modal */}
             <CreateDebtModal

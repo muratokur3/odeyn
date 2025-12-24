@@ -10,7 +10,6 @@ import { blockUser, isUserBlocked, unblockUser } from '../services/blockService'
 import { Avatar } from '../components/Avatar';
 import { DebtCard } from '../components/DebtCard';
 import { TransactionList } from '../components/TransactionList';
-import { QuickTransactionModal } from '../components/QuickTransactionModal';
 import { CreateDebtModal } from '../components/CreateDebtModal';
 import { UserBalanceHeader } from '../components/UserBalanceHeader';
 import { PhoneInput } from '../components/PhoneInput';
@@ -43,8 +42,7 @@ export const PersonDetail = () => {
     const [contactId, setContactId] = useState<string | null>(null);
     const [lastReadTimestamp, setLastReadTimestamp] = useState<number | null>(null); // New State
     const [showEditModal, setShowEditModal] = useState(false);
-    const [showQuickTransactionModal, setShowQuickTransactionModal] = useState(false); // NEW: Quick Transaction Modal
-    const [showCreateDebtModal, setShowCreateDebtModal] = useState(false); // NEW: Create Debt Modal for Özel İşlemler
+    const [showCreateDebtModal, setShowCreateDebtModal] = useState(false);
     const [activeViewIndex, setActiveViewIndex] = useState(0); // NEW: 0 = Akış (Stream), 1 = Özel İşlemler (Special)
     const scrollContainerRef = useRef<HTMLDivElement>(null); // NEW: Scroll container ref
     const [editName, setEditName] = useState('');
@@ -85,18 +83,12 @@ export const PersonDetail = () => {
     useEffect(() => {
         const handleBottomNavTrigger = () => {
             if (isBlocked) return;
-            if (activeViewIndex === 0) {
-                // Stream view -> Quick Transaction
-                setShowQuickTransactionModal(true);
-            } else {
-                // Special view -> Open Create Debt Modal
-                setShowCreateDebtModal(true);
-            }
+            setShowCreateDebtModal(true);
         };
 
         window.addEventListener('trigger-person-fab-action', handleBottomNavTrigger);
         return () => window.removeEventListener('trigger-person-fab-action', handleBottomNavTrigger);
-    }, [activeViewIndex, isBlocked]);
+    }, [isBlocked]);
 
 
 
@@ -793,49 +785,13 @@ export const PersonDetail = () => {
                 </div>
             </main>
 
-            {/* Quick Transaction Modal */}
-            <QuickTransactionModal
-                isOpen={showQuickTransactionModal}
-                onClose={() => setShowQuickTransactionModal(false)}
-                ledgerId={ledgerId}
-                contactName={personInfo.name}
-                userId={user?.uid}
-                userName={user?.displayName}
-                otherPartyId={otherPartyId || undefined}
-                otherPartyName={personInfo.name}
-            />
-
-            {/* Create Debt Modal (for Özel İşlemler) */}
+            {/* Create Debt Modal */}
             <CreateDebtModal
                 isOpen={showCreateDebtModal}
                 onClose={() => setShowCreateDebtModal(false)}
-                onSubmit={async (
-                    borrowerId: string,
-                    borrowerName: string,
-                    amount: number,
-                    type: 'LENDING' | 'BORROWING',
-                    currency: string,
-                    note?: string,
-                    dueDate?: Date,
-                    installments?: any[],
-                    canBorrowerAddPayment?: boolean,
-                    initialPayment?: number
-                ) => {
+                onSubmit={async (borrowerId, borrowerName, amount, type, currency, note, dueDate, installments, canBorrowerAddPayment, initialPayment) => {
                     if (!user) return;
-                    await createDebt(
-                        user.uid,
-                        user.displayName || 'Bilinmeyen',
-                        borrowerId,
-                        borrowerName,
-                        amount,
-                        type,
-                        currency,
-                        note,
-                        dueDate,
-                        installments,
-                        canBorrowerAddPayment,
-                        initialPayment || 0
-                    );
+                    await createDebt(user.uid, user.displayName || 'Bilinmeyen', borrowerId, borrowerName, amount, type, currency, note, dueDate, installments, canBorrowerAddPayment, initialPayment || 0);
                     setShowCreateDebtModal(false);
                 }}
                 targetUser={targetUserObject}
