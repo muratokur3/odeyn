@@ -1,11 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { X, Search, ChevronDown, ChevronUp, Plus, Ban, RefreshCw } from 'lucide-react';
+import { X, Calendar, DollarSign, User as UserIcon, FileText, ChevronDown, ChevronUp, Plus, Search, FolderOpen, Ban, RefreshCw } from 'lucide-react';
 import { Avatar } from './Avatar';
-import { SelectedUserCard } from './SelectedUserCard'; // Import moved to top
+import { SelectedUserCard } from './SelectedUserCard';
 
-import { searchUserByPhone, searchContacts } from '../services/db';
+import { searchUserByPhone, searchContacts, createDebt, getContacts } from '../services/db';
+import { getOrCreateLedger, addLedgerTransaction } from '../services/transactionService';
 import { formatCurrency } from '../utils/format';
-import { formatPhoneForDisplay } from '../utils/phoneUtils'; // Added import
+import { cleanPhone as cleanPhoneNumber, formatPhoneForDisplay } from '../utils/phoneUtils';
 import type { User, Contact, Installment } from '../types';
 import { useAuth } from '../hooks/useAuth';
 import { useContactSync } from '../hooks/useContactSync';
@@ -13,6 +14,8 @@ import { Toggle } from './Toggle';
 import { Timestamp } from 'firebase/firestore';
 import clsx from 'clsx';
 import { ContactModal } from './ContactModal';
+import { useModal } from '../context/ModalContext';
+
 
 interface CreateDebtModalProps {
     isOpen: boolean;
@@ -34,7 +37,6 @@ interface CreateDebtModalProps {
     initialName?: string; // New prop
 }
 
-import { useModal } from '../context/ModalContext';
 
 export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClose, onSubmit, initialPhoneNumber, targetUser, initialName: propInitialName }) => {
     const { user, blockedUsers } = useAuth();
@@ -95,6 +97,9 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
     const [showContactModal, setShowContactModal] = useState(false);
     const [isResolvingInitial, setIsResolvingInitial] = useState(false);
 
+    // Special Debt Logic
+    const isSpecialDebt = isInstallment || (dueDate && dueDate.length > 0);
+
     // Reset/Init when opening
     useEffect(() => {
         if (isOpen) {
@@ -139,6 +144,25 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                 setCanBorrowerAddPayment(false);
             }
             setDownPayment('');
+        } else {
+            // Reset when closed
+            setPhoneNumber('');
+            setAmount('');
+            setBorrowerName('');
+            setFoundUser(null);
+            setFoundContact(null);
+            setSearchResults([]);
+            setNote('');
+            setDueDate('');
+            setType('LENDING');
+            setCurrency('TRY');
+            setShowDetails(false);
+            setIsInstallment(false);
+            setInstallmentCount(1);
+            setCanBorrowerAddPayment(false);
+            setDownPayment('');
+            setStep('SEARCH');
+            setIsResolvingInitial(false);
         }
     }, [isOpen, initialPhoneNumber, targetUser, user, propInitialName]);
 
@@ -346,37 +370,48 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                 }
             }
 
-            // 1. Create Debt
-            await onSubmit(
-                finalBorrowerId,
-                finalBorrowerName,
-                numAmount,
-                type,
-                currency,
-                note,
-                dueDate ? new Date(dueDate) : undefined,
-                generatedInstallments,
-                canBorrowerAddPayment,
-                numDownPayment // Pass Initial Payment
-            );
+            // 1. Submit Logic Split
+            if (isSpecialDebt) {
+                // SPECIAL DEBT (Complex) -> Uses standard Debt collection via createDebt
+                await createDebt(
+                    user.uid,
+                    user.displayName || 'İsimsiz',
+                    finalBorrowerId,
+                    finalBorrowerName,
+                    numAmount,
+                    type,
+                    currency,
+                    note,
+                    dueDate ? new Date(dueDate) : undefined,
+                    generatedInstallments,
+                    canBorrowerAddPayment,
+                    numDownPayment
+                );
+            } else {
+                // NORMAL FLOW (Ledger Transaction) -> Uses Ledger system
+                // 1. Get or Create Ledger
+                const ledgerId = await getOrCreateLedger(
+                    user.uid,
+                    user.displayName || 'İsimsiz',
+                    finalBorrowerId,
+                    finalBorrowerName
+                );
+
+                // 2. Add Transaction
+                // LENDING (Veriyorum) -> OUTGOING (Benden Çıkan)
+                // BORROWING (Alıyorum) -> INCOMING (Bana Gelen)
+                const direction = type === 'LENDING' ? 'OUTGOING' : 'INCOMING';
+
+                await addLedgerTransaction(
+                    ledgerId,
+                    user.uid,
+                    numAmount,
+                    direction,
+                    note
+                );
+            }
 
             onClose();
-            // Reset form
-            setPhoneNumber('');
-            setAmount('');
-            setBorrowerName('');
-            setFoundUser(null);
-            setFoundContact(null);
-            setSearchResults([]);
-            setNote('');
-            setDueDate('');
-            setType('LENDING');
-            setCurrency('TRY');
-            setShowDetails(false);
-            setIsInstallment(false);
-            setInstallmentCount(1);
-            setCanBorrowerAddPayment(false);
-            setDownPayment(''); // Reset down payment
 
         } catch (error) {
             console.error(error);
@@ -394,9 +429,23 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
 
     return (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-            <div className="bg-surface rounded-2xl w-full max-w-sm shadow-xl animate-in fade-in zoom-in duration-200 h-auto max-h-[90dvh] flex flex-col border border-slate-700">
-                <div className="flex justify-between items-center p-6 pb-2 flex-none">
-                    <h2 className="text-xl font-bold text-text-primary">Yeni İşlem Ekle</h2>
+            <div className={clsx(
+                "rounded-2xl w-full max-w-sm shadow-xl animate-in fade-in zoom-in duration-200 h-auto max-h-[90dvh] flex flex-col border transition-colors",
+                isSpecialDebt 
+                    ? "bg-surface border-purple-500/50 dark:border-purple-400/50 shadow-purple-500/10" 
+                    : "bg-surface border-slate-700"
+            )}>
+                <div className={clsx(
+                    "flex justify-between items-center p-6 pb-2 flex-none rounded-t-2xl transition-colors",
+                    isSpecialDebt ? "bg-purple-500/10" : ""
+                )}>
+                    <h2 className={clsx(
+                        "text-xl font-bold flex items-center gap-2",
+                        isSpecialDebt ? "text-purple-600 dark:text-purple-300" : "text-text-primary"
+                    )}>
+                        {isSpecialDebt && <FileText size={24} className="text-purple-600 dark:text-purple-400" />}
+                        {isSpecialDebt ? 'Özel İşlem Ekle' : 'Yeni İşlem Ekle'}
+                    </h2>
                     <button onClick={onClose} className="p-2 hover:bg-slate-700/50 rounded-full">
                         <X size={20} className="text-text-secondary" />
                     </button>
@@ -642,6 +691,20 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
 
                             {showDetails && (
                                 <div className="space-y-4 pt-2 animate-in fade-in slide-in-from-top-2 duration-200 mt-2">
+                                    {/* Due Date Field - Hidden when installments enabled */}
+                                    {!isInstallment && (
+                                        <div>
+                                            <label className="block text-sm font-medium text-text-secondary mb-1">Vade Tarihi</label>
+                                            <input
+                                                type="date"
+                                                value={dueDate}
+                                                onChange={(e) => setDueDate(e.target.value)}
+                                                disabled={isTargetBlocked}
+                                                className="w-full px-4 py-3 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary focus:ring-2 focus:ring-blue-900/50 outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                            />
+                                        </div>
+                                    )}
+
                                     {/* Installment Toggle */}
                                     <div className={clsx(
                                         "p-4 rounded-xl border transition-all",
@@ -713,15 +776,20 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                                         )}
                                     </div>
 
-                                    {/* Payment Permission Toggle */}
-                                    <div className="flex items-center justify-between p-4 bg-background rounded-xl border border-slate-700">
-                                        <span className="text-sm font-medium text-text-primary">Karşı taraf ödeme ekleyebilsin</span>
-                                        <Toggle
-                                            checked={canBorrowerAddPayment}
-                                            onChange={setCanBorrowerAddPayment}
-                                            label=""
-                                        />
-                                    </div>
+                                    {/* Payment Permission Toggle (Only for Special Debt) */}
+                                    {isSpecialDebt && (
+                                        <div className={clsx(
+                                            "flex items-center justify-between p-4 rounded-xl border animate-in fade-in slide-in-from-top-2",
+                                            "bg-purple-50 dark:bg-purple-900/20 border-purple-100 dark:border-purple-800"
+                                        )}>
+                                            <span className="text-sm font-medium text-purple-900 dark:text-purple-100">Karşı taraf ödeme ekleyebilsin</span>
+                                            <Toggle
+                                                checked={canBorrowerAddPayment}
+                                                onChange={setCanBorrowerAddPayment}
+                                                label=""
+                                            />
+                                        </div>
+                                    )}
 
                                 </div>
                             )}

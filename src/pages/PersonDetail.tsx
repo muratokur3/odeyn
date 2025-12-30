@@ -270,52 +270,11 @@ export const PersonDetail = () => {
                 }
             }
 
-            // 2. Find Contact ID for editing AND for Modal Target
-            try {
-                const myContacts = await getContacts(user.uid);
-
-                if (id.length > 20) {
-                    // ID is UID
-                    // 1. Try to find by linkedUserId
-                    foundContactData = myContacts.find(c => c.linkedUserId === id);
-
-                    // 2. If not found, and we found a system user, try to match by their phone number
-                    if (!foundContactData && foundSysUser && foundSysUser.primaryPhoneNumber) {
-                        const userPhone = cleanPhoneNumber(foundSysUser.primaryPhoneNumber);
-                        foundContactData = myContacts.find(c => c.phoneNumber === userPhone);
-                    }
-                } else {
-                    // ID is Phone
-                    foundContactData = myContacts.find(c =>
-                        c.phoneNumber === cleanId || c.phoneNumber === id
-                    );
-                }
-
-                if (foundContactData) {
-                    setContactId(foundContactData.id);
-                    setEditName(foundContactData.name);
-                    setEditPhone(foundContactData.phoneNumber);
-                    setTargetUserObject(foundContactData);
-
-                    // Capture lastReadAt for highlighting new items
-                    if (foundContactData.lastReadAt) {
-                        setLastReadTimestamp(foundContactData.lastReadAt.toMillis());
-                    } else {
-                        // If never read, maybe everything is new? Or nothing? 
-                        // Let's assume nothing is "New" in the highlighting sense if first time, 
-                        // or we could defaults to 0. 
-                        // Actually, if lastReadAt is missing, it means we haven't tracked it yet.
-                        setLastReadTimestamp(Date.now()); // Avoid highlighting everything on first ever load
-                    }
-                } else if (foundSysUser) {
-                    setTargetUserObject(foundSysUser);
-                } else {
-                    // Raw phone number
-                    setTargetUserObject(null); // Don't lock to a user object
-                    // We will rely on passing initialPhoneNumber and initialName to the modal
-                }
-            } catch (error) {
-                console.error("Error finding contact:", error);
+            // 2. Initial Target Object Set
+            if (foundSysUser) {
+                setTargetUserObject(foundSysUser);
+            } else {
+                 setTargetUserObject(null);
             }
         };
         checkRegistrationAndContact();
@@ -476,8 +435,48 @@ export const PersonDetail = () => {
             phone: phone.length > 20 ? '' : phone
         };
     }, [personDebts, user, id, contactId, editName, editPhone, resolveName, targetUserObject, location.state]);
+    
 
-    // SHARED LEDGER: Get the ledger ID for this person
+    // NEW: Check if the displayed person is in my contacts (Phone Number Primary Check)
+    useEffect(() => {
+        const checkContactStatus = async () => {
+            if (!user || !personInfo.phone) return;
+            // Ensure we are checking a real phone number, not a UID acting as one
+            if (personInfo.phone.length > 20) return; 
+
+            const phoneToCheck = cleanPhoneNumber(personInfo.phone);
+            
+            try {
+                const contacts = await getContacts(user.uid);
+                const match = contacts.find(c => c.phoneNumber === phoneToCheck);
+                
+                if (match) {
+                    // Only update if changed to avoid loops
+                    if (contactId !== match.id) {
+                        setContactId(match.id);
+                        setEditName(match.name);
+                        setEditPhone(match.phoneNumber);
+                        setTargetUserObject(match); 
+                        
+                        if (match.lastReadAt) {
+                            setLastReadTimestamp(match.lastReadAt.toMillis());
+                        } else {
+                            setLastReadTimestamp(Date.now());
+                        }
+                    }
+                } else {
+                    // Start fresh if not found in contacts
+                    if (contactId !== null) {
+                        setContactId(null);
+                    }
+                }
+            } catch (e) {
+                console.error("Contact check error", e);
+            }
+        };
+        
+        checkContactStatus();
+    }, [user, personInfo.phone]);    // SHARED LEDGER: Get the ledger ID for this person
     const otherPartyId = getTargetUid() || id;
     const { 
         ledger, 

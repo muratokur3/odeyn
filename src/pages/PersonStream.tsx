@@ -157,6 +157,10 @@ export const PersonStream = () => {
             if (amICreator) return true;
             if (d.status === 'REJECTED_BY_RECEIVER' || d.status === 'AUTO_HIDDEN') return false;
             return true;
+        }).sort((a, b) => {
+            const timeA = a.createdAt?.toMillis() || 0;
+            const timeB = b.createdAt?.toMillis() || 0;
+            return timeA - timeB;
         });
     }, [debts, id, user, resolvedUid]);
 
