@@ -7,12 +7,12 @@ Uygulama artık iki ana katman üzerinde çalışır:
 1.  **Akış (Cari):** Günlük basit para alışverişi. Sohbet balonları şeklinde görünür.
 2.  **Dosyalar (Özel İşlemler):** Vade, taksit veya detay içeren karmaşık borçlar. Dosya/Kart şeklinde görünür.
 
-2. "1 Saat Kuralı" (The 1-Hour Hard Delete Rule)
-Veri bütünlüğü için katı silme kuralı:
-*   Bir kayıt SADECE **Oluşturan (Creator)** tarafından silinebilir.
-*   Bir kayıt SADECE oluşturulduktan sonraki **1 Saat** içinde silinebilir.
-*   **Mantık:** `isDeletable = isCreator && (now - createdAt < 60 minutes)`
-*   Süre dolduysa silinemez, ancak karşı işlem (ters kayıt) ile kapatılabilir veya arşivlenebilir.
+2. "1 Saat Düzeltme Penceresi" (The 1-Hour Correction Window)
+Veri bütünlüğü için katı düzenleme kuralı:
+*   Bir kayıt SADECE **Oluşturan (Creator)** tarafından Düzenlenebilir veya Silinebilir.
+*   Bu işlem SADECE oluşturulduktan sonraki **1 Saat** içinde yapılabilir.
+*   **Mantık:** `isModifiable = isCreator && (now - createdAt < 60 minutes)`
+*   Süre dolduysa düzenlenemez/silinemez; ancak karşı işlem (ters kayıt) ile kapatılabilir veya arşivlenebilir.
 
 3. Birleşik Akıllı Giriş (Unified Smart Input)
 *   Tek bir "Ekle" (+) butonu vardır.

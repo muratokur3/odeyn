@@ -16,7 +16,7 @@ The app now operates on a "Dual-Layer" architecture:
 *   **Platform:** Web (deployed via Firebase Hosting).
 
 ## 3. CRITICAL RULES (NEVER BREAK THESE)
-1.  **1-Hour Hard Delete Rule:** A record can ONLY be deleted by its **Creator** and ONLY within **1 Hour** of creation. After that, it must be reversed or archived.
+1.  **1-Hour Correction Window:** A record can ONLY be **Edited** or **Deleted** by its **Creator** and ONLY within **1 Hour** of creation. After that, it must be reversed or archived.
 2.  **Unified Smart Input:** All entries start from a single FAB. Simple inputs go to Stream; Complex inputs (Date/Installment) go to Files.
 3.  **NO Class Components:** Always use Functional Components and Hooks.
 4.  **NO Direct DOM Manipulation:** Use `useRef` if absolutely necessary.
@@ -30,7 +30,7 @@ The app now operates on a "Dual-Layer" architecture:
 ## 5. UI/UX STANDARDS
 *   **Stream View:** Chat Bubbles (Right/Green = Given, Left/Red = Taken). Solid Borders.
 *   **Files View:** Card List. Dashed Borders (Paper feel).
-*   **Swipe Actions:** Swipe left on Stream bubble to delete (if < 1hr).
+*   **Swipe Actions:** Swipe left to Delete, Swipe Right to Edit (if < 1hr).
 
 ## 6. CODING STANDARDS
 *   **Error Handling:** Wrap async ops in `try/catch`.

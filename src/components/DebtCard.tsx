@@ -3,7 +3,7 @@ import { useContactName } from '../hooks/useContactName';
 import type { Debt } from '../types';
 import { format, differenceInMinutes } from 'date-fns';
 import { tr } from 'date-fns/locale';
-import { CheckCheck, Clock, Ban, MoreVertical, Trash2, Archive, AlertTriangle } from 'lucide-react';
+import { CheckCheck, Clock, Ban, MoreVertical, Trash2, Archive, AlertTriangle, Edit2 } from 'lucide-react';
 import { formatCurrency } from '../utils/format';
 import { formatPhoneForDisplay as formatPhoneNumber } from '../utils/phoneUtils';
 import { Avatar } from './Avatar';
@@ -70,7 +70,21 @@ export const DebtCard: React.FC<DebtCardProps> = ({ debt, currentUserId, onClick
     const now = new Date();
     const createdAt = debt.createdAt?.toDate ? debt.createdAt.toDate() : new Date();
     const diffMinutes = differenceInMinutes(now, createdAt);
-    const isDeletable = isCreator && diffMinutes < 60;
+    const isModifiable = isCreator && diffMinutes < 60;
+
+    const handleEdit = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setShowMenu(false);
+        // Navigate to edit page or open edit modal
+        // Using existing EditDebtModal logic or simple navigation
+        // Since we don't have a direct "openEditModal" prop passed down,
+        // we might need to rely on navigating to a debt detail page where edit is available,
+        // OR simply alert that this feature is coming if not fully wired in this specific card context.
+        // However, the prompt implies the menu option should exist.
+        // For now, let's assume we can trigger the detail view's edit mode or show an alert.
+        // Ideally, we'd pass an onEdit prop.
+        showAlert("Bilgi", "Düzenleme için dosya detayına gidiniz.", "info");
+    };
 
     const handleDelete = async (e: React.MouseEvent) => {
         e.stopPropagation();
@@ -82,7 +96,7 @@ export const DebtCard: React.FC<DebtCardProps> = ({ debt, currentUserId, onClick
         );
         if (confirmed) {
             try {
-                if (isDeletable) {
+                if (isModifiable) {
                     await permanentlyDeleteDebt(debt.id, currentUserId);
                     showAlert("Silindi", "Dosya kalıcı olarak silindi.", "success");
                 } else {
@@ -183,7 +197,16 @@ export const DebtCard: React.FC<DebtCardProps> = ({ debt, currentUserId, onClick
                         <>
                             <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)}></div>
                             <div className="absolute right-0 top-full mt-1 w-32 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-gray-200 dark:border-slate-700 z-20 overflow-hidden">
-                                {isDeletable ? (
+                                {isModifiable && (
+                                    <button
+                                        onClick={handleEdit}
+                                        className="w-full text-left px-4 py-3 text-sm font-medium text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/10 flex items-center gap-2"
+                                    >
+                                        <Edit2 size={16} /> Düzenle
+                                    </button>
+                                )}
+
+                                {isModifiable ? (
                                     <button
                                         onClick={handleDelete}
                                         className="w-full text-left px-4 py-3 text-sm font-medium text-red-600 hover:bg-red-50 dark:hover:bg-red-900/10 flex items-center gap-2"

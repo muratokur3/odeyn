@@ -217,6 +217,29 @@ export const deleteLedgerTransaction = async (
 };
 
 /**
+ * Update a ledger transaction (only by creator)
+ */
+export const updateLedgerTransaction = async (
+    ledgerId: string,
+    transactionId: string,
+    data: Partial<Omit<Transaction, 'id' | 'createdAt' | 'createdBy' | 'type'>>
+): Promise<void> => {
+    const txDoc = doc(db, 'debts', ledgerId, 'transactions', transactionId);
+
+    // Prepare update data (whitelist allowed fields)
+    const updates: Record<string, any> = {};
+    if (data.amount !== undefined) updates.amount = data.amount;
+    if (data.direction !== undefined) updates.direction = data.direction;
+    if (data.description !== undefined) updates.description = data.description;
+    updates.updatedAt = serverTimestamp();
+
+    await updateDoc(txDoc, updates);
+
+    // Recalculate balance
+    await updateLedgerBalance(ledgerId);
+};
+
+/**
  * Update ledger's remainingAmount based on all transactions
  */
 const updateLedgerBalance = async (ledgerId: string): Promise<void> => {
