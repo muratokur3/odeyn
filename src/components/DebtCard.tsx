@@ -213,7 +213,7 @@ export const DebtCard: React.FC<DebtCardProps> = ({ debt, currentUserId, onClick
                                 </p>
 
                                 <div className="flex items-center gap-2 text-xs text-gray-500">
-                                    <span>{debt.createdAt ? format(debt.createdAt.toDate(), 'd MMM', { locale: tr }) : '-'}</span>
+                                    <span>{debt.createdAt?.toDate?.() ? format(debt.createdAt.toDate(), 'd MMM', { locale: tr }) : '-'}</span>
                                     {hasInstallments && (
                                         <span className="bg-white px-2 py-0.5 rounded-md border text-gray-600 font-medium shadow-sm">
                                             {paidInstallments}/{totalInstallments} Taksit
@@ -250,7 +250,7 @@ export const DebtCard: React.FC<DebtCardProps> = ({ debt, currentUserId, onClick
                     {isChat && (
                         <div className="mt-2 flex justify-end">
                             <span className="text-[10px] text-text-secondary opacity-70">
-                                {debt.createdAt ? format(debt.createdAt.toDate(), 'HH:mm • d MMM', { locale: tr }) : ''}
+                                {debt.createdAt?.toDate?.() ? format(debt.createdAt.toDate(), 'HH:mm • d MMM', { locale: tr }) : ''}
                             </span>
                         </div>
                     )}

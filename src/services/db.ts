@@ -13,15 +13,13 @@ import {
     limit,
     deleteDoc,
     getDoc,
-    setDoc,
     updateDoc,
     writeBatch
 } from 'firebase/firestore';
 import { db } from './firebase';
 import type { Debt, DebtStatus, PaymentLog, User, Contact, Installment } from '../types';
 import { cleanPhone as cleanPhoneNumber } from '../utils/phoneUtils';
-import { checkBlockStatus } from './blockService'; // Import block service
-import { normalizeDebt } from '../utils/debtUtils';
+import { checkBlockStatus } from './blockService';
 
 // --- Activity Feed Helpers ---
 
@@ -117,9 +115,8 @@ export const createDebt = async (
     installments?: Installment[],
     canBorrowerAddPayment?: boolean,
     // requestApproval removed
-    initialPayment: number = 0
-) => {
-    try {
+        initialPayment: number = 0
+    ) => {
         const isLending = type === 'LENDING';
 
         // ... (existing logic for target determination) ...
@@ -307,13 +304,9 @@ export const createDebt = async (
         }
 
         return docRef.id;
-    } catch (error) {
-        throw error;
-    }
-};
+    };
 
 export const makePayment = async (debtId: string, amount: number, performedBy: string, note?: string) => {
-    try {
         await runTransaction(db, async (transaction) => {
             const debtRef = doc(db, 'debts', debtId);
             const debtDoc = await transaction.get(debtRef);
@@ -374,16 +367,11 @@ export const makePayment = async (debtId: string, amount: number, performedBy: s
             const target = d.lenderId === performedBy ? d.borrowerId : d.lenderId;
             updateContactActivity(performedBy, target, 'Ödeme yapıldı');
         }
-
-    } catch (error) {
-        throw error;
-    }
 };
 
 // ... subscriptions ...
 
 export const respondToDebtRequest = async (debtId: string, status: 'ACTIVE' | 'REJECTED' | 'REJECTED_BY_RECEIVER', performedBy: string) => {
-    try {
         await runTransaction(db, async (transaction) => {
             const debtRef = doc(db, 'debts', debtId);
             const debtDoc = await transaction.get(debtRef);
@@ -395,6 +383,7 @@ export const respondToDebtRequest = async (debtId: string, status: 'ACTIVE' | 'R
             const debtData = debtDoc.data() as Debt;
 
             // Update debt status
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
             const updates: any = { status };
             if (status === 'REJECTED_BY_RECEIVER') {
                 updates.rejectedAt = serverTimestamp();
@@ -429,10 +418,6 @@ export const respondToDebtRequest = async (debtId: string, status: 'ACTIVE' | 'R
             else if (status === 'REJECTED') msg = 'Borç reddedildi';
             updateContactActivity(performedBy, target, msg);
         }
-
-    } catch (error) {
-        throw error;
-    }
 };
 
 export const searchUserByPhone = async (phoneNumber: string): Promise<User | null> => {
@@ -440,20 +425,31 @@ export const searchUserByPhone = async (phoneNumber: string): Promise<User | nul
 
     // Use registry lookup to resolve UID securely
     const { resolvePhoneToUid } = await import('./identity');
-    const uid = await resolvePhoneToUid(cleanPhone);
+    let uid: string | null = null;
+    try {
+        uid = await resolvePhoneToUid(cleanPhone);
+    } catch (e) {
+        console.warn("Registry lookup failed (likely permission):", e);
+    }
 
     if (!uid) {
         // Fallback: Search in users collection directly (for legacy or unsynced data)
-        const q = query(
-            collection(db, 'users'),
-            where('phoneNumbers', 'array-contains', cleanPhone),
-            limit(1)
-        );
-        const snapshot = await getDocs(q);
+        try {
+            const q = query(
+                collection(db, 'users'),
+                where('phoneNumbers', 'array-contains', cleanPhone),
+                limit(1)
+            );
+            const snapshot = await getDocs(q);
 
-        if (!snapshot.empty) {
-            const userDoc = snapshot.docs[0];
-            return { uid: userDoc.id, ...userDoc.data() } as User;
+            if (!snapshot.empty) {
+                const userDoc = snapshot.docs[0];
+                return { uid: userDoc.id, ...userDoc.data() } as User;
+            }
+        } catch (error) {
+            // Unauthenticated users cannot search users collection (Rules).
+            // This is expected for new registrations.
+            console.warn("Fallback search skipped/allowed:", error);
         }
 
         return null;
@@ -622,6 +618,7 @@ export const claimLegacyDebts = async (userId: string, phoneNumber: string) => {
                 if (!participants.includes(userId)) participants.push(userId);
 
                 // Ensure lockedPhoneNumber is set
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const updates: any = {
                     lenderId: userId,
                     participants
@@ -658,6 +655,7 @@ export const claimLegacyDebts = async (userId: string, phoneNumber: string) => {
                 if (!participants.includes(userId)) participants.push(userId);
 
                 // Ensure lockedPhoneNumber is set
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 const updates: any = {
                     borrowerId: userId,
                     participants
@@ -729,6 +727,7 @@ export const subscribeToContacts = (userId: string, callback: (contacts: Contact
             id: doc.id,
             ...doc.data()
         })) as Contact[];
+        callback(contacts);
     });
 };
 
@@ -789,11 +788,11 @@ export const addPayment = async (debtId: string, amount: number, note: string, u
 };
 
 // ... confirmPayment deprecated ...
-export const confirmPayment = async (debtId: string, paymentId: string, currentUserId: string) => {
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
+export const confirmPayment = async (debtId: string, paymentId: string, _currentUserId: string) => {
     console.warn("confirmPayment is deprecated in Asymmetric Debt Model (Instant Validity).");
     try {
         const debtRef = doc(db, 'debts', debtId);
-        const logRef = doc(db, 'debts', debtId, 'logs', paymentId);
 
         await runTransaction(db, async (transaction) => {
             // Basic dummy transaction to satisfy types or just throw/return
@@ -839,7 +838,6 @@ export const rejectPayment = async (debtId: string, paymentId: string, currentUs
             let newStatus = debt.status;
 
             // Type Guard / Normalization
-            const logStatus: string = log.status || 'PENDING';
 
             // Check if this payment was counted against the debt.
             // "APPROVED" (Legacy) or "ACTIVE" (if we used that) or implicitly if it was a 'PAYMENT' type that wasn't pending?
@@ -1212,7 +1210,7 @@ export const batchAddContacts = async (currentUserId: string, contacts: { name: 
             let linkedUserId = null;
             try {
                 linkedUserId = await resolvePhoneToUid(clean);
-            } catch (e) {
+            } catch {
                 // Ignore resolution error
             }
 

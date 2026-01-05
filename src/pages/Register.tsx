@@ -34,6 +34,12 @@ export const Register = () => {
                 size: 'invisible',
             });
         }
+        return () => {
+            if (recaptchaVerifier.current) {
+                recaptchaVerifier.current.clear();
+                recaptchaVerifier.current = null;
+            }
+        };
     }, []);
 
     const handleSendOtp = async (e: React.FormEvent) => {
@@ -53,9 +59,9 @@ export const Register = () => {
             const result = await startPhoneLogin(phone, recaptchaVerifier.current);
             setConfirmationResult(result);
             setStep('OTP');
-        } catch (error) {
+        } catch (error: any) {
             console.error(error);
-            showAlert("Hata", "SMS gönderilemedi. Lütfen numarayı kontrol edin.", "error");
+            showAlert("Hata", `SMS gönderilemedi: ${error.code || error.message}`, "error");
         } finally {
             setLoading(false);
         }
@@ -89,9 +95,9 @@ export const Register = () => {
 
             await linkPasswordToPhone(currentUser, password, displayName, email);
             navigate('/');
-        } catch (error) {
+        } catch (error: any) {
             console.error(error);
-            showAlert("Kayıt Hatası", "Hesap oluşturulurken bir hata oluştu.", "error");
+            showAlert("Kayıt Hatası", `Hesap oluşturulamadı: ${error.code || error.message}`, "error");
         } finally {
             setLoading(false);
         }

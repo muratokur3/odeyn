@@ -1,14 +1,17 @@
 
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useDebts } from '../hooks/useDebts';
 import { useContactName } from '../hooks/useContactName';
-import { ArrowLeft, Phone, MessageCircle, Trash2, Edit2, X, MoreVertical, Ban, UserPlus, VolumeX, Volume2 } from 'lucide-react';
-import { searchUserByPhone, getContacts, updateContact, addContact, deleteContact, muteUser, unmuteUser, markContactAsRead } from '../services/db';
+import { ArrowLeft, Phone, MessageCircle, Trash2, Edit2, X, MoreVertical, Ban, UserPlus, VolumeX, Volume2, FolderOpen, Plus, ChevronRight, ChevronLeft } from 'lucide-react';
+import { searchUserByPhone, getContacts, updateContact, addContact, deleteContact, muteUser, unmuteUser, markContactAsRead, createDebt } from '../services/db';
 import { blockUser, isUserBlocked, unblockUser } from '../services/blockService'; // Import block services
 import { Avatar } from '../components/Avatar';
 import { DebtCard } from '../components/DebtCard';
+import { TransactionList } from '../components/TransactionList';
+import { CreateDebtModal } from '../components/CreateDebtModal';
+import { UserBalanceHeader } from '../components/UserBalanceHeader';
 import { PhoneInput } from '../components/PhoneInput';
 import { formatCurrency } from '../utils/format';
 import { convertToTRY, fetchRates, type CurrencyRates } from '../services/currency';
@@ -19,6 +22,7 @@ import clsx from 'clsx';
 import { useModal } from '../context/ModalContext';
 
 import type { User, Contact } from '../types'; // Added import
+import { useLedger } from '../hooks/useLedger';
 
 export const PersonDetail = () => {
     const { id } = useParams<{ id: string }>(); // This can be a userId or a contactId (phone number)
@@ -38,12 +42,55 @@ export const PersonDetail = () => {
     const [contactId, setContactId] = useState<string | null>(null);
     const [lastReadTimestamp, setLastReadTimestamp] = useState<number | null>(null); // New State
     const [showEditModal, setShowEditModal] = useState(false);
+    const [showCreateDebtModal, setShowCreateDebtModal] = useState(false);
+    const [activeViewIndex, setActiveViewIndex] = useState(0); // NEW: 0 = Akış (Stream), 1 = Özel İşlemler (Special)
+    const scrollContainerRef = useRef<HTMLDivElement>(null); // NEW: Scroll container ref
     const [editName, setEditName] = useState('');
     const [editPhone, setEditPhone] = useState('');
     const [submittingEdit, setSubmittingEdit] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
     const [isBlocked, setIsBlocked] = useState(false); // Block state
     const [isMuted, setIsMuted] = useState(false);
+
+    // Resolved other party info (for ledger)
+    const [resolvedOtherPartyId, setResolvedOtherPartyId] = useState<string | undefined>(undefined);
+    const [resolvedOtherPartyName, setResolvedOtherPartyName] = useState<string>('');
+
+
+    // NEW: Handle scroll snap detection
+    const handleScroll = () => {
+        const container = scrollContainerRef.current;
+        if (!container) return;
+        const scrollLeft = container.scrollLeft;
+        const viewWidth = container.offsetWidth;
+        const newIndex = Math.round(scrollLeft / viewWidth);
+        if (newIndex !== activeViewIndex) {
+            setActiveViewIndex(newIndex);
+        }
+    };
+
+    // NEW: Programmatic scroll to view
+    const scrollToView = (index: number) => {
+        const container = scrollContainerRef.current;
+        if (!container) return;
+        container.scrollTo({
+            left: index * container.offsetWidth,
+            behavior: 'smooth'
+        });
+    };
+
+    // NEW: Listen for bottom nav trigger event
+    useEffect(() => {
+        const handleBottomNavTrigger = () => {
+            if (isBlocked) return;
+            setShowCreateDebtModal(true);
+        };
+
+        window.addEventListener('trigger-person-fab-action', handleBottomNavTrigger);
+        return () => window.removeEventListener('trigger-person-fab-action', handleBottomNavTrigger);
+    }, [isBlocked]);
+
+
 
     // Helper to get target UID safely
     const getTargetUid = () => {
@@ -223,52 +270,11 @@ export const PersonDetail = () => {
                 }
             }
 
-            // 2. Find Contact ID for editing AND for Modal Target
-            try {
-                const myContacts = await getContacts(user.uid);
-
-                if (id.length > 20) {
-                    // ID is UID
-                    // 1. Try to find by linkedUserId
-                    foundContactData = myContacts.find(c => c.linkedUserId === id);
-
-                    // 2. If not found, and we found a system user, try to match by their phone number
-                    if (!foundContactData && foundSysUser && foundSysUser.primaryPhoneNumber) {
-                        const userPhone = cleanPhoneNumber(foundSysUser.primaryPhoneNumber);
-                        foundContactData = myContacts.find(c => c.phoneNumber === userPhone);
-                    }
-                } else {
-                    // ID is Phone
-                    foundContactData = myContacts.find(c =>
-                        c.phoneNumber === cleanId || c.phoneNumber === id
-                    );
-                }
-
-                if (foundContactData) {
-                    setContactId(foundContactData.id);
-                    setEditName(foundContactData.name);
-                    setEditPhone(foundContactData.phoneNumber);
-                    setTargetUserObject(foundContactData);
-
-                    // Capture lastReadAt for highlighting new items
-                    if (foundContactData.lastReadAt) {
-                        setLastReadTimestamp(foundContactData.lastReadAt.toMillis());
-                    } else {
-                        // If never read, maybe everything is new? Or nothing? 
-                        // Let's assume nothing is "New" in the highlighting sense if first time, 
-                        // or we could defaults to 0. 
-                        // Actually, if lastReadAt is missing, it means we haven't tracked it yet.
-                        setLastReadTimestamp(Date.now()); // Avoid highlighting everything on first ever load
-                    }
-                } else if (foundSysUser) {
-                    setTargetUserObject(foundSysUser);
-                } else {
-                    // Raw phone number
-                    setTargetUserObject(null); // Don't lock to a user object
-                    // We will rely on passing initialPhoneNumber and initialName to the modal
-                }
-            } catch (error) {
-                console.error("Error finding contact:", error);
+            // 2. Initial Target Object Set
+            if (foundSysUser) {
+                setTargetUserObject(foundSysUser);
+            } else {
+                 setTargetUserObject(null);
             }
         };
         checkRegistrationAndContact();
@@ -304,12 +310,15 @@ export const PersonDetail = () => {
         }
     };
 
-    // Filter debts for this person
+    // Filter debts for this person (EXCLUDE LEDGER type - those go to Stream view)
     const personDebts = useMemo(() => {
         if (!debts || !id || !user) return [];
         const cleanId = cleanPhoneNumber(id);
 
         return debts.filter(d => {
+            // EXCLUDE LEDGER type - those are for the Stream view
+            if (d.type === 'LEDGER') return false;
+            
             const isLender = d.lenderId === user.uid;
             const otherId = isLender ? d.borrowerId : d.lenderId;
             const cleanOtherId = cleanPhoneNumber(otherId);
@@ -344,6 +353,21 @@ export const PersonDetail = () => {
         });
     }, [debts, id, user, resolvedUid]);
 
+    // Calculate Special Balance (from debts) - must be after personDebts definition
+    const specialBalance = useMemo(() => {
+        if (!rates || !personDebts.length) return 0;
+        let total = 0;
+        personDebts.forEach(debt => {
+            if (debt.status === 'PAID' || debt.status === 'REJECTED') return;
+            const amountInTRY = convertToTRY(debt.remainingAmount, debt.currency, rates);
+            if (debt.lenderId === user?.uid) {
+                total += amountInTRY;
+            } else {
+                total -= amountInTRY;
+            }
+        });
+        return total;
+    }, [personDebts, rates, user]);
 
 
     const personInfo = useMemo(() => {
@@ -411,6 +435,62 @@ export const PersonDetail = () => {
             phone: phone.length > 20 ? '' : phone
         };
     }, [personDebts, user, id, contactId, editName, editPhone, resolveName, targetUserObject, location.state]);
+    
+
+    // NEW: Check if the displayed person is in my contacts (Phone Number Primary Check)
+    useEffect(() => {
+        const checkContactStatus = async () => {
+            if (!user || !personInfo.phone) return;
+            // Ensure we are checking a real phone number, not a UID acting as one
+            if (personInfo.phone.length > 20) return; 
+
+            const phoneToCheck = cleanPhoneNumber(personInfo.phone);
+            
+            try {
+                const contacts = await getContacts(user.uid);
+                const match = contacts.find(c => c.phoneNumber === phoneToCheck);
+                
+                if (match) {
+                    // Only update if changed to avoid loops
+                    if (contactId !== match.id) {
+                        setContactId(match.id);
+                        setEditName(match.name);
+                        setEditPhone(match.phoneNumber);
+                        setTargetUserObject(match); 
+                        
+                        if (match.lastReadAt) {
+                            setLastReadTimestamp(match.lastReadAt.toMillis());
+                        } else {
+                            setLastReadTimestamp(Date.now());
+                        }
+                    }
+                } else {
+                    // Start fresh if not found in contacts
+                    if (contactId !== null) {
+                        setContactId(null);
+                    }
+                }
+            } catch (e) {
+                console.error("Contact check error", e);
+            }
+        };
+        
+        checkContactStatus();
+    }, [user, personInfo.phone]);    // SHARED LEDGER: Get the ledger ID for this person
+    const otherPartyId = getTargetUid() || id;
+    const { 
+        ledger, 
+        ledgerId, 
+        transactions, 
+        loading: txLoading, 
+        balance: cariBalance,
+        createLedger 
+    } = useLedger(
+        user?.uid,
+        user?.displayName,
+        otherPartyId || undefined,
+        personInfo.name
+    );
 
     // Calculate Totals with this person
     const totals = useMemo(() => {
@@ -579,64 +659,144 @@ export const PersonDetail = () => {
                     </div>
                 )}
 
-                {/* Summary Card */}
-                <div className="bg-surface p-6 rounded-2xl shadow-sm border border-border">
-                    <p className="text-sm text-text-secondary mb-1 text-center">Net Durum (TRY Karşılığı)</p>
-                    <h2 className={clsx(
-                        "text-3xl font-bold text-center mb-6",
-                        totals.net > 0 ? "text-green-600" : totals.net < 0 ? "text-red-600" : "text-text-secondary"
-                    )}>
-                        {formatCurrency(Math.abs(totals.net), 'TRY')}
-                        <span className="text-sm font-normal text-text-secondary ml-2 block mt-1">
-                            {totals.net > 0 ? "Alacaklısınız" : totals.net < 0 ? "Vereceklisiniz" : "Hesap Denk"}
-                        </span>
-                    </h2>
+                {/* Multi-Currency Balance Header */}
+                <UserBalanceHeader
+                    transactions={transactions}
+                    specialDebts={personDebts}
+                    currentUserId={user?.uid || ''}
+                />
 
-                    <div className="grid grid-cols-2 gap-4">
-                        <div className="bg-green-50 dark:bg-green-900/10 p-3 rounded-xl border border-green-100 dark:border-green-900/20 text-center">
-                            <p className="text-xs text-green-700 dark:text-green-400 mb-1">Toplam Alacak</p>
-                            <p className="font-bold text-green-700 dark:text-green-400">{formatCurrency(totals.receivables, 'TRY')}</p>
+                {/* ========== SWIPEABLE DUAL-VIEW ARCHITECTURE ========== */}
+
+                {/* View Tabs */}
+                <div className="flex items-center justify-center gap-4 mb-4">
+                    <button
+                        onClick={() => scrollToView(0)}
+                        className={clsx(
+                            "px-4 py-2 rounded-full text-sm font-medium transition-all",
+                            activeViewIndex === 0
+                                ? "bg-purple-600 text-white shadow-md"
+                                : "bg-slate-100 dark:bg-slate-800 text-text-secondary hover:bg-slate-200 dark:hover:bg-slate-700"
+                        )}
+                    >
+                        Akış
+                    </button>
+                    <button
+                        onClick={() => scrollToView(1)}
+                        className={clsx(
+                            "px-4 py-2 rounded-full text-sm font-medium transition-all flex items-center gap-1.5",
+                            activeViewIndex === 1
+                                ? "bg-blue-600 text-white shadow-md"
+                                : "bg-slate-100 dark:bg-slate-800 text-text-secondary hover:bg-slate-200 dark:hover:bg-slate-700"
+                        )}
+                    >
+                        <FolderOpen size={14} />
+                        Özel İşlemler
+                        {personDebts.length > 0 && (
+                            <span className="bg-white/20 dark:bg-black/20 px-1.5 py-0.5 rounded text-xs">{personDebts.length}</span>
+                        )}
+                    </button>
+                </div>
+
+                {/* Swipeable Container */}
+                <div
+                    ref={scrollContainerRef}
+                    onScroll={handleScroll}
+                    className="flex overflow-x-auto snap-x snap-mandatory scroll-smooth hide-scrollbar"
+                    style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
+                >
+                    {/* View 1: Akış (Stream) */}
+                    <div className="snap-start shrink-0 w-full px-1 space-y-4">
+                        {/* Transaction List */}
+                        <div className="space-y-3">
+                            <h3 className="font-semibold text-text-primary px-1">Cari Akışı</h3>
+                            {txLoading ? (
+                                <div className="text-center py-8 text-text-secondary">Yükleniyor...</div>
+                            ) : ledgerId ? (
+                                <TransactionList
+                                    transactions={transactions}
+                                    ledgerId={ledgerId}
+                                />
+                            ) : (
+                                <div className="text-center py-12 text-text-secondary">
+                                    <div className="text-4xl mb-3 opacity-50">💸</div>
+                                    <p className="font-medium">Henüz defter oluşturulmadı</p>
+                                    <p className="text-sm mt-1 opacity-70">İlk işlemi ekleyerek defteri başlatın</p>
+                                </div>
+                            )}
                         </div>
-                        <div className="bg-red-50 dark:bg-red-900/10 p-3 rounded-xl border border-red-100 dark:border-red-900/20 text-center">
-                            <p className="text-xs text-red-700 dark:text-red-400 mb-1">Toplam Verecek</p>
-                            <p className="font-bold text-red-700 dark:text-red-400">{formatCurrency(totals.payables, 'TRY')}</p>
+
+                        {/* Swipe Hint (only if there are special transactions) */}
+                        {personDebts.length > 0 && activeViewIndex === 0 && (
+                            <div className="fixed right-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 text-blue-500 opacity-50 animate-pulse pointer-events-none">
+                                <ChevronRight size={24} />
+                                <span className="text-[10px] font-medium rotate-90 origin-center whitespace-nowrap">Özel İşlemler</span>
+                            </div>
+                        )}
+                    </div>
+
+                    {/* View 2: Özel İşlemler (Special Transactions) */}
+                    <div className="snap-start shrink-0 w-full px-1 space-y-4">
+                        {/* Debt List */}
+                        <div className="space-y-3">
+                            <h3 className="font-semibold text-text-primary px-1 flex items-center gap-2">
+                                <FolderOpen size={16} />
+                                Özel İşlemler
+                            </h3>
+                            {personDebts.length > 0 ? (
+                                <div className="space-y-2">
+                                    {personDebts.map(debt => {
+                                        const isMyEntry = debt.createdBy === user?.uid;
+                                        const isNew = !isMyEntry && lastReadTimestamp && debt.createdAt && debt.createdAt.toMillis() > lastReadTimestamp;
+                                        return (
+                                            <div key={debt.id} className={clsx("flex w-full", isMyEntry ? "justify-end" : "justify-start")}>
+                                                <div className="w-[85%]">
+                                                    <DebtCard
+                                                        debt={debt}
+                                                        isNew={!!isNew}
+                                                        currentUserId={user?.uid || ''}
+                                                        onClick={() => navigate(`/debt/${debt.id}`)}
+                                                        disabled={isBlocked}
+                                                        variant="chat"
+                                                    />
+                                                </div>
+                                            </div>
+                                        );
+                                    })}
+                                </div>
+                            ) : (
+                                <div className="text-center py-12 text-text-secondary">
+                                    <FolderOpen size={32} className="mx-auto mb-3 opacity-40" />
+                                    <p className="font-medium">Özel işlem yok</p>
+                                    <p className="text-sm mt-1 opacity-70">Taksitli veya karmaşık borçlar burada görünecek</p>
+                                </div>
+                            )}
                         </div>
+
+                        {/* Back Hint */}
+                        {activeViewIndex === 1 && (
+                            <div className="fixed left-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 text-purple-500 opacity-50 animate-pulse pointer-events-none">
+                                <ChevronLeft size={24} />
+                                <span className="text-[10px] font-medium -rotate-90 origin-center whitespace-nowrap">Akış</span>
+                            </div>
+                        )}
                     </div>
                 </div>
-
-                {/* Debt List */}
-                <div className="space-y-3">
-                    <h3 className="font-semibold text-text-primary px-1">Hareketler</h3>
-                    {personDebts.length > 0 ? (
-                        personDebts.map(debt => {
-                            const isMyEntry = debt.createdBy === user?.uid;
-
-                            // Check if it's new (created AFTER my last read time)
-                            // Only highlight if I didn't create it (incoming)
-                            const isNew = !isMyEntry && lastReadTimestamp && debt.createdAt && debt.createdAt.toMillis() > lastReadTimestamp;
-
-                            return (
-                                <div key={debt.id} className={clsx("flex w-full", isMyEntry ? "justify-end" : "justify-start")}>
-                                    <div className="w-[85%]">
-                                        <DebtCard
-                                            debt={debt}
-                                            isNew={!!isNew}
-                                            currentUserId={user?.uid || ''}
-                                            onClick={() => navigate(`/debt/${debt.id}`)}
-                                            disabled={isBlocked}
-                                            variant="chat"
-                                        />
-                                    </div>
-                                </div>
-                            );
-                        })
-                    ) : (
-                        <div className="text-center py-10 text-text-secondary opacity-60">
-                            <p>Henüz kayıtlı işlem yok.</p>
-                        </div>
-                    )}
-                </div>
             </main>
+
+            {/* Create Debt Modal */}
+            <CreateDebtModal
+                isOpen={showCreateDebtModal}
+                onClose={() => setShowCreateDebtModal(false)}
+                onSubmit={async (borrowerId, borrowerName, amount, type, currency, note, dueDate, installments, canBorrowerAddPayment, initialPayment) => {
+                    if (!user) return;
+                    await createDebt(user.uid, user.displayName || 'Bilinmeyen', borrowerId, borrowerName, amount, type, currency, note, dueDate, installments, canBorrowerAddPayment, initialPayment || 0);
+                    setShowCreateDebtModal(false);
+                }}
+                targetUser={targetUserObject}
+                initialPhoneNumber={personInfo.phone}
+                initialName={personInfo.name}
+            />
 
             {/* Edit Modal */}
             {

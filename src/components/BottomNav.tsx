@@ -100,12 +100,12 @@ export const BottomNav = () => {
             }
             : (isPersonDetail
                 ? {
-                    path: '#create-debt-context',
+                    path: '#create-transaction-context',
                     icon: Plus,
                     label: 'İşlem Ekle',
                     isCenter: true,
                     isContextAction: true, // Purple styling
-                    onClick: () => setShowDebtModal(true)
+                    onClick: () => window.dispatchEvent(new Event('trigger-person-fab-action'))
                 }
                 : (isContacts
                     ? {

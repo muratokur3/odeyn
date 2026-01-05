@@ -8,7 +8,8 @@ import { Settings } from './pages/Settings';
 import { BlockedUsers } from './pages/BlockedUsers';
 import { MutedUsers } from './pages/MutedUsers';
 import { Tools } from './pages/Tools';
-import { PersonDetail } from './pages/PersonDetail';
+import { PersonStream } from './pages/PersonStream';
+import { PersonProfile } from './pages/PersonProfile';
 import { PendingRequests } from './pages/PendingRequests';
 import { Layout } from './components/Layout';
 import { useAuth } from './hooks/useAuth';
@@ -52,7 +53,8 @@ function App() {
                   <Route path="/settings/account" element={<AccountSettings />} />
                   <Route path="/debt/:id" element={<DebtDetail />} />
                   <Route path="/tools" element={<Tools />} />
-                  <Route path="/person/:id" element={<PersonDetail />} />
+                  <Route path="/person/:id" element={<PersonStream />} />
+                  <Route path="/person/:id/profile" element={<PersonProfile />} />
                   <Route path="/contacts" element={<Contacts />} />
                   <Route path="/settings" element={<Settings />} />
                   <Route path="/settings/sessions" element={<ActiveSessions />} />

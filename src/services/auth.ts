@@ -13,7 +13,6 @@ import { doc, setDoc, serverTimestamp, getDoc, updateDoc } from 'firebase/firest
 import { auth, db } from './firebase';
 import { claimLegacyDebts } from './db';
 import { cleanPhone as cleanPhoneNumber } from '../utils/phoneUtils';
-import { hashPhone } from '../utils/hash';
 
 const EMAIL_DOMAIN = '@debtdert.local';
 
@@ -49,27 +48,79 @@ export const linkPasswordToPhone = async (user: User, password: string, displayN
         if (!cleanPhone) throw new Error("User has no phone number");
 
         const pseudoEmail = formatPseudoEmail(cleanPhone);
-        const credential = EmailAuthProvider.credential(pseudoEmail, password);
 
-        // Link the credential
-        const userCred = await linkWithCredential(user, credential);
-        const linkedUser = userCred.user;
+        // Check if already linked (Idempotency for retries)
+        const isPasswordLinked = user.providerData.some(p => p.providerId === EmailAuthProvider.PROVIDER_ID);
+        
+        let linkedUser = user;
+
+        if (!isPasswordLinked) {
+            const credential = EmailAuthProvider.credential(pseudoEmail, password);
+             // Link the credential
+            const userCred = await linkWithCredential(user, credential);
+            linkedUser = userCred.user;
+        } else {
+            // Already linked? We should actually verify if we need to sign in with password to re-auth?
+            // But since we are logged in (via phone), we are fine.
+            // Just proceed to update DB.
+            console.log("User already has password linked. Skipping link step.");
+        }
+
+
+        // Force strict token refresh to ensure Firestore sees the new state
+        await linkedUser.getIdToken(true);
+        // Small buffer for claim propagation
+        await new Promise(resolve => setTimeout(resolve, 500));
+        
+        console.log("[DEBUG_AUTH] Token refreshed. UID:", linkedUser.uid);
+        console.log("[DEBUG_AUTH] Target UID for Write:", linkedUser.uid);
 
         // Update Profile
         await updateProfile(linkedUser, { displayName });
 
         // Save/Update User Document in Firestore
-        await setDoc(doc(db, 'users', linkedUser.uid), {
-            uid: linkedUser.uid,
-            phoneNumber: cleanPhone,
-            displayName: displayName,
-            authEmail: pseudoEmail, // Read-only internal email
-            recoveryEmail: recoveryEmail || null, // Real user email
-            createdAt: serverTimestamp()
-        }, { merge: true });
+        try {
+            const userDocRef = doc(db, 'users', linkedUser.uid);
+            const userDocSnap = await getDoc(userDocRef);
+            
+            if (userDocSnap.exists()) {
+                // UPDATE existing doc
+                await updateDoc(userDocRef, {
+                    displayName: displayName,
+                    authEmail: pseudoEmail,
+                    recoveryEmail: recoveryEmail || null,
+                    // Do NOT update createdAt
+                    // Do NOT overwrite phoneNumbers array with legacy field unless needed
+                    ...(cleanPhone ? { phoneNumber: cleanPhone } : {}) 
+                });
+                console.log("[DEBUG_AUTH] User doc UPDATED successfully.");
+            } else {
+                // CREATE new doc
+                await setDoc(userDocRef, {
+                    uid: linkedUser.uid,
+                    phoneNumber: cleanPhone,
+                    displayName: displayName,
+                    authEmail: pseudoEmail,
+                    recoveryEmail: recoveryEmail || null,
+                    createdAt: serverTimestamp(),
+                    phoneNumbers: cleanPhone ? [cleanPhone] : [], // Initialize array
+                    primaryPhoneNumber: cleanPhone
+                });
+                console.log("[DEBUG_AUTH] User doc CREATED successfully.");
+            }
+
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        } catch (dbError: any) {
+            console.error("[DEBUG_AUTH] Firestore write failed:", dbError);
+            throw new Error(`DB Write Failed: ${dbError.code || dbError.message}`);
+        }
 
         // Claim existing debts related to this phone number
-        await claimLegacyDebts(linkedUser.uid, cleanPhone);
+        try {
+            await claimLegacyDebts(linkedUser.uid, cleanPhone);
+        } catch (claimError) {
+             console.warn("Legacy debt claim failed (non-fatal):", claimError);
+        }
 
         return linkedUser;
     } catch (error) {
@@ -182,6 +233,8 @@ export const checkUserExists = async (_phoneNumber: string): Promise<boolean> =>
         return docSnap.exists();
     } catch (error) {
         console.error("Error checking user existence:", error);
-        return false;
+        // If we can't check (permission denied), assume true to let them try login.
+        // Better to fail at OTP stage than block valid users here.
+        return true;
     }
 };

@@ -31,6 +31,12 @@ export const Login = () => {
                 size: 'invisible',
             });
         }
+        return () => {
+            if (recaptchaVerifier.current) {
+                recaptchaVerifier.current.clear();
+                recaptchaVerifier.current = null;
+            }
+        };
     }, []);
 
     const handlePasswordLogin = async (e: React.FormEvent) => {
@@ -66,9 +72,9 @@ export const Login = () => {
             const result = await startPhoneLogin(phone, recaptchaVerifier.current);
             setConfirmationResult(result);
             setSmsStep('VERIFY');
-        } catch (error) {
+        } catch (error: any) {
             console.error(error);
-            showAlert("Hata", "SMS gönderilemedi.", "error");
+            showAlert("Hata", `SMS gönderilemedi: ${error.code || error.message}`, "error");
         } finally {
             setLoading(false);
         }
