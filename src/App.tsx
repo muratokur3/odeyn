@@ -8,7 +8,7 @@ import { Settings } from './pages/Settings';
 import { BlockedUsers } from './pages/BlockedUsers';
 import { MutedUsers } from './pages/MutedUsers';
 import { Tools } from './pages/Tools';
-import { PersonStream } from './pages/PersonStream';
+import { PersonDetail } from './pages/PersonDetail';
 import { PersonProfile } from './pages/PersonProfile';
 import { PendingRequests } from './pages/PendingRequests';
 import { Layout } from './components/Layout';
@@ -30,14 +30,16 @@ import { ThemeProvider } from './context/ThemeContext';
 import { ModalProvider } from './context/ModalContext';
 
 import { ContactProvider } from './context/ContactContext';
+import { AuthProvider } from './context/AuthContext';
 
 function App() {
   return (
     <ThemeProvider>
-      <ModalProvider>
-        <ContactProvider>
-          <div className="w-full max-w-3xl mx-auto min-h-screen bg-background shadow-2xl relative border-x border-border">
-            <Router>
+      <AuthProvider>
+        <ModalProvider>
+          <ContactProvider>
+            <div className="w-full max-w-3xl mx-auto min-h-screen bg-background shadow-2xl relative border-x border-border">
+              <Router>
               <Routes>
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
@@ -53,7 +55,7 @@ function App() {
                   <Route path="/settings/account" element={<AccountSettings />} />
                   <Route path="/debt/:id" element={<DebtDetail />} />
                   <Route path="/tools" element={<Tools />} />
-                  <Route path="/person/:id" element={<PersonStream />} />
+                  <Route path="/person/:id" element={<PersonDetail />} />
                   <Route path="/person/:id/profile" element={<PersonProfile />} />
                   <Route path="/contacts" element={<Contacts />} />
                   <Route path="/settings" element={<Settings />} />
@@ -67,8 +69,9 @@ function App() {
               </Routes>
             </Router>
           </div>
-        </ContactProvider>
-      </ModalProvider>
+          </ContactProvider>
+        </ModalProvider>
+      </AuthProvider>
     </ThemeProvider>
   );
 }

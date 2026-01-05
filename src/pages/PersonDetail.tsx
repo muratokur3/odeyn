@@ -3,13 +3,13 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useDebts } from '../hooks/useDebts';
 import { useContactName } from '../hooks/useContactName';
-import { ArrowLeft, Phone, MessageCircle, Trash2, Edit2, X, MoreVertical, Ban, UserPlus, VolumeX, Volume2, FolderOpen, ChevronRight, ChevronLeft } from 'lucide-react';
+import { ArrowLeft, Phone, MessageCircle, Trash2, Edit2, X, MoreVertical, Ban, UserPlus, VolumeX, Volume2, FolderOpen, ChevronRight, ChevronLeft, Plus } from 'lucide-react';
 import { searchUserByPhone, getContacts, updateContact, addContact, deleteContact, muteUser, unmuteUser, markContactAsRead, createDebt } from '../services/db';
 import { blockUser, isUserBlocked, unblockUser } from '../services/blockService';
 import { Avatar } from '../components/Avatar';
 import { DebtCard } from '../components/DebtCard';
 import { TransactionList } from '../components/TransactionList';
-import { CreateDebtModal } from '../components/CreateDebtModal';
+import { SmartTransactionModal } from '../components/SmartTransactionModal';
 import { UserBalanceHeader } from '../components/UserBalanceHeader';
 import { PhoneInput } from '../components/PhoneInput';
 import { convertToTRY, fetchRates, type CurrencyRates } from '../services/currency';
@@ -21,13 +21,22 @@ import { useModal } from '../context/ModalContext';
 
 import type { User, Contact } from '../types';
 import { useLedger } from '../hooks/useLedger';
+import type { Debt, Transaction } from '../types';
 
-export const PersonDetail = () => {
+interface PersonDetailProps {
+    testDebts?: Debt[];
+    testTransactions?: Transaction[];
+    testLoading?: boolean;
+}
+
+export const PersonDetail = ({ testDebts, testTransactions, testLoading = false }: PersonDetailProps) => {
     const { id } = useParams<{ id: string }>();
     const { user } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
-    const { allDebts: debts, loading } = useDebts();
+    const { allDebts: hookDebts, loading: hookLoading } = useDebts();
+    const debts = testDebts || hookDebts;
+    const loading = testLoading || (testDebts ? false : hookLoading);
     const { resolveName } = useContactName();
     const { showAlert, showConfirm } = useModal();
     const [rates, setRates] = useState<CurrencyRates | null>(null);
@@ -38,7 +47,7 @@ export const PersonDetail = () => {
     const [contactId, setContactId] = useState<string | null>(null);
     const [lastReadTimestamp, setLastReadTimestamp] = useState<number | null>(null);
     const [showEditModal, setShowEditModal] = useState(false);
-    const [showCreateDebtModal, setShowCreateDebtModal] = useState(false);
+    const [showSmartTransactionModal, setShowSmartTransactionModal] = useState(false);
     const [activeViewIndex, setActiveViewIndex] = useState(0); // 0 = Stream, 1 = Files
     const scrollContainerRef = useRef<HTMLDivElement>(null);
     const [editName, setEditName] = useState('');
@@ -71,7 +80,7 @@ export const PersonDetail = () => {
     useEffect(() => {
         const handleBottomNavTrigger = () => {
             if (isBlocked) return;
-            setShowCreateDebtModal(true);
+            setShowSmartTransactionModal(true);
         };
 
         window.addEventListener('trigger-person-fab-action', handleBottomNavTrigger);
@@ -393,8 +402,8 @@ export const PersonDetail = () => {
     const otherPartyId = getTargetUid() || id;
     const { 
         ledgerId, 
-        transactions, 
-        loading: txLoading, 
+        transactions: hookTransactions,
+        loading: hookTxLoading,
     } = useLedger(
         user?.uid,
         user?.displayName,
@@ -402,11 +411,14 @@ export const PersonDetail = () => {
         personInfo.name
     );
 
+    const transactions = testTransactions || hookTransactions;
+    const txLoading = testTransactions ? false : hookTxLoading;
+
     if (loading) return <div className="p-4 text-center">Yükleniyor...</div>;
 
     return (
-        <div className="min-h-full bg-background pb-24">
-            <header className="bg-surface sticky top-0 z-10 shadow-sm transition-colors duration-200">
+        <div className="min-h-full bg-background pb-24 flex flex-col h-screen">
+            <header className="bg-surface sticky top-0 z-10 shadow-sm transition-colors duration-200 flex-none">
                 <div className="max-w-3xl mx-auto px-4 py-3 flex items-center gap-3">
                     <button onClick={() => navigate(-1)} className="p-2 -ml-2 text-text-secondary hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors shrink-0">
                         <ArrowLeft size={20} />
@@ -517,7 +529,7 @@ export const PersonDetail = () => {
                 </div>
             </header>
 
-            <main className="max-w-2xl mx-auto p-4 space-y-6">
+            <div className="max-w-2xl mx-auto p-4 space-y-4 flex-none w-full">
                 {isBlocked && (
                     <div className="bg-orange-50 dark:bg-orange-900/20 p-4 rounded-xl border border-orange-200 dark:border-orange-800 flex items-center gap-3">
                         <Ban className="text-orange-600 shrink-0" size={20} />
@@ -533,7 +545,7 @@ export const PersonDetail = () => {
                     currentUserId={user?.uid || ''}
                 />
 
-                <div className="flex items-center justify-center gap-4 mb-4">
+                <div className="flex items-center justify-center gap-4">
                     <button
                         onClick={() => scrollToView(0)}
                         className={clsx(
@@ -561,16 +573,31 @@ export const PersonDetail = () => {
                         )}
                     </button>
                 </div>
+            </div>
 
-                <div
+            <main className="flex-1 overflow-hidden relative">
+                 <div
                     ref={scrollContainerRef}
                     onScroll={handleScroll}
-                    className="flex overflow-x-auto snap-x snap-mandatory scroll-smooth hide-scrollbar"
+                    className="flex h-full overflow-x-auto snap-x snap-mandatory scroll-smooth hide-scrollbar"
                     style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
                 >
-                    <div className="snap-start shrink-0 w-full px-1 space-y-4">
-                        <div className="space-y-3">
-                            <h3 className="font-semibold text-text-primary px-1">Cari Akışı</h3>
+                    {/* View A: Stream */}
+                    <div className="snap-start shrink-0 w-full px-4 pb-24 h-full overflow-y-auto flex flex-col relative">
+                        {activeViewIndex === 0 && personDebts.length > 0 && (
+                             <div className="fixed right-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 text-blue-500 opacity-50 animate-pulse pointer-events-none z-0">
+                                <ChevronRight size={24} />
+                                <span className="text-[10px] font-medium rotate-90 origin-center whitespace-nowrap">Özel İşlemler</span>
+                            </div>
+                        )}
+
+                        <div className="flex-1 flex flex-col justify-end min-h-0">
+                             {/* Stream content stacks upwards, so we use justify-end and space-y.
+                                TransactionList renders items. We want the newest at bottom.
+                                Currently TransactionList orders oldest first (top) -> newest (bottom).
+                                This matches standard chat.
+                             */}
+
                             {txLoading ? (
                                 <div className="text-center py-8 text-text-secondary">Yükleniyor...</div>
                             ) : ledgerId ? (
@@ -579,27 +606,28 @@ export const PersonDetail = () => {
                                     ledgerId={ledgerId}
                                 />
                             ) : (
-                                <div className="text-center py-12 text-text-secondary">
+                                <div className="text-center py-12 text-text-secondary mt-auto mb-auto">
                                     <div className="text-4xl mb-3 opacity-50">💸</div>
                                     <p className="font-medium">Henüz defter oluşturulmadı</p>
                                     <p className="text-sm mt-1 opacity-70">İlk işlemi ekleyerek defteri başlatın</p>
                                 </div>
                             )}
                         </div>
-
-                        {personDebts.length > 0 && activeViewIndex === 0 && (
-                            <div className="fixed right-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 text-blue-500 opacity-50 animate-pulse pointer-events-none">
-                                <ChevronRight size={24} />
-                                <span className="text-[10px] font-medium rotate-90 origin-center whitespace-nowrap">Özel İşlemler</span>
-                            </div>
-                        )}
                     </div>
 
-                    <div className="snap-start shrink-0 w-full px-1 space-y-4">
-                        <div className="space-y-3">
-                            <h3 className="font-semibold text-text-primary px-1 flex items-center gap-2">
+                    {/* View B: Files */}
+                    <div className="snap-start shrink-0 w-full px-4 pb-24 h-full overflow-y-auto relative">
+                        {activeViewIndex === 1 && (
+                            <div className="fixed left-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 text-purple-500 opacity-50 animate-pulse pointer-events-none z-0">
+                                <ChevronLeft size={24} />
+                                <span className="text-[10px] font-medium -rotate-90 origin-center whitespace-nowrap">Akış</span>
+                            </div>
+                        )}
+
+                        <div className="space-y-3 pt-4">
+                            <h3 className="font-semibold text-text-primary px-1 flex items-center gap-2 sticky top-0 bg-background/95 backdrop-blur z-10 py-2">
                                 <FolderOpen size={16} />
-                                Özel İşlemler
+                                Özel Dosyalar
                             </h3>
                             {personDebts.length > 0 ? (
                                 <div className="space-y-2">
@@ -607,17 +635,15 @@ export const PersonDetail = () => {
                                         const isMyEntry = debt.createdBy === user?.uid;
                                         const isNew = !isMyEntry && lastReadTimestamp && debt.createdAt && debt.createdAt.toMillis() > lastReadTimestamp;
                                         return (
-                                            <div key={debt.id} className={clsx("flex w-full", isMyEntry ? "justify-end" : "justify-start")}>
-                                                <div className="w-full">
-                                                    <DebtCard
-                                                        debt={debt}
-                                                        isNew={!!isNew}
-                                                        currentUserId={user?.uid || ''}
-                                                        onClick={() => navigate(`/debt/${debt.id}`)}
-                                                        disabled={isBlocked}
-                                                        variant="chat"
-                                                    />
-                                                </div>
+                                            <div key={debt.id} className="w-full">
+                                                <DebtCard
+                                                    debt={debt}
+                                                    isNew={!!isNew}
+                                                    currentUserId={user?.uid || ''}
+                                                    onClick={() => navigate(`/debt/${debt.id}`)}
+                                                    disabled={isBlocked}
+                                                    variant="chat" // Using chat variant for consistent look in this view as requested (Dashed border)
+                                                />
                                             </div>
                                         );
                                     })}
@@ -630,25 +656,24 @@ export const PersonDetail = () => {
                                 </div>
                             )}
                         </div>
-
-                        {activeViewIndex === 1 && (
-                            <div className="fixed left-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 text-purple-500 opacity-50 animate-pulse pointer-events-none">
-                                <ChevronLeft size={24} />
-                                <span className="text-[10px] font-medium -rotate-90 origin-center whitespace-nowrap">Akış</span>
-                            </div>
-                        )}
                     </div>
                 </div>
+
+                {/* Unified FAB */}
+                {!isBlocked && (
+                    <button
+                        onClick={() => setShowSmartTransactionModal(true)}
+                        className="fixed bottom-24 right-4 w-14 h-14 bg-purple-600 text-white rounded-full shadow-lg flex items-center justify-center hover:bg-purple-700 active:scale-95 transition-all z-40"
+                    >
+                        <Plus size={28} />
+                    </button>
+                )}
             </main>
 
-            <CreateDebtModal
-                isOpen={showCreateDebtModal}
-                onClose={() => setShowCreateDebtModal(false)}
-                onSubmit={async (borrowerId, borrowerName, amount, type, currency, note, dueDate, installments, canBorrowerAddPayment, initialPayment) => {
-                    if (!user) return;
-                    await createDebt(user.uid, user.displayName || 'Bilinmeyen', borrowerId, borrowerName, amount, type, currency, note, dueDate, installments, canBorrowerAddPayment, initialPayment || 0);
-                    setShowCreateDebtModal(false);
-                }}
+            <SmartTransactionModal
+                isOpen={showSmartTransactionModal}
+                onClose={() => setShowSmartTransactionModal(false)}
+                // onSubmit is handled internally in SmartTransactionModal if not provided, or we can provide wrapper
                 targetUser={targetUserObject}
                 initialPhoneNumber={personInfo.phone}
                 initialName={personInfo.name}
