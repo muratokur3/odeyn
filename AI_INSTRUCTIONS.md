@@ -2,35 +2,40 @@
 
 This document outlines the core rules, architectural decisions, and coding standards for the "DebtDert" project. All AI agents (Jules, Copilot, etc.) MUST adhere to these guidelines strictly.
 
-## 1. TECH STACK & ARCHITECTURE
-* **Frontend Library:** React (Functional Components with Hooks ONLY).
-* **Language:** JavaScript (ES6+) / React JSX.
-* **Backend / Database:** Firebase (Firestore, Authentication, Hosting).
-* **Styling:** CSS Modules or Styled Components (Check existing files for consistency).
-* **Routing:** React Router DOM.
-* **Platform:** Web (deployed via Firebase Hosting).
+## 1. CORE PHILOSOPHY: DUAL-LAYER ARCHITECTURE
+The app now operates on a "Dual-Layer" architecture:
+1.  **Current Stream (Cari / Akış):** For simple daily flow (e.g., "Lunch", "Taxi"). Visualized as a Chat.
+2.  **Special Files (Dosyalar):** For complex debts (Installments, Dates, Contracts). Visualized as Cards/Files.
 
-## 2. CRITICAL RULES (NEVER BREAK THESE)
-1.  **NO Class Components:** Always use Functional Components and Hooks (`useState`, `useEffect`, etc.).
-2.  **NO Direct DOM Manipulation:** Never use `document.getElementById` or `querySelector`. Use `useRef` if absolutely necessary.
-3.  **NO SQL:** This is a Firebase project. Do not generate SQL queries. Use Firestore SDK methods (`collection`, `doc`, `getDocs`, `addDoc`).
-4.  **NO Secrets in Code:** Never hardcode API keys or secrets. Use `process.env` or Firebase config variables.
-5.  **Preserve Directory Structure:** Do not move existing files unless explicitly asked.
+## 2. TECH STACK & ARCHITECTURE
+*   **Frontend Library:** React (Functional Components with Hooks ONLY).
+*   **Language:** JavaScript (ES6+) / React JSX / TypeScript.
+*   **Backend / Database:** Firebase (Firestore, Authentication, Hosting).
+*   **Styling:** Tailwind CSS (preferred) / CSS Modules.
+*   **Routing:** React Router DOM.
+*   **Platform:** Web (deployed via Firebase Hosting).
 
-## 3. CODING STANDARDS & BEST PRACTICES
-* **Error Handling:** All asynchronous operations (especially Firebase calls) MUST be wrapped in `try/catch` blocks.
-* **User Feedback:** Always provide UI feedback for loading states and errors (e.g., toast notifications, alert banners). Do not just log to console.
-* **Component Structure:**
-    * Keep components small and focused.
-    * Use descriptive variable and function names (e.g., `handleSaveDebt` instead of `save`).
-* **Firebase Usage:**
-    * Use `serverTimestamp()` for `createdAt` and `updatedAt` fields.
-    * Validate data types before sending to Firestore.
+## 3. CRITICAL RULES (NEVER BREAK THESE)
+1.  **1-Hour Hard Delete Rule:** A record can ONLY be deleted by its **Creator** and ONLY within **1 Hour** of creation. After that, it must be reversed or archived.
+2.  **Unified Smart Input:** All entries start from a single FAB. Simple inputs go to Stream; Complex inputs (Date/Installment) go to Files.
+3.  **NO Class Components:** Always use Functional Components and Hooks.
+4.  **NO Direct DOM Manipulation:** Use `useRef` if absolutely necessary.
+5.  **NO SQL:** Use Firestore SDK methods.
+6.  **NO Secrets in Code:** Use environment variables.
 
-## 4. WORKFLOW & PR GUIDELINES
-* **Atomic Commits:** Focus on one task per PR.
-* **Self-Correction:** If you modify a file, ensure the app still builds. Check for unused imports.
-* **Explanation:** In PR descriptions, clearly state WHAT changed and HOW to test it.
+## 4. DATA STRUCTURE
+*   **Stream (Transactions):** stored in `debts/{ledgerId}/transactions` (Shared Ledger).
+*   **Files (Debts):** stored in `debts` collection (Independent documents).
+
+## 5. UI/UX STANDARDS
+*   **Stream View:** Chat Bubbles (Right/Green = Given, Left/Red = Taken). Solid Borders.
+*   **Files View:** Card List. Dashed Borders (Paper feel).
+*   **Swipe Actions:** Swipe left on Stream bubble to delete (if < 1hr).
+
+## 6. CODING STANDARDS
+*   **Error Handling:** Wrap async ops in `try/catch`.
+*   **User Feedback:** Use toasts/alerts.
+*   **Firebase Usage:** Use `serverTimestamp()`. Validate data.
 
 ---
-*If you are unsure about a specific implementation details, refer to the existing code patterns in the `src/` directory.*
+*Refer to `PROJECT_MANIFEST.md` for detailed business logic.*

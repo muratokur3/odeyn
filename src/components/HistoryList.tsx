@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { formatCurrency } from '../utils/format';
-import { History, Wallet, Check, X, Clock, MoreVertical } from 'lucide-react';
+import { History, Wallet, X, MoreVertical } from 'lucide-react';
 import { rejectPayment } from '../services/db';
 import { useAuth } from '../hooks/useAuth';
 import clsx from 'clsx';
@@ -84,8 +84,8 @@ export const HistoryList: React.FC<HistoryListProps> = ({ logs, currency, isLend
                         <SwipeableItem
                             key={log.id}
                             onSwipeLeft={canReject(log) ? () => handleReject(log.id) : undefined}
-                            deleteColor="bg-red-500"
-                            DeleteIcon={X}
+                            leftActionColor="bg-red-500"
+                            leftActionIcon={<X size={20} className="text-white" />}
                             className="mb-3"
                             contentClassName="bg-background" // Match page bg
                         >

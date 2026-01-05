@@ -1,63 +1,53 @@
-
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useDebts } from '../hooks/useDebts';
 import { useContactName } from '../hooks/useContactName';
-import { ArrowLeft, Phone, MessageCircle, Trash2, Edit2, X, MoreVertical, Ban, UserPlus, VolumeX, Volume2, FolderOpen, Plus, ChevronRight, ChevronLeft } from 'lucide-react';
+import { ArrowLeft, Phone, MessageCircle, Trash2, Edit2, X, MoreVertical, Ban, UserPlus, VolumeX, Volume2, FolderOpen, ChevronRight, ChevronLeft } from 'lucide-react';
 import { searchUserByPhone, getContacts, updateContact, addContact, deleteContact, muteUser, unmuteUser, markContactAsRead, createDebt } from '../services/db';
-import { blockUser, isUserBlocked, unblockUser } from '../services/blockService'; // Import block services
+import { blockUser, isUserBlocked, unblockUser } from '../services/blockService';
 import { Avatar } from '../components/Avatar';
 import { DebtCard } from '../components/DebtCard';
 import { TransactionList } from '../components/TransactionList';
 import { CreateDebtModal } from '../components/CreateDebtModal';
 import { UserBalanceHeader } from '../components/UserBalanceHeader';
 import { PhoneInput } from '../components/PhoneInput';
-import { formatCurrency } from '../utils/format';
 import { convertToTRY, fetchRates, type CurrencyRates } from '../services/currency';
 import { cleanPhone as cleanPhoneNumber, formatPhoneForDisplay as formatPhoneNumber } from '../utils/phoneUtils';
-import { doc, getDoc, onSnapshot } from 'firebase/firestore'; // Added imports
-import { db } from '../services/firebase'; // Added import
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../services/firebase';
 import clsx from 'clsx';
 import { useModal } from '../context/ModalContext';
 
-import type { User, Contact } from '../types'; // Added import
+import type { User, Contact } from '../types';
 import { useLedger } from '../hooks/useLedger';
 
 export const PersonDetail = () => {
-    const { id } = useParams<{ id: string }>(); // This can be a userId or a contactId (phone number)
+    const { id } = useParams<{ id: string }>();
     const { user } = useAuth();
     const navigate = useNavigate();
     const location = useLocation();
     const { allDebts: debts, loading } = useDebts();
-    const { resolveName } = useContactName(); // Added this
+    const { resolveName } = useContactName();
     const { showAlert, showConfirm } = useModal();
     const [rates, setRates] = useState<CurrencyRates | null>(null);
     const [isRegisteredUser, setIsRegisteredUser] = useState(false);
 
-    // New State for Modal Target
     const [targetUserObject, setTargetUserObject] = useState<User | Contact | null>(null);
 
-    // Edit Contact State
     const [contactId, setContactId] = useState<string | null>(null);
-    const [lastReadTimestamp, setLastReadTimestamp] = useState<number | null>(null); // New State
+    const [lastReadTimestamp, setLastReadTimestamp] = useState<number | null>(null);
     const [showEditModal, setShowEditModal] = useState(false);
     const [showCreateDebtModal, setShowCreateDebtModal] = useState(false);
-    const [activeViewIndex, setActiveViewIndex] = useState(0); // NEW: 0 = Akış (Stream), 1 = Özel İşlemler (Special)
-    const scrollContainerRef = useRef<HTMLDivElement>(null); // NEW: Scroll container ref
+    const [activeViewIndex, setActiveViewIndex] = useState(0); // 0 = Stream, 1 = Files
+    const scrollContainerRef = useRef<HTMLDivElement>(null);
     const [editName, setEditName] = useState('');
     const [editPhone, setEditPhone] = useState('');
     const [submittingEdit, setSubmittingEdit] = useState(false);
     const [showMenu, setShowMenu] = useState(false);
-    const [isBlocked, setIsBlocked] = useState(false); // Block state
+    const [isBlocked, setIsBlocked] = useState(false);
     const [isMuted, setIsMuted] = useState(false);
 
-    // Resolved other party info (for ledger)
-    const [resolvedOtherPartyId, setResolvedOtherPartyId] = useState<string | undefined>(undefined);
-    const [resolvedOtherPartyName, setResolvedOtherPartyName] = useState<string>('');
-
-
-    // NEW: Handle scroll snap detection
     const handleScroll = () => {
         const container = scrollContainerRef.current;
         if (!container) return;
@@ -69,7 +59,6 @@ export const PersonDetail = () => {
         }
     };
 
-    // NEW: Programmatic scroll to view
     const scrollToView = (index: number) => {
         const container = scrollContainerRef.current;
         if (!container) return;
@@ -79,7 +68,6 @@ export const PersonDetail = () => {
         });
     };
 
-    // NEW: Listen for bottom nav trigger event
     useEffect(() => {
         const handleBottomNavTrigger = () => {
             if (isBlocked) return;
@@ -90,9 +78,6 @@ export const PersonDetail = () => {
         return () => window.removeEventListener('trigger-person-fab-action', handleBottomNavTrigger);
     }, [isBlocked]);
 
-
-
-    // Helper to get target UID safely
     const getTargetUid = () => {
         if (id && id.length > 20) return id;
         if (targetUserObject) {
@@ -102,25 +87,21 @@ export const PersonDetail = () => {
         return null;
     };
 
-    // Mark as Read on Mount
     useEffect(() => {
         if (user && id) {
             markContactAsRead(user.uid, id);
         }
     }, [user, id]);
 
-    // Check block & mute status
     useEffect(() => {
         const checkStatus = async () => {
             if (!user || !id) return;
             const targetUid = getTargetUid();
 
             if (targetUid) {
-                // Check Block
                 const blocked = await isUserBlocked(user.uid, targetUid);
                 setIsBlocked(blocked);
 
-                // Check Mute
                 const userRef = doc(db, 'users', user.uid);
                 const userSnap = await getDoc(userRef);
                 if (userSnap.exists()) {
@@ -155,7 +136,6 @@ export const PersonDetail = () => {
                 "warning"
             );
             if (confirmed) {
-                // Pass the person's name to the blockUser function
                 await blockUser(user.uid, targetUid, personInfo.name);
                 setIsBlocked(true);
                 showAlert("Engellendi", "Kullanıcı engellendi.", "success");
@@ -193,19 +173,6 @@ export const PersonDetail = () => {
         }
     };
 
-    // const [isScrolled, setIsScrolled] = useState(false); // Removed scroll logic
-
-    /* Removed scroll effect
-    useEffect(() => {
-        const handleScroll = () => {
-            const scrolled = window.scrollY > 20;
-            setIsScrolled(scrolled);
-        };
-        window.addEventListener('scroll', handleScroll);
-        return () => window.removeEventListener('scroll', handleScroll);
-    }, []);
-    */
-
     const handleDelete = async () => {
         if (!user || !contactId) return;
 
@@ -218,7 +185,6 @@ export const PersonDetail = () => {
             try {
                 await deleteContact(user.uid, contactId);
                 showAlert("Başarılı", "Kişi rehberden silindi.", "success");
-                // Refresh to update UI (will show 'Add to Contacts' button)
                 setTimeout(() => window.location.reload(), 1000);
             } catch (error) {
                 console.error("Delete contact error:", error);
@@ -227,30 +193,22 @@ export const PersonDetail = () => {
         }
     };
 
-    // Fetch rates for summary calculation
     useEffect(() => {
         fetchRates().then(setRates);
     }, []);
 
-    // Check if user is registered and find Contact ID
     const [resolvedUid, setResolvedUid] = useState<string | null>(null);
 
     useEffect(() => {
         const checkRegistrationAndContact = async () => {
             if (!id || !user) return;
-            // Only clean if it looks like a phone number (short, starts with + or digit)
-            // If it's a long UID, leave it be.
             const isUID = id.length > 20;
-            const cleanId = isUID ? id : cleanPhoneNumber(id);
 
             let foundSysUser: User | null = null;
-            let foundContactData: Contact | undefined;
 
-            // 1. Check Registration & Fetch User
-            if (id.length > 20) { // UID check
+            if (id.length > 20) {
                 setResolvedUid(id);
                 setIsRegisteredUser(true);
-                // Fetch User Details for UID
                 try {
                     const userDoc = await getDoc(doc(db, 'users', id));
                     if (userDoc.exists()) {
@@ -270,7 +228,6 @@ export const PersonDetail = () => {
                 }
             }
 
-            // 2. Initial Target Object Set
             if (foundSysUser) {
                 setTargetUserObject(foundSysUser);
             } else {
@@ -282,25 +239,22 @@ export const PersonDetail = () => {
 
     const handleEditSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        if (!user) return; // contactId check removed to allow creation
+        if (!user) return;
 
         setSubmittingEdit(true);
         try {
             if (contactId) {
-                // Update existing
                 await updateContact(user.uid, contactId, {
                     name: editName,
                     phoneNumber: editPhone
                 });
                 showAlert("Başarılı", "Kişi bilgileri güncellendi.", "success");
             } else {
-                // Add new contact
                 await addContact(user.uid, editName, editPhone);
                 showAlert("Başarılı", "Kişi rehbere eklendi.", "success");
             }
 
             setShowEditModal(false);
-            // window.location.reload(); 
             setTimeout(() => window.location.reload(), 1500);
         } catch (error) {
             console.error(error);
@@ -310,22 +264,17 @@ export const PersonDetail = () => {
         }
     };
 
-    // Filter debts for this person (EXCLUDE LEDGER type - those go to Stream view)
     const personDebts = useMemo(() => {
         if (!debts || !id || !user) return [];
         const cleanId = cleanPhoneNumber(id);
 
         return debts.filter(d => {
-            // EXCLUDE LEDGER type - those are for the Stream view
             if (d.type === 'LEDGER') return false;
             
             const isLender = d.lenderId === user.uid;
             const otherId = isLender ? d.borrowerId : d.lenderId;
             const cleanOtherId = cleanPhoneNumber(otherId);
 
-            // Check if ID matches or if it's a phone number match (for non-system users)
-            // Also check resolvedUid if available (handles case where URL is phone but debt has UID)
-            // Base matching logic
             const isMatch = otherId === id ||
                 cleanOtherId === cleanId ||
                 (d.participants.includes(id)) ||
@@ -333,18 +282,11 @@ export const PersonDetail = () => {
 
             if (!isMatch) return false;
 
-            // ASYMMETRIC VISIBILITY FILTER:
-            // If I am the Creator (Lender or Borrower who created it): Show Everything (Active, Rejected, Hidden)
-            // If I am the Receiver (I did not assign this to myself): Hide Rejected/Hidden
-
             const amICreator = d.createdBy === user.uid;
 
             if (amICreator) {
-                // I created it, I see it even if they rejected it.
                 return true;
             } else {
-                // I am the receiver. 
-                // Exclude if REJECTED_BY_RECEIVER or AUTO_HIDDEN
                 if (d.status === 'REJECTED_BY_RECEIVER' || d.status === 'AUTO_HIDDEN') {
                     return false;
                 }
@@ -353,39 +295,18 @@ export const PersonDetail = () => {
         });
     }, [debts, id, user, resolvedUid]);
 
-    // Calculate Special Balance (from debts) - must be after personDebts definition
-    const specialBalance = useMemo(() => {
-        if (!rates || !personDebts.length) return 0;
-        let total = 0;
-        personDebts.forEach(debt => {
-            if (debt.status === 'PAID' || debt.status === 'REJECTED') return;
-            const amountInTRY = convertToTRY(debt.remainingAmount, debt.currency, rates);
-            if (debt.lenderId === user?.uid) {
-                total += amountInTRY;
-            } else {
-                total -= amountInTRY;
-            }
-        });
-        return total;
-    }, [personDebts, rates, user]);
-
-
     const personInfo = useMemo(() => {
-        // Determine fallback name and phone from debts if available
         let fallbackName = '';
 
-        // Use navigation state as high priority fallback for immediate render (Fixes UID flash)
         const locationState = location.state as { name?: string; phone?: string } | undefined;
         if (locationState?.name) {
             fallbackName = locationState.name;
         }
 
-        // Always clean the ID from URL (handles + becoming space) IF it is a phone number.
         const isUID = id && id.length > 20;
         const cleanId = isUID ? (id || '') : cleanPhoneNumber(id || '');
         let phone = cleanId;
 
-        // 1. Try to get better phone from targetUserObject (fetched/found user/contact)
         if (targetUserObject) {
             if ('primaryPhoneNumber' in targetUserObject && targetUserObject.primaryPhoneNumber) {
                 phone = targetUserObject.primaryPhoneNumber;
@@ -394,7 +315,6 @@ export const PersonDetail = () => {
             }
         }
 
-        // 2. Fallback to Debt Information
         if ((!phone || phone.length > 20) && personDebts.length > 0) {
             const first = personDebts[0];
             const isLender = first.lenderId === user?.uid;
@@ -403,24 +323,20 @@ export const PersonDetail = () => {
                 fallbackName = isLender ? first.borrowerName : first.lenderName;
             }
 
-            // Check lockedPhoneNumber first (most reliable for debt context)
             if (first.lockedPhoneNumber) {
                 phone = first.lockedPhoneNumber;
             } else {
                 const otherId = isLender ? first.borrowerId : first.lenderId;
-                // If the ID param is a UID, we prefer the phone from the debt record if it looks like a phone
                 if (id && id.length > 20 && otherId.length <= 15) {
                     phone = cleanPhoneNumber(otherId);
                 }
             }
         }
 
-        // 3. Navigation State Fallback (Lowest priority for phone, but high for name?)
         if ((!phone || phone.length > 20) && locationState?.phone) {
             phone = locationState.phone;
         }
 
-        // Local override if we just edited (optimistic UI)
         if (contactId && editName) {
             return {
                 name: editName,
@@ -437,11 +353,9 @@ export const PersonDetail = () => {
     }, [personDebts, user, id, contactId, editName, editPhone, resolveName, targetUserObject, location.state]);
     
 
-    // NEW: Check if the displayed person is in my contacts (Phone Number Primary Check)
     useEffect(() => {
         const checkContactStatus = async () => {
             if (!user || !personInfo.phone) return;
-            // Ensure we are checking a real phone number, not a UID acting as one
             if (personInfo.phone.length > 20) return; 
 
             const phoneToCheck = cleanPhoneNumber(personInfo.phone);
@@ -451,7 +365,6 @@ export const PersonDetail = () => {
                 const match = contacts.find(c => c.phoneNumber === phoneToCheck);
                 
                 if (match) {
-                    // Only update if changed to avoid loops
                     if (contactId !== match.id) {
                         setContactId(match.id);
                         setEditName(match.name);
@@ -465,7 +378,6 @@ export const PersonDetail = () => {
                         }
                     }
                 } else {
-                    // Start fresh if not found in contacts
                     if (contactId !== null) {
                         setContactId(null);
                     }
@@ -476,15 +388,13 @@ export const PersonDetail = () => {
         };
         
         checkContactStatus();
-    }, [user, personInfo.phone]);    // SHARED LEDGER: Get the ledger ID for this person
+    }, [user, personInfo.phone]);
+
     const otherPartyId = getTargetUid() || id;
     const { 
-        ledger, 
         ledgerId, 
         transactions, 
         loading: txLoading, 
-        balance: cariBalance,
-        createLedger 
     } = useLedger(
         user?.uid,
         user?.displayName,
@@ -492,44 +402,16 @@ export const PersonDetail = () => {
         personInfo.name
     );
 
-    // Calculate Totals with this person
-    const totals = useMemo(() => {
-        if (!rates) return { net: 0, receivables: 0, payables: 0 };
-
-        let receivables = 0;
-        let payables = 0;
-
-        personDebts.forEach(debt => {
-            if (debt.status === 'PAID' || debt.status === 'REJECTED') return;
-
-            const amountInTRY = convertToTRY(debt.remainingAmount, debt.currency, rates);
-            if (debt.lenderId === user?.uid) {
-                receivables += amountInTRY;
-            } else {
-                payables += amountInTRY;
-            }
-        });
-
-        return {
-            receivables,
-            payables,
-            net: receivables - payables
-        };
-    }, [personDebts, rates, user]);
-
     if (loading) return <div className="p-4 text-center">Yükleniyor...</div>;
 
     return (
         <div className="min-h-full bg-background pb-24">
-            {/* Header */}
             <header className="bg-surface sticky top-0 z-10 shadow-sm transition-colors duration-200">
                 <div className="max-w-3xl mx-auto px-4 py-3 flex items-center gap-3">
-                    {/* Back Button */}
                     <button onClick={() => navigate(-1)} className="p-2 -ml-2 text-text-secondary hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full transition-colors shrink-0">
                         <ArrowLeft size={20} />
                     </button>
 
-                    {/* Avatar */}
                     <div className="shrink-0">
                         <Avatar
                             name={personInfo.name}
@@ -544,15 +426,12 @@ export const PersonDetail = () => {
                         />
                     </div>
 
-                    {/* Name & Phone */}
                     <div className="flex flex-col justify-center overflow-hidden min-w-0 mr-2">
                         <h1 className="text-base font-bold text-text-primary leading-tight truncate">{personInfo.name}</h1>
                         <p className="text-xs text-text-secondary font-medium mt-0.5 truncate">{formatPhoneNumber(personInfo.phone || '')}</p>
                     </div>
 
-                    {/* Right Side Actions */}
                     <div className="ml-auto flex items-center gap-2 shrink-0">
-                        {/* WhatsApp */}
                         <a
                             href={`https://wa.me/${cleanPhoneNumber(personInfo.phone || '')}`}
                             target="_blank"
@@ -562,7 +441,6 @@ export const PersonDetail = () => {
                             <MessageCircle size={18} />
                         </a>
 
-                        {/* Call */}
                         <a
                             href={`tel:${personInfo.phone || ''}`}
                             className="w-9 h-9 rounded-full bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-700 text-blue-600 dark:text-blue-500 flex items-center justify-center hover:bg-blue-50 dark:hover:bg-slate-700 transition-colors shadow-sm"
@@ -570,10 +448,6 @@ export const PersonDetail = () => {
                             <Phone size={18} />
                         </a>
 
-                        {/* More Options Menu, moved inside div to reuse space if needed, 
-                            but actually we just removed the primary action button. 
-                            WhatsApp and Call buttons remain. 
-                        */}
                         <div className="relative">
                             <button
                                 onClick={() => setShowMenu(!showMenu)}
@@ -582,13 +456,10 @@ export const PersonDetail = () => {
                                 <MoreVertical size={20} />
                             </button>
 
-                            {/* Dropdown Menu */}
                             {showMenu && (
                                 <>
                                     <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)}></div>
                                     <div className="absolute right-0 top-full mt-2 w-48 bg-surface rounded-xl shadow-xl border border-border z-20 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
-
-                                        {/* 1. Edit / Add (Context Dependent) */}
                                         {contactId ? (
                                             <button
                                                 onClick={() => { setShowEditModal(true); setShowMenu(false); }}
@@ -612,7 +483,6 @@ export const PersonDetail = () => {
 
                                         <div className="h-px bg-border my-0"></div>
 
-                                        {/* 2. Universal Actions (Mute & Block) */}
                                         <button
                                             onClick={() => { handleMuteToggle(); setShowMenu(false); }}
                                             className="w-full text-left px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 dark:hover:bg-slate-700 flex items-center gap-2"
@@ -628,7 +498,6 @@ export const PersonDetail = () => {
                                             <Ban size={16} /> {isBlocked ? 'Engeli Kaldır' : 'Kullanıcıyı Engelle'}
                                         </button>
 
-                                        {/* 3. Delete (Contact Only) */}
                                         {contactId && (
                                             <>
                                                 <div className="h-px bg-border my-0"></div>
@@ -649,7 +518,6 @@ export const PersonDetail = () => {
             </header>
 
             <main className="max-w-2xl mx-auto p-4 space-y-6">
-                {/* Blocked Badge */}
                 {isBlocked && (
                     <div className="bg-orange-50 dark:bg-orange-900/20 p-4 rounded-xl border border-orange-200 dark:border-orange-800 flex items-center gap-3">
                         <Ban className="text-orange-600 shrink-0" size={20} />
@@ -659,16 +527,12 @@ export const PersonDetail = () => {
                     </div>
                 )}
 
-                {/* Multi-Currency Balance Header */}
                 <UserBalanceHeader
                     transactions={transactions}
                     specialDebts={personDebts}
                     currentUserId={user?.uid || ''}
                 />
 
-                {/* ========== SWIPEABLE DUAL-VIEW ARCHITECTURE ========== */}
-
-                {/* View Tabs */}
                 <div className="flex items-center justify-center gap-4 mb-4">
                     <button
                         onClick={() => scrollToView(0)}
@@ -698,16 +562,13 @@ export const PersonDetail = () => {
                     </button>
                 </div>
 
-                {/* Swipeable Container */}
                 <div
                     ref={scrollContainerRef}
                     onScroll={handleScroll}
                     className="flex overflow-x-auto snap-x snap-mandatory scroll-smooth hide-scrollbar"
                     style={{ scrollbarWidth: 'none', msOverflowStyle: 'none' }}
                 >
-                    {/* View 1: Akış (Stream) */}
                     <div className="snap-start shrink-0 w-full px-1 space-y-4">
-                        {/* Transaction List */}
                         <div className="space-y-3">
                             <h3 className="font-semibold text-text-primary px-1">Cari Akışı</h3>
                             {txLoading ? (
@@ -726,7 +587,6 @@ export const PersonDetail = () => {
                             )}
                         </div>
 
-                        {/* Swipe Hint (only if there are special transactions) */}
                         {personDebts.length > 0 && activeViewIndex === 0 && (
                             <div className="fixed right-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 text-blue-500 opacity-50 animate-pulse pointer-events-none">
                                 <ChevronRight size={24} />
@@ -735,9 +595,7 @@ export const PersonDetail = () => {
                         )}
                     </div>
 
-                    {/* View 2: Özel İşlemler (Special Transactions) */}
                     <div className="snap-start shrink-0 w-full px-1 space-y-4">
-                        {/* Debt List */}
                         <div className="space-y-3">
                             <h3 className="font-semibold text-text-primary px-1 flex items-center gap-2">
                                 <FolderOpen size={16} />
@@ -750,7 +608,7 @@ export const PersonDetail = () => {
                                         const isNew = !isMyEntry && lastReadTimestamp && debt.createdAt && debt.createdAt.toMillis() > lastReadTimestamp;
                                         return (
                                             <div key={debt.id} className={clsx("flex w-full", isMyEntry ? "justify-end" : "justify-start")}>
-                                                <div className="w-[85%]">
+                                                <div className="w-full">
                                                     <DebtCard
                                                         debt={debt}
                                                         isNew={!!isNew}
@@ -773,7 +631,6 @@ export const PersonDetail = () => {
                             )}
                         </div>
 
-                        {/* Back Hint */}
                         {activeViewIndex === 1 && (
                             <div className="fixed left-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 text-purple-500 opacity-50 animate-pulse pointer-events-none">
                                 <ChevronLeft size={24} />
@@ -784,7 +641,6 @@ export const PersonDetail = () => {
                 </div>
             </main>
 
-            {/* Create Debt Modal */}
             <CreateDebtModal
                 isOpen={showCreateDebtModal}
                 onClose={() => setShowCreateDebtModal(false)}
@@ -798,7 +654,6 @@ export const PersonDetail = () => {
                 initialName={personInfo.name}
             />
 
-            {/* Edit Modal */}
             {
                 showEditModal && (
                     <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">

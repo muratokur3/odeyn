@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { getContacts, deleteContact, updateContact, createDebt, batchAddContacts } from '../services/db';
 import type { Contact } from '../types';
-import { Search, ArrowLeft, Wallet, X, Ban } from 'lucide-react';
+import { Search, ArrowLeft, Wallet, X, Ban, Edit2 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { SwipeableItem } from '../components/SwipeableItem';
 import { Avatar } from '../components/Avatar';
@@ -332,7 +332,6 @@ export const Contacts = () => {
                                             <SwipeableItem
                                                 key={contact.id}
                                                 onSwipeLeft={() => handleDeleteContact(contact.id)}
-                                                onSwipeRight={() => openEditModal(contact)}
                                                 className="mb-0"
                                             >
                                                 <div className="p-4 pl-5 flex items-center justify-between hover:bg-background/50 transition-colors min-h-[72px]">
@@ -381,7 +380,16 @@ export const Contacts = () => {
                                                             </button>
                                                         ) : (
                                                             <div className="flex items-center gap-1">
-
+                                                                {/* Edit Button */}
+                                                                <button
+                                                                    onClick={(e) => {
+                                                                        e.stopPropagation();
+                                                                        openEditModal(contact);
+                                                                    }}
+                                                                    className="p-2.5 rounded-full text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
+                                                                >
+                                                                    <Edit2 size={18} />
+                                                                </button>
 
                                                                 {/* Wallet Button (Always Visible) */}
                                                                 <button

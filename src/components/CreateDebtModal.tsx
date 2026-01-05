@@ -1,9 +1,9 @@
 import React, { useState, useEffect } from 'react';
-import { X, Calendar, DollarSign, User as UserIcon, FileText, ChevronDown, ChevronUp, Plus, Search, FolderOpen, Ban, RefreshCw } from 'lucide-react';
+import { X, FileText, ChevronDown, ChevronUp, Plus, Search, Ban, RefreshCw, MessageCircle } from 'lucide-react';
 import { Avatar } from './Avatar';
 import { SelectedUserCard } from './SelectedUserCard';
 
-import { searchUserByPhone, searchContacts, createDebt, getContacts } from '../services/db';
+import { searchUserByPhone, searchContacts, createDebt } from '../services/db';
 import { getOrCreateLedger, addLedgerTransaction } from '../services/transactionService';
 import { formatCurrency } from '../utils/format';
 import { cleanPhone as cleanPhoneNumber, formatPhoneForDisplay } from '../utils/phoneUtils';
@@ -15,7 +15,6 @@ import { Timestamp } from 'firebase/firestore';
 import clsx from 'clsx';
 import { ContactModal } from './ContactModal';
 import { useModal } from '../context/ModalContext';
-
 
 interface CreateDebtModalProps {
     isOpen: boolean;
@@ -34,9 +33,8 @@ interface CreateDebtModalProps {
     ) => Promise<void>;
     initialPhoneNumber?: string;
     targetUser?: User | Contact | null;
-    initialName?: string; // New prop
+    initialName?: string;
 }
-
 
 export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClose, onSubmit, initialPhoneNumber, targetUser, initialName: propInitialName }) => {
     const { user, blockedUsers } = useAuth();
@@ -47,9 +45,6 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
     const derivedInitialName = targetUser
         ? ('displayName' in targetUser ? targetUser.displayName : targetUser.name)
         : (propInitialName || '');
-
-
-    // ... [rest unchanged]
 
     const initialPhone = targetUser
         ? ('uid' in targetUser
@@ -76,8 +71,6 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
     const [step, setStep] = useState<'SEARCH' | 'DETAILS'>('SEARCH');
     const [isShadowUser, setIsShadowUser] = useState(false);
 
-    // const [isManualSearch, setIsManualSearch] = useState(false); // Removed in favor of step
-
     // New Fields
     const [type, setType] = useState<'LENDING' | 'BORROWING'>('LENDING');
     const [currency, setCurrency] = useState('TRY');
@@ -85,7 +78,6 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
     const [dueDate, setDueDate] = useState('');
     const [showDetails, setShowDetails] = useState(false);
     const [canBorrowerAddPayment, setCanBorrowerAddPayment] = useState(false);
-
 
     // Installment State
     const [isInstallment, setIsInstallment] = useState(false);
@@ -97,15 +89,14 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
     const [showContactModal, setShowContactModal] = useState(false);
     const [isResolvingInitial, setIsResolvingInitial] = useState(false);
 
-    // Special Debt Logic
-    const isSpecialDebt = isInstallment || (dueDate && dueDate.length > 0);
+    // Special Debt Logic: If ANY complex field is used, it's a "File" (Debt), otherwise "Stream" (Transaction)
+    const isSpecialDebt = isInstallment || (dueDate && dueDate.length > 0) || (showDetails && (canBorrowerAddPayment));
 
     // Reset/Init when opening
     useEffect(() => {
         if (isOpen) {
             setPhoneNumber(initialPhone);
             setBorrowerName(derivedInitialName);
-            // setIsManualSearch(false); 
 
             if (targetUser) {
                 setStep('DETAILS');
@@ -119,14 +110,12 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                 }
             } else if (propInitialName && initialPhone) {
                 // Shadow/Optimistic User Case 
-                // Whether it's a raw phone or a UID with a known name (Optimistic System User)
                 setStep('DETAILS');
-                setIsShadowUser(true); // Treat as shadow until resolved
+                setIsShadowUser(true);
                 setFoundContact(null);
                 setFoundUser(null);
             } else if (initialPhoneNumber && initialPhoneNumber.length > 20) {
                 // UID provided but no user object and NO name yet.
-                // Must resolve before showing UI to avoid empty card.
                 setIsResolvingInitial(true);
                 setStep('SEARCH');
             } else {
@@ -134,10 +123,6 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                 setIsShadowUser(false);
             }
 
-            // Initialize requestApproval to false (user can manually check if needed)
-            // ...
-
-            // Initialize canBorrowerAddPayment from preference
             if (user?.preferences?.defaultAllowPaymentAddition) {
                 setCanBorrowerAddPayment(true);
             } else {
@@ -186,17 +171,11 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
     useEffect(() => {
         if (initialPhoneNumber && initialPhoneNumber.length > 20 && !targetUser && isOpen) {
             const fetchUser = async () => {
-                // Only block UI if we don't have a name to show optimistically
                 if (!borrowerName) {
                     setIsResolvingInitial(true);
                 }
 
                 try {
-                    // We need to import getDoc and doc and db. Since they might not be imported yet, 
-                    // I will assume they need to be imported or used from services/db if available, 
-                    // or use the direct firebase import. 
-                    // PersonDetail uses: import { doc, getDoc } from 'firebase/firestore'; import { db } from '../services/firebase';
-                    // Let's use the same.
                     const { doc, getDoc } = await import('firebase/firestore');
                     const { db } = await import('../services/firebase');
 
@@ -217,8 +196,7 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
             };
             fetchUser();
         }
-    }, [initialPhoneNumber, targetUser, isOpen, borrowerName]); // Added borrowerName dep
-
+    }, [initialPhoneNumber, targetUser, isOpen, borrowerName]);
 
     // Search Effect - Disable if NOT in SEARCH step
     useEffect(() => {
@@ -228,35 +206,21 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
             if (!user || !phoneNumber || phoneNumber.length < 3) {
                 setSearchResults([]);
                 setFoundUser(null);
-
                 return;
             }
 
-
             try {
-                // 1. Search Contacts
                 const contacts = await searchContacts(user.uid, phoneNumber);
-                // Filter out blocked users if they are linked?
-                // The requirements say: "Filter out users present in the blockedUsers collection. They should NOT appear in the autocomplete list"
-                // However, contacts are local. Linked users are the issue.
-                // We should probably show them but marked as blocked?
-                // "Filter out users present in the blockedUsers collection" implies strict filtering from the list.
-                // Let's filter linked blocked users from the list if possible, or mark them.
-                // But let's follow the requirement: Filter OUT.
-
                 const filteredContacts = contacts.filter(c =>
                     !c.linkedUserId || !blockedUsers.some(b => b.blockedUid === c.linkedUserId)
                 );
-
                 setSearchResults(filteredContacts);
 
-                // 2. Search System Users (only if full phone number)
                 if (phoneNumber.length >= 10) {
                     const sysUser = await searchUserByPhone(phoneNumber);
                     if (sysUser && sysUser.uid !== user.uid) {
-                        // Check if blocked
                         if (blockedUsers.some(b => b.blockedUid === sysUser.uid)) {
-                            setFoundUser(null); // Don't show blocked system users
+                            setFoundUser(null);
                         } else {
                             setFoundUser(sysUser);
                         }
@@ -266,8 +230,6 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                 }
             } catch (error) {
                 console.error(error);
-            } finally {
-
             }
         };
 
@@ -316,7 +278,6 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
         e.preventDefault();
         if (!user) return;
 
-        // Final Block Check before submission
         if (isTargetBlocked) {
             showAlert("Engellendi", "Engellediğiniz bir kullanıcıya işlem yapamazsınız.", "error");
             return;
@@ -331,7 +292,6 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
             return;
         }
 
-        // Determine final ID and Name
         let finalBorrowerId: string = phoneNumber || '';
         let finalBorrowerName = borrowerName;
 
@@ -343,14 +303,12 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
             finalBorrowerName = borrowerName || foundUser.displayName;
         }
 
-        // Fallback: If name empty, use formatted phone or raw phone
         if (!finalBorrowerName) {
             finalBorrowerName = formatPhoneForDisplay(finalBorrowerId);
         }
 
         setLoading(true);
         try {
-            // Generate Installments
             let generatedInstallments: Installment[] | undefined;
             if (isInstallment && installmentCount > 1) {
                 generatedInstallments = [];
@@ -370,9 +328,8 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                 }
             }
 
-            // 1. Submit Logic Split
             if (isSpecialDebt) {
-                // SPECIAL DEBT (Complex) -> Uses standard Debt collection via createDebt
+                // SPECIAL DEBT (Complex) -> Uses standard Debt collection
                 await createDebt(
                     user.uid,
                     user.displayName || 'İsimsiz',
@@ -389,7 +346,6 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                 );
             } else {
                 // NORMAL FLOW (Ledger Transaction) -> Uses Ledger system
-                // 1. Get or Create Ledger
                 const ledgerId = await getOrCreateLedger(
                     user.uid,
                     user.displayName || 'İsimsiz',
@@ -397,9 +353,6 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                     finalBorrowerName
                 );
 
-                // 2. Add Transaction
-                // LENDING (Veriyorum) -> OUTGOING (Benden Çıkan)
-                // BORROWING (Alıyorum) -> INCOMING (Bana Gelen)
                 const direction = type === 'LENDING' ? 'OUTGOING' : 'INCOMING';
 
                 await addLedgerTransaction(
@@ -430,21 +383,21 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
     return (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
             <div className={clsx(
-                "rounded-2xl w-full max-w-sm shadow-xl animate-in fade-in zoom-in duration-200 h-auto max-h-[90dvh] flex flex-col border transition-colors",
+                "rounded-2xl w-full max-w-sm shadow-xl animate-in fade-in zoom-in duration-200 h-auto max-h-[90dvh] flex flex-col border-2 transition-all",
                 isSpecialDebt 
-                    ? "bg-surface border-purple-500/50 dark:border-purple-400/50 shadow-purple-500/10" 
-                    : "bg-surface border-slate-700"
+                    ? "bg-surface border-dashed border-purple-500 shadow-purple-500/10"
+                    : "bg-surface border-solid border-slate-700 shadow-lg"
             )}>
                 <div className={clsx(
                     "flex justify-between items-center p-6 pb-2 flex-none rounded-t-2xl transition-colors",
-                    isSpecialDebt ? "bg-purple-500/10" : ""
+                    isSpecialDebt ? "bg-purple-500/5" : ""
                 )}>
                     <h2 className={clsx(
                         "text-xl font-bold flex items-center gap-2",
                         isSpecialDebt ? "text-purple-600 dark:text-purple-300" : "text-text-primary"
                     )}>
-                        {isSpecialDebt && <FileText size={24} className="text-purple-600 dark:text-purple-400" />}
-                        {isSpecialDebt ? 'Özel İşlem Ekle' : 'Yeni İşlem Ekle'}
+                        {isSpecialDebt ? <FileText size={24} className="text-purple-600 dark:text-purple-400" /> : <MessageCircle size={24} className="text-blue-600 dark:text-blue-400" />}
+                        {isSpecialDebt ? 'Özel Dosya Oluştur' : 'Hızlı Akış Ekle'}
                     </h2>
                     <button onClick={onClose} className="p-2 hover:bg-slate-700/50 rounded-full">
                         <X size={20} className="text-text-secondary" />
@@ -685,7 +638,7 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                                 {showDetails ? (
                                     <>Daha Az Detay <ChevronUp size={16} /></>
                                 ) : (
-                                    <>Taksit, Vade ve Diğer Detaylar <ChevronDown size={16} /></>
+                                    <>Detay, Vade veya Taksit Ekle ▾ <ChevronDown size={16} /></>
                                 )}
                             </button>
 
@@ -802,9 +755,14 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                         type="submit"
                         form="create-debt-form"
                         disabled={loading || !amount || (!foundUser && !foundContact && !borrowerName) || isTargetBlocked}
-                        className="w-full bg-primary text-white py-3 rounded-xl font-semibold hover:bg-blue-600 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-blue-500/20"
+                        className={clsx(
+                            "w-full py-3 rounded-xl font-semibold hover:opacity-90 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg",
+                            isSpecialDebt
+                                ? "bg-purple-600 text-white shadow-purple-500/20"
+                                : "bg-primary text-white shadow-blue-500/20"
+                        )}
                     >
-                        {loading ? 'İşleniyor...' : 'Kaydet'}
+                        {loading ? 'İşleniyor...' : (isSpecialDebt ? 'Dosya Oluştur' : 'Akışa Ekle')}
                     </button>
                 </div>
             </div >
@@ -814,7 +772,7 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                 onClose={() => setShowContactModal(false)}
                 initialPhone={phoneNumber}
                 onSuccess={handleContactCreated}
-                checkDuplicates={false} // Already checked in search, plus we want flow 
+                checkDuplicates={false}
             />
         </div >
     );
