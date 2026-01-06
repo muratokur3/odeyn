@@ -3,7 +3,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useDebts } from '../hooks/useDebts';
 import { useContactName } from '../hooks/useContactName';
-import { ArrowLeft, Phone, MessageCircle, Trash2, Edit2, X, MoreVertical, Ban, UserPlus, VolumeX, Volume2, FolderOpen, ChevronRight, ChevronLeft } from 'lucide-react';
+import { ArrowLeft, Phone, MessageCircle, Trash2, Edit2, X, MoreVertical, Ban, UserPlus, VolumeX, Volume2, FolderOpen } from 'lucide-react';
 import { searchUserByPhone, getContacts, updateContact, addContact, deleteContact, muteUser, unmuteUser, markContactAsRead, createDebt } from '../services/db';
 import { blockUser, isUserBlocked, unblockUser } from '../services/blockService';
 import { Avatar } from '../components/Avatar';
@@ -587,12 +587,6 @@ export const PersonDetail = () => {
                             )}
                         </div>
 
-                        {personDebts.length > 0 && activeViewIndex === 0 && (
-                            <div className="fixed right-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 text-blue-500 opacity-50 animate-pulse pointer-events-none">
-                                <ChevronRight size={24} />
-                                <span className="text-[10px] font-medium rotate-90 origin-center whitespace-nowrap">Özel İşlemler</span>
-                            </div>
-                        )}
                     </div>
 
                     <div className="snap-start shrink-0 w-full px-1 space-y-4">
@@ -631,12 +625,6 @@ export const PersonDetail = () => {
                             )}
                         </div>
 
-                        {activeViewIndex === 1 && (
-                            <div className="fixed left-2 top-1/2 -translate-y-1/2 flex flex-col items-center gap-1 text-purple-500 opacity-50 animate-pulse pointer-events-none">
-                                <ChevronLeft size={24} />
-                                <span className="text-[10px] font-medium -rotate-90 origin-center whitespace-nowrap">Akış</span>
-                            </div>
-                        )}
                     </div>
                 </div>
             </main>
