@@ -9,6 +9,7 @@ import { BlockedUsers } from './pages/BlockedUsers';
 import { MutedUsers } from './pages/MutedUsers';
 import { Tools } from './pages/Tools';
 import { PersonStream } from './pages/PersonStream';
+import { StreamHistory } from './pages/StreamHistory';
 import { PersonProfile } from './pages/PersonProfile';
 import { PendingRequests } from './pages/PendingRequests';
 import { Layout } from './components/Layout';
@@ -54,6 +55,7 @@ function App() {
                   <Route path="/debt/:id" element={<DebtDetail />} />
                   <Route path="/tools" element={<Tools />} />
                   <Route path="/person/:id" element={<PersonStream />} />
+                  <Route path="/person/:id/history" element={<StreamHistory />} />
                   <Route path="/person/:id/profile" element={<PersonProfile />} />
                   <Route path="/contacts" element={<Contacts />} />
                   <Route path="/settings" element={<Settings />} />
