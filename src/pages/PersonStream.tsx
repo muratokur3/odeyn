@@ -356,7 +356,7 @@ export const PersonStream = () => {
                 <section>
                     <h2 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-3 px-1 flex items-center gap-2">
                         <FolderOpen size={14} />
-                        Özel Dosyalar
+                        Özel Borçlar
                     </h2>
 
                     {personDebts.length > 0 ? (
@@ -381,7 +381,7 @@ export const PersonStream = () => {
                     ) : (
                         <div className="bg-surface/50 rounded-xl p-8 text-center border border-dashed border-border">
                             <FolderOpen size={32} className="mx-auto mb-3 opacity-30 text-text-secondary" />
-                            <p className="text-text-secondary font-medium">Özel dosya yok</p>
+                            <p className="text-text-secondary font-medium">Özel borç yok</p>
                             <p className="text-xs text-text-tertiary mt-1">Vadeli veya taksitli borçlar burada görünür</p>
                         </div>
                     )}

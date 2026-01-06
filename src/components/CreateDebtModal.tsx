@@ -360,7 +360,8 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                     user.uid,
                     numAmount,
                     direction,
-                    note
+                    note,
+                    currency
                 );
             }
 
@@ -397,7 +398,7 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                         isSpecialDebt ? "text-purple-600 dark:text-purple-300" : "text-text-primary"
                     )}>
                         {isSpecialDebt ? <FileText size={24} className="text-purple-600 dark:text-purple-400" /> : <MessageCircle size={24} className="text-blue-600 dark:text-blue-400" />}
-                        {isSpecialDebt ? 'Özel Dosya Oluştur' : 'Hızlı Akış Ekle'}
+                        {isSpecialDebt ? 'Özel Borç Ekle' : 'Hızlı Akış Ekle'}
                     </h2>
                     <button onClick={onClose} className="p-2 hover:bg-slate-700/50 rounded-full">
                         <X size={20} className="text-text-secondary" />
@@ -762,7 +763,7 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                                 : "bg-primary text-white shadow-blue-500/20"
                         )}
                     >
-                        {loading ? 'İşleniyor...' : (isSpecialDebt ? 'Dosya Oluştur' : 'Akışa Ekle')}
+                        {loading ? 'İşleniyor...' : (isSpecialDebt ? 'Özel Borç Oluştur' : 'Akışa Ekle')}
                     </button>
                 </div>
             </div >

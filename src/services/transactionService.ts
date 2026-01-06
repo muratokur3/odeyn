@@ -155,7 +155,8 @@ export const addLedgerTransaction = async (
     userId: string,
     amount: number,
     direction: TransactionDirection,
-    description?: string
+    description?: string,
+    currency: string = 'TRY'
 ): Promise<string> => {
     const txRef = getLedgerTransactionsRef(ledgerId);
     
@@ -163,6 +164,7 @@ export const addLedgerTransaction = async (
     const newTx: Record<string, unknown> = {
         amount,
         direction,
+        currency,
         createdAt: serverTimestamp(),
         createdBy: userId,
         type: 'SIMPLE'

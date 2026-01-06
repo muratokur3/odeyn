@@ -42,30 +42,29 @@ export const calculateStreamBalance = (
 ): CurrencyBalances => {
     const balances = new Map<string, number>();
     
-    // All stream transactions are in TRY for now
-    let tryBalance = 0;
-    
     transactions.forEach(tx => {
+        const currency = tx.currency || 'TRY'; // Default to TRY if missing
+        const currentBalance = balances.get(currency) || 0;
+        let change = 0;
+
         if (tx.createdBy === currentUserId) {
             // I created this entry
             if (tx.direction === 'OUTGOING') {
-                tryBalance += tx.amount; // I gave, they owe me
+                change = tx.amount; // I gave, they owe me (Positive)
             } else {
-                tryBalance -= tx.amount; // I took, I owe them
+                change = -tx.amount; // I took, I owe them (Negative)
             }
         } else {
             // They created this entry (reverse my perspective)
             if (tx.direction === 'OUTGOING') {
-                tryBalance -= tx.amount; // They gave me, I owe them
+                change = -tx.amount; // They gave me, I owe them (Negative)
             } else {
-                tryBalance += tx.amount; // They took from me, they owe me
+                change = tx.amount; // They took from me, they owe me (Positive)
             }
         }
+
+        balances.set(currency, currentBalance + change);
     });
-    
-    if (tryBalance !== 0) {
-        balances.set('TRY', tryBalance);
-    }
     
     return balances;
 };

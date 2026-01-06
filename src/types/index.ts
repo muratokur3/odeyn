@@ -117,6 +117,7 @@ export type TransactionDirection = 'OUTGOING' | 'INCOMING';
 export interface Transaction {
     id: string;
     amount: number;
+    currency?: string; // Support for multi-currency stream
     description?: string;
     direction: TransactionDirection; // OUTGOING = I gave/paid, INCOMING = I took/received
     createdAt: Timestamp;

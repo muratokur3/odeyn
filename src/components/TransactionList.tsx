@@ -83,7 +83,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                                         "text-lg font-bold leading-none",
                                         isOutgoing ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"
                                     )}>
-                                        {formatCurrency(tx.amount, 'TRY')}
+                                        {formatCurrency(tx.amount, tx.currency || 'TRY')}
                                     </p>
                                     <div className="text-[10px] text-text-secondary opacity-70 whitespace-nowrap">
                                         {tx.createdAt?.toDate ? format(tx.createdAt.toDate(), 'HH:mm', { locale: tr }) : ''}
