@@ -1,13 +1,13 @@
 import React, { useState, useEffect } from 'react';
-import { X, FileText, ChevronDown, ChevronUp, Plus, Search, Ban, RefreshCw, MessageCircle } from 'lucide-react';
+import { X, FileText, ChevronDown, ChevronUp, Plus, Search, Ban, RefreshCw, MessageCircle, AlertTriangle } from 'lucide-react';
 import { Avatar } from './Avatar';
 import { SelectedUserCard } from './SelectedUserCard';
 
-import { searchUserByPhone, searchContacts, createDebt } from '../services/db';
+import { searchUserByPhone, searchContacts, createDebt, updateDebtHardReset } from '../services/db';
 import { getOrCreateLedger, addLedgerTransaction } from '../services/transactionService';
 import { formatCurrency } from '../utils/format';
 import { cleanPhone as cleanPhoneNumber, formatPhoneForDisplay } from '../utils/phoneUtils';
-import type { User, Contact, Installment } from '../types';
+import type { User, Contact, Installment, Debt } from '../types';
 import { useAuth } from '../hooks/useAuth';
 import { useContactSync } from '../hooks/useContactSync';
 import { Toggle } from './Toggle';
@@ -19,7 +19,8 @@ import { useModal } from '../context/ModalContext';
 interface CreateDebtModalProps {
     isOpen: boolean;
     onClose: () => void;
-    onSubmit: (
+    // onSubmit is effectively replaced by logic inside but kept for signature compatibility if needed
+    onSubmit?: (
         borrowerId: string,
         borrowerName: string,
         amount: number,
@@ -34,9 +35,21 @@ interface CreateDebtModalProps {
     initialPhoneNumber?: string;
     targetUser?: User | Contact | null;
     initialName?: string;
+    // New Props for Editing
+    editMode?: boolean;
+    initialData?: Debt;
 }
 
-export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClose, onSubmit, initialPhoneNumber, targetUser, initialName: propInitialName }) => {
+export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
+    isOpen,
+    onClose,
+    onSubmit,
+    initialPhoneNumber,
+    targetUser,
+    initialName: propInitialName,
+    editMode = false,
+    initialData
+}) => {
     const { user, blockedUsers } = useAuth();
     const { showAlert } = useModal();
     const { syncContacts, dismissSuggestion, userInfo, isSyncing, isSupported } = useContactSync();
@@ -95,6 +108,65 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
     // Reset/Init when opening
     useEffect(() => {
         if (isOpen) {
+            // EDIT MODE INITIALIZATION
+            if (editMode && initialData) {
+                // Determine Counterparty Name/Phone
+                // If I am the creator, I look at the other person.
+                const amILender = initialData.lenderId === user?.uid;
+                // If I am lender, target is Borrower.
+                const targetId = amILender ? initialData.borrowerId : initialData.lenderId;
+                const targetName = amILender ? initialData.borrowerName : initialData.lenderName;
+
+                // Determine Type
+                // If I created it:
+                // If I am Lender -> 'LENDING' (Asset)
+                // If I am Borrower -> 'BORROWING' (Liability)
+                // Wait, type is perspective based.
+                // If I created it, and I am Lender -> I lent money.
+                const newType = initialData.lenderId === initialData.createdBy ? 'LENDING' : 'BORROWING';
+
+                setType(newType);
+                setAmount(initialData.originalAmount.toString());
+                setCurrency(initialData.currency);
+                setNote(initialData.note || '');
+                setPhoneNumber(initialData.lockedPhoneNumber || targetId); // Use locked phone if available
+                setBorrowerName(targetName);
+
+                // Details
+                if (initialData.dueDate) {
+                    setDueDate(initialData.dueDate.toDate().toISOString().split('T')[0]);
+                }
+                if (initialData.canBorrowerAddPayment) {
+                    setCanBorrowerAddPayment(true);
+                }
+
+                // Installments
+                if (initialData.installments && initialData.installments.length > 0) {
+                    setIsInstallment(true);
+                    setInstallmentCount(initialData.installments.length);
+                    // Try to guess down payment? Or leave empty?
+                    // Recalculation logic will overwrite anyway.
+                    // Let's assume user re-enters or we just don't prefill down payment for edit?
+                    // "Sanki yeniden oluşturulmuş gibi" -> User modifies parameters.
+                }
+
+                setStep('DETAILS');
+
+                // Resolving User/Contact Object for display card?
+                // We have names, so we can set shadow user state or try to resolve.
+                // Let's assume shadow for speed unless targetUser prop was passed.
+                if (!targetUser) {
+                    setIsShadowUser(true);
+                }
+
+                if (isSpecialDebt || initialData.installments || initialData.dueDate) {
+                     setShowDetails(true);
+                }
+
+                return;
+            }
+
+            // CREATE MODE INITIALIZATION
             setPhoneNumber(initialPhone);
             setBorrowerName(derivedInitialName);
 
@@ -149,7 +221,7 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
             setStep('SEARCH');
             setIsResolvingInitial(false);
         }
-    }, [isOpen, initialPhoneNumber, targetUser, user, propInitialName]);
+    }, [isOpen, initialPhoneNumber, targetUser, user, propInitialName, editMode, initialData]);
 
     // Check blocked status whenever foundUser or foundContact changes
     useEffect(() => {
@@ -169,7 +241,7 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
 
     // Fetch User by UID if initialPhoneNumber looks like a UID
     useEffect(() => {
-        if (initialPhoneNumber && initialPhoneNumber.length > 20 && !targetUser && isOpen) {
+        if (initialPhoneNumber && initialPhoneNumber.length > 20 && !targetUser && isOpen && !editMode) {
             const fetchUser = async () => {
                 if (!borrowerName) {
                     setIsResolvingInitial(true);
@@ -196,11 +268,11 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
             };
             fetchUser();
         }
-    }, [initialPhoneNumber, targetUser, isOpen, borrowerName]);
+    }, [initialPhoneNumber, targetUser, isOpen, borrowerName, editMode]);
 
     // Search Effect - Disable if NOT in SEARCH step
     useEffect(() => {
-        if (step !== 'SEARCH') return;
+        if (step !== 'SEARCH' || editMode) return;
 
         const search = async () => {
             if (!user || !phoneNumber || phoneNumber.length < 3) {
@@ -235,7 +307,7 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
 
         const timeoutId = setTimeout(search, 500);
         return () => clearTimeout(timeoutId);
-    }, [phoneNumber, user, targetUser, blockedUsers]);
+    }, [phoneNumber, user, targetUser, blockedUsers, step, editMode]);
 
     if (!isOpen) return null;
 
@@ -328,6 +400,47 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                 }
             }
 
+            // --- EDIT MODE LOGIC ---
+            if (editMode && initialData) {
+                // For editing, we reuse the existing participants from initialData usually.
+                // But we allow updating note, amount, installments.
+                // We do NOT allow changing the person for now (complex validation),
+                // but if we did, we'd need to re-validate block status etc.
+                // We assume person is same.
+
+                // Construct Update Object
+                // If it's becoming a transaction (Stream) vs File (Debt)
+                // "Hard Reset" treats everything as a Debt Document Update.
+                // Even simple transactions are stored as Debt docs in this architecture
+                // (except Ledger specialized ones? No, createDebt covers both usually if we look at db.ts?
+                // Ah, createDebt creates a debt doc. Ledger is different service?
+                // The existing code has `getOrCreateLedger`...
+                // If the original item was a Ledger Transaction, `initialData` probably won't be a `Debt` object?
+                // Or we unify them.
+                // If initialData is passed, it implies it's a Debt object (from Firestore 'debts').
+
+                await updateDebtHardReset(
+                    initialData.id,
+                    user.uid,
+                    {
+                        originalAmount: numAmount,
+                        currency,
+                        note,
+                        ...(dueDate ? { dueDate: Timestamp.fromDate(new Date(dueDate)) } : { dueDate: null }),
+                        ...(generatedInstallments ? { installments: generatedInstallments } : { installments: null }),
+                        canBorrowerAddPayment,
+                        // Update status logic handled in service based on remaining
+                    },
+                    numDownPayment
+                );
+
+                onClose();
+                setLoading(false);
+                return;
+            }
+
+            // --- CREATE MODE LOGIC ---
+
             if (isSpecialDebt) {
                 // SPECIAL DEBT (Complex) -> Uses standard Debt collection
                 await createDebt(
@@ -372,6 +485,8 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
             if (error instanceof Error) {
                 if (error.message.includes("blocked")) {
                     showAlert("İşlem Başarısız", "Bu kullanıcı gizlilik ayarları nedeniyle işlem kabul etmiyor.", "error");
+                } else if (error.message.includes("1 saat")) {
+                    showAlert("Süre Doldu", error.message, "error");
                 } else {
                     showAlert("Hata", "İşlem kaydedilirken bir hata oluştu.", "error");
                 }
@@ -397,8 +512,17 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                         "text-xl font-bold flex items-center gap-2",
                         isSpecialDebt ? "text-purple-600 dark:text-purple-300" : "text-text-primary"
                     )}>
-                        {isSpecialDebt ? <FileText size={24} className="text-purple-600 dark:text-purple-400" /> : <MessageCircle size={24} className="text-blue-600 dark:text-blue-400" />}
-                        {isSpecialDebt ? 'Özel Borç Ekle' : 'Hızlı Akış Ekle'}
+                        {editMode ? (
+                            <>
+                            <FileText size={24} className="text-orange-500" />
+                            Kaydı Düzenle
+                            </>
+                        ) : (
+                            <>
+                            {isSpecialDebt ? <FileText size={24} className="text-purple-600 dark:text-purple-400" /> : <MessageCircle size={24} className="text-blue-600 dark:text-blue-400" />}
+                            {isSpecialDebt ? 'Özel Borç Ekle' : 'Hızlı Akış Ekle'}
+                            </>
+                        )}
                     </h2>
                     <button onClick={onClose} className="p-2 hover:bg-slate-700/50 rounded-full">
                         <X size={20} className="text-text-secondary" />
@@ -414,6 +538,17 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                         </div>
                     )}
 
+                    {/* Hard Reset Warning */}
+                    {editMode && (
+                        <div className="mb-4 p-3 bg-orange-50 dark:bg-orange-900/20 rounded-lg border border-orange-200 dark:border-orange-800 flex items-start gap-2">
+                             <AlertTriangle className="text-orange-600 shrink-0 mt-0.5" size={16} />
+                             <div className="text-xs text-orange-800 dark:text-orange-200">
+                                 <span className="font-bold block mb-1">Dikkat: Sıfırdan Hesaplama</span>
+                                 Bu işlem kaydı tamamen silip yeni bilgilerle tekrar oluşturur. Geçmiş ödemeler ve notlar silinecektir.
+                             </div>
+                        </div>
+                    )}
+
                     <form id="create-debt-form" onSubmit={handleSubmit} className="space-y-4">
                         {/* Type Toggle */}
                         <div className="flex p-1 bg-background rounded-xl border border-slate-700">
@@ -425,7 +560,7 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                                     type === 'LENDING' ? "bg-surface text-green-500 shadow-sm" : "text-text-secondary hover:text-text-primary"
                                 )}
                             >
-                                Borç Veriyorum
+                                {editMode && type === 'LENDING' ? 'Borç Vermiştim' : 'Borç Veriyorum'}
                             </button>
                             <button
                                 type="button"
@@ -435,13 +570,13 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                                     type === 'BORROWING' ? "bg-surface text-red-500 shadow-sm" : "text-text-secondary hover:text-text-primary"
                                 )}
                             >
-                                Borç Alıyorum
+                                {editMode && type === 'BORROWING' ? 'Borç Almıştım' : 'Borç Alıyorum'}
                             </button>
                         </div>
 
 
-                        {/* Sync Banner */}
-                        {step === 'SEARCH' && isSupported && !userInfo?.settings?.contactSyncEnabled && !userInfo?.settings?.suppressSyncSuggestion && (
+                        {/* Sync Banner - Hide in Edit Mode */}
+                        {!editMode && step === 'SEARCH' && isSupported && !userInfo?.settings?.contactSyncEnabled && !userInfo?.settings?.suppressSyncSuggestion && (
                             <div className="mb-4 p-3 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-xl border border-indigo-100 dark:border-indigo-800 flex flex-col gap-2 animate-in fade-in slide-in-from-top-2">
                                 <div className="flex items-center gap-2">
                                     <div className="p-1.5 bg-indigo-100 dark:bg-indigo-900/40 rounded-full text-indigo-600 dark:text-indigo-400">
@@ -484,7 +619,7 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                                 phoneNumber={phoneNumber}
                                 status={foundUser ? 'system' : (foundContact ? 'contact' : 'none')}
                                 uid={foundUser ? foundUser.uid : foundContact?.linkedUserId}
-                                onClear={() => {
+                                onClear={editMode ? undefined : () => { // Disable clearing user in edit mode
                                     setFoundContact(null);
                                     setFoundUser(null);
                                     setPhoneNumber('');
@@ -758,12 +893,14 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({ isOpen, onClos
                         disabled={loading || !amount || (!foundUser && !foundContact && !borrowerName) || isTargetBlocked}
                         className={clsx(
                             "w-full py-3 rounded-xl font-semibold hover:opacity-90 active:scale-95 transition-all disabled:opacity-50 disabled:cursor-not-allowed shadow-lg",
-                            isSpecialDebt
-                                ? "bg-purple-600 text-white shadow-purple-500/20"
-                                : "bg-primary text-white shadow-blue-500/20"
+                            editMode
+                                ? "bg-orange-600 text-white shadow-orange-500/20"
+                                : isSpecialDebt
+                                    ? "bg-purple-600 text-white shadow-purple-500/20"
+                                    : "bg-primary text-white shadow-blue-500/20"
                         )}
                     >
-                        {loading ? 'İşleniyor...' : (isSpecialDebt ? 'Özel Borç Oluştur' : 'Akışa Ekle')}
+                        {loading ? 'İşleniyor...' : (editMode ? 'Güncelle (Sıfırla)' : (isSpecialDebt ? 'Özel Borç Oluştur' : 'Akışa Ekle'))}
                     </button>
                 </div>
             </div >

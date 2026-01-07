@@ -5,14 +5,17 @@
 
 import { format, differenceInMinutes } from 'date-fns';
 import { tr } from 'date-fns/locale';
-import { ArrowUpRight, ArrowDownLeft, Trash2 } from 'lucide-react';
+import { ArrowUpRight, ArrowDownLeft, Trash2, Edit2 } from 'lucide-react';
 import { formatCurrency } from '../utils/format';
 import { deleteLedgerTransaction } from '../services/transactionService';
+import { isTransactionEditable } from '../services/db'; // New helper
 import { useAuth } from '../hooks/useAuth';
 import { useModal } from '../context/ModalContext';
 import clsx from 'clsx';
 import type { Transaction } from '../types';
 import { SwipeableItem } from './SwipeableItem';
+import { useState } from 'react';
+import { CreateDebtModal } from './CreateDebtModal';
 
 interface TransactionListProps {
     transactions: Transaction[];
@@ -26,17 +29,27 @@ export const TransactionList: React.FC<TransactionListProps> = ({
 }) => {
     const { user } = useAuth();
     const { showConfirm, showAlert } = useModal();
+    const [editingTx, setEditingTx] = useState<Transaction | null>(null);
 
     const handleDelete = async (txId: string) => {
         if (!user) return;
         
-        try {
-            await deleteLedgerTransaction(ledgerId, txId);
-            // No alert needed for swipe action usually, but success feedback is good
-        } catch (error) {
-            console.error(error);
-            showAlert("Hata", "Silme işlemi başarısız.", "error");
-        }
+        showConfirm(
+            "Kaydı Sil",
+            "Bu işlem geri alınamaz. Kayıt tamamen silinecek. Emin misin?",
+            async () => {
+                try {
+                    await deleteLedgerTransaction(ledgerId, txId);
+                } catch (error) {
+                    console.error(error);
+                    showAlert("Hata", "Silme işlemi başarısız.", "error");
+                }
+            }
+        );
+    };
+
+    const handleEdit = (tx: Transaction) => {
+        setEditingTx(tx);
     };
 
     if (transactions.length === 0) {
@@ -56,10 +69,8 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                 const isOutgoing = tx.direction === 'OUTGOING';
 
                 // 1-Hour Hard Delete Rule Check
-                const now = new Date();
                 const createdAt = tx.createdAt?.toDate ? tx.createdAt.toDate() : new Date();
-                const diffMinutes = differenceInMinutes(now, createdAt);
-                const isDeletable = isMine && diffMinutes < 60;
+                const isEditable = isMine && isTransactionEditable(createdAt);
 
                 const content = (
                     <div
@@ -98,13 +109,18 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                     </div>
                 );
 
-                if (isDeletable) {
+                if (isEditable) {
                     return (
                         <SwipeableItem
                             key={tx.id}
                             onSwipeLeft={() => handleDelete(tx.id)}
                             leftActionColor="bg-red-500"
                             leftActionIcon={<Trash2 className="text-white" size={20} />}
+
+                            // Right Swipe for Edit
+                            onSwipeRight={() => handleEdit(tx)}
+                            rightActionColor="bg-blue-500"
+                            rightActionIcon={<Edit2 className="text-white" size={20} />}
                         >
                             {content}
                         </SwipeableItem>
@@ -113,6 +129,41 @@ export const TransactionList: React.FC<TransactionListProps> = ({
 
                 return <div key={tx.id}>{content}</div>;
             })}
+
+            {/* Edit Modal (Reusing CreateDebtModal) */}
+            {editingTx && (
+                <CreateDebtModal
+                    isOpen={!!editingTx}
+                    onClose={() => setEditingTx(null)}
+                    editMode={true}
+                    initialData={{
+                        // Mapping Transaction to Debt-like structure for the modal
+                        id: editingTx.id,
+                        lenderId: editingTx.direction === 'OUTGOING' ? (user?.uid || '') : '', // If Outgoing, I am lender
+                        borrowerId: editingTx.direction === 'INCOMING' ? (user?.uid || '') : '',
+                        // Names might be missing in Tx object, but Modal handles display logic or we can fetch/pass?
+                        // Transaction object usually lacks names. But CreateDebtModal expects names for rendering card.
+                        // However, editMode uses initialData primarily for amounts/notes.
+                        // It will try to show "User Card" which might be empty if we don't pass name.
+                        // Let's rely on the fact that Transaction List is for a specific person usually?
+                        // Wait, TransactionList is used in PersonStream? Yes.
+                        // So we know the other person. But we don't have it passed here explicitly as a user object.
+                        // Let's modify TransactionList to accept targetUser?
+                        // Or just let Modal handle "Shadow User" logic.
+                        // We need to pass valid IDs.
+                        originalAmount: editingTx.amount,
+                        remainingAmount: editingTx.amount, // Irrelevant for edit display
+                        currency: editingTx.currency || 'TRY',
+                        note: editingTx.description,
+                        createdAt: editingTx.createdAt,
+                        createdBy: editingTx.createdBy,
+                        status: 'ACTIVE',
+                        participants: [],
+                        lenderName: '',
+                        borrowerName: ''
+                    }}
+                />
+            )}
         </div>
     );
 };

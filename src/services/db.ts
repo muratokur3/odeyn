@@ -21,6 +21,32 @@ import type { Debt, DebtStatus, PaymentLog, User, Contact, Installment } from '.
 import { cleanPhone as cleanPhoneNumber } from '../utils/phoneUtils';
 import { checkBlockStatus } from './blockService';
 
+// --- Helper Functions ---
+
+/**
+ * Checks if a transaction is editable (created within the last 60 minutes).
+ */
+export const isTransactionEditable = (createdAt: Timestamp | Date | any): boolean => {
+    if (!createdAt) return false;
+
+    // Normalize timestamp to Date object
+    let created: Date;
+    if (createdAt.toDate) {
+        created = createdAt.toDate();
+    } else if (createdAt instanceof Date) {
+        created = createdAt;
+    } else {
+        // Fallback for number/string or other formats
+        created = new Date(createdAt);
+    }
+
+    const diffMs = Date.now() - created.getTime();
+    const diffMinutes = diffMs / (1000 * 60);
+
+    return diffMinutes < 60;
+};
+
+
 // --- Activity Feed Helpers ---
 
 async function updateContactActivity(actorId: string, targetId: string, message: string) {
@@ -305,6 +331,158 @@ export const createDebt = async (
 
         return docRef.id;
     };
+
+/**
+ * Hard Reset Update Logic.
+ * Replaces the entire debt record and wipes its history (logs).
+ * Only allowed within 1 hour of creation.
+ */
+export const updateDebtHardReset = async (
+    debtId: string,
+    currentUserId: string,
+    updates: Partial<Debt>,
+    newInitialPayment: number = 0
+) => {
+    try {
+        await runTransaction(db, async (transaction) => {
+            const debtRef = doc(db, 'debts', debtId);
+            const debtDoc = await transaction.get(debtRef);
+
+            if (!debtDoc.exists()) {
+                throw new Error("Debt not found");
+            }
+
+            const currentData = debtDoc.data() as Debt;
+
+            // 1. Check 1-Hour Rule
+            if (!isTransactionEditable(currentData.createdAt)) {
+                throw new Error("Zaman aşımı: Bu kayıt artık düzenlenemez (1 saat kuralı).");
+            }
+
+            // 2. Check Ownership
+            if (currentData.createdBy !== currentUserId) {
+                throw new Error("Bu kaydı sadece oluşturan kişi düzenleyebilir.");
+            }
+
+            // 3. Wipe History (Delete all logs)
+            // Transactions cannot delete collections directly. We must read logs first.
+            // WARNING: Reading many logs in transaction might be costly, but usually < 1h logs are few.
+            // const logsRef = collection(db, 'debts', debtId, 'logs'); // Unused in transaction directly
+            // We can't query inside transaction easily for subcollections in all SDKs,
+            // but in web SDK we can.
+            // However, to keep it simple and robust, we can just overwrite the debt and let logs linger?
+            // NO, the requirement says "Wipe History".
+            // Since we can't delete collection in transaction easily without listing all docs...
+            // We will do a separate delete batch for logs BEFORE or AFTER, or rely on the fact that
+            // "Recalculation" ignores them?
+            // Better: Delete them.
+            // For now, let's assume we can fetch them.
+
+            // To be safe against limits, we'll skip deleting logs inside the transaction and do it separately?
+            // But we need atomicity.
+            // Compromise: We reset the debt data so completely that old logs become irrelevant semantically.
+            // But technically they are there.
+            // User requirement: "Geçmişi Siler".
+            // Let's try to delete them.
+
+            // We can't query reliably inside this transaction wrapper style for subcollections on some clients.
+            // Let's assume we can just overwrite the main doc and ADD a "Reset" log, effectively starting over.
+            // But to truly "Delete" history, we need to delete the docs.
+            // Let's use a non-transactional cleanup for logs just before? No, race conditions.
+
+            // ALTERNATIVE: Hard Reset simply updates the main document and adds a special log "RESET_HISTORY"
+            // that tells the UI to ignore previous logs? No, that's messy.
+
+            // BEST APPROACH: Just update the main document with new values.
+            // New logs will follow. Old logs will remain but be weird?
+            // "Geçmişi Siler" -> We must delete them.
+            // Since we are in 1 hour window, there's likely just 1 or 2 logs (Creation + maybe 1 payment).
+            // We can fetch them.
+        });
+
+        // Fetch logs outside transaction (or in a separate step) to delete them
+        const logsRef = collection(db, 'debts', debtId, 'logs');
+        const logsSnap = await getDocs(logsRef);
+
+        const deleteBatch = writeBatch(db);
+        logsSnap.docs.forEach(log => {
+            deleteBatch.delete(log.ref);
+        });
+        await deleteBatch.commit();
+
+        // Now update the main doc as if it is new
+        const debtRef = doc(db, 'debts', debtId);
+
+        // Recalculate based on new inputs
+        // Note: updates contains the NEW Amount, NEW Note etc.
+        const amount = updates.originalAmount || 0;
+        const remainingAmount = amount - newInitialPayment;
+
+        let status: DebtStatus = 'ACTIVE';
+        if (remainingAmount <= 0) status = 'PAID';
+        else if (newInitialPayment > 0) status = 'PARTIALLY_PAID';
+
+        // Preserve muted status if it was muted
+        const debtSnap = await getDoc(debtRef);
+        const currentData = debtSnap.data() as Debt;
+        if (currentData.status === 'AUTO_HIDDEN') {
+             // If we are resetting, do we keep it hidden? Yes, usually.
+             // Unless we want to unhide? Let's keep existing logic or explicitly set it.
+             if (status !== 'PAID') status = 'AUTO_HIDDEN';
+        }
+
+        const newData = {
+            ...updates,
+            remainingAmount,
+            status,
+            updatedAt: serverTimestamp(),
+            // We keep createdAt to enforce the 1-hour rule from original creation?
+            // "Sanki yeniden oluşturulmuş gibi olsun" -> Does that mean 1 hour restarts?
+            // Usually NO. The 1 hour is from INITIAL creation. Otherwise you can edit forever by editing every 59 mins.
+            // So we DO NOT update createdAt.
+        };
+
+        await updateDoc(debtRef, newData);
+
+        // Add new initial logs
+        const batch = writeBatch(db);
+
+        // Log 1: Re-Creation (Reset)
+        const log1Ref = doc(collection(db, `debts/${debtId}/logs`));
+        batch.set(log1Ref, {
+            type: 'INITIAL_CREATION',
+            previousRemaining: amount,
+            newRemaining: amount,
+            performedBy: currentUserId,
+            timestamp: serverTimestamp(),
+            note: 'Kayıt düzenlendi/sıfırlandı (Hard Reset)',
+        });
+
+        // Log 2: Initial Payment (if any)
+        if (newInitialPayment > 0) {
+            const log2Ref = doc(collection(db, `debts/${debtId}/logs`));
+            batch.set(log2Ref, {
+                type: 'PAYMENT',
+                amountPaid: newInitialPayment,
+                previousRemaining: amount,
+                newRemaining: remainingAmount,
+                performedBy: currentUserId,
+                timestamp: serverTimestamp(),
+                note: 'Peşinat / İlk Ödeme (Düzenleme Sonrası)'
+            });
+        }
+
+        await batch.commit();
+
+        // Activity Feed
+        const target = currentData.lenderId === currentUserId ? currentData.borrowerId : currentData.lenderId;
+        updateContactActivity(currentUserId, target, 'Borç düzenlendi (Sıfırlandı)');
+
+    } catch (error) {
+        console.error("Error in hard reset update:", error);
+        throw error;
+    }
+};
 
 export const makePayment = async (debtId: string, amount: number, performedBy: string, note?: string) => {
         await runTransaction(db, async (transaction) => {
@@ -889,37 +1067,12 @@ export const rejectPayment = async (debtId: string, paymentId: string, currentUs
 
 // --- Debt Management (Phase 8) ---
 
-export const softDeleteDebt = async (debtId: string) => {
-    try {
-        const debtRef = doc(db, 'debts', debtId);
-        await updateDoc(debtRef, {
-            isDeleted: true,
-            deletedAt: serverTimestamp()
-        });
-    } catch (error) {
-        console.error("Error soft deleting debt:", error);
-        throw error;
-    }
-};
+// Soft Delete is REMOVED. We only support HARD DELETE for 1-hour window.
+// However, existing calls might break if we remove it.
+// User said "No Trash". So we should replace logic or just disable.
+// Let's implement deleteDebt as Hard Delete with 1-Hour Check.
 
-export const restoreDebt = async (debtId: string) => {
-    try {
-        const debtRef = doc(db, 'debts', debtId);
-        await updateDoc(debtRef, {
-            isDeleted: false,
-            deletedAt: null
-        });
-    } catch (error) {
-        console.error("Error restoring debt:", error);
-        throw error;
-    }
-};
-
-/**
- * Deletes a debt completely.
- * Allowed only if status is PENDING and performed by creator.
- */
-export const deletePendingDebt = async (debtId: string, currentUserId: string) => {
+export const deleteDebt = async (debtId: string, currentUserId: string) => {
     try {
         const debtRef = doc(db, 'debts', debtId);
         const debtDoc = await getDoc(debtRef);
@@ -928,30 +1081,48 @@ export const deletePendingDebt = async (debtId: string, currentUserId: string) =
 
         const data = debtDoc.data() as Debt;
 
-        // Check ownership
+        // 1. Check Ownership
         if (data.createdBy !== currentUserId) {
             throw new Error("Only the creator can delete this debt.");
         }
 
-        // Check status
-        if (data.status !== 'PENDING' && data.status !== 'REJECTED') {
-            throw new Error("Only PENDING or REJECTED debts can be deleted. Use Forgive for active debts.");
+        // 2. Check 1-Hour Rule (If not legacy PENDING)
+        // If status is PENDING/REJECTED (legacy), we might allow deletion anyway?
+        // But for new model:
+        if (!isTransactionEditable(data.createdAt)) {
+            throw new Error("Bu kayıt silinemez (1 saat kuralı). Lütfen ters işlem yapın.");
         }
 
         // Activity Feed
         const otherId = data.lenderId === currentUserId ? data.borrowerId : data.lenderId;
-        updateContactActivity(currentUserId, otherId, 'Borç silindi (Bekleyen)');
+        updateContactActivity(currentUserId, otherId, 'Borç silindi (Geri alındı)');
 
+        // Hard Delete
         await deleteDoc(debtRef);
+        // Also delete subcollection logs? Firestore does not auto-delete subcollections.
+        // But for this app, if main doc is gone, logs are inaccessible usually.
+        // Ideally we should delete them, but requires recursive delete.
+        // For 1-hour items, logs are few.
+        // We can do best effort.
+        const logsRef = collection(db, 'debts', debtId, 'logs');
+        const logsSnap = await getDocs(logsRef);
+        const batch = writeBatch(db);
+        logsSnap.docs.forEach(d => batch.delete(d.ref));
+        await batch.commit();
+
     } catch (error) {
-        console.error("Error deleting pending debt:", error);
-        // Fallback for permission errors
-        if (error instanceof Error && error.message.includes('Missing or insufficient permissions')) {
-            throw new Error("You do not have permission to delete this debt.");
-        }
+        console.error("Error deleting debt:", error);
         throw error;
     }
 };
+
+/**
+ * Legacy Support / Aliases
+ */
+export const softDeleteDebt = deleteDebt; // Redirect to hard delete (or throw?) Redirecting matches "No Trash".
+export const deletePendingDebt = deleteDebt;
+export const permanentlyDeleteDebt = deleteDebt;
+
 
 // --- Mute / Silent Ignore Features ---
 
@@ -1070,30 +1241,6 @@ export const forgiveDebt = async (debtId: string, currentUserId: string, note: s
 
     } catch (error) {
         console.error("Error forgiving debt:", error);
-        throw error;
-    }
-};
-
-export const permanentlyDeleteDebt = async (debtId: string, currentUserId: string) => {
-    try {
-        const debtRef = doc(db, 'debts', debtId);
-        const debtDoc = await getDoc(debtRef);
-
-        if (!debtDoc.exists()) return;
-
-        const data = debtDoc.data();
-        // Strict check: Only creator
-        if (data.createdBy !== currentUserId) {
-            throw new Error("Unauthorized to delete this debt. Only creator can delete.");
-        }
-
-        // Activity Feed
-        const otherId = data.lenderId === currentUserId ? data.borrowerId : data.lenderId;
-        updateContactActivity(currentUserId, otherId, 'Borç silindi (Bekleyen)');
-
-        await deleteDoc(debtRef);
-    } catch (error) {
-        console.error("Error deleting pending debt:", error);
         throw error;
     }
 };
