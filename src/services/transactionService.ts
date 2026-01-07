@@ -25,6 +25,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import type { Transaction, TransactionDirection, Debt } from '../types';
+import { isTransactionEditable } from './db';
 
 // ============= LEDGER DOCUMENT OPERATIONS =============
 
@@ -206,12 +207,23 @@ export const subscribeLedgerTransactions = (
 
 /**
  * Delete a ledger transaction (only by creator)
+ * ENFORCES 1-HOUR HARD RULE
  */
 export const deleteLedgerTransaction = async (
     ledgerId: string,
     transactionId: string
 ): Promise<void> => {
     const txDoc = doc(db, 'debts', ledgerId, 'transactions', transactionId);
+
+    // Check 1-Hour Rule
+    const txSnap = await getDoc(txDoc);
+    if (!txSnap.exists()) return;
+
+    const data = txSnap.data();
+    if (!isTransactionEditable(data.createdAt)) {
+         throw new Error("Bu kayıt silinemez (1 saat kuralı). Lütfen ters işlem yapın.");
+    }
+
     await deleteDoc(txDoc);
     
     // Recalculate balance
