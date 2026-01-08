@@ -3,11 +3,12 @@ import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { formatCurrency } from '../utils/format';
-import { History, Wallet, X, MoreVertical } from 'lucide-react';
+import { History, Wallet, X } from 'lucide-react';
 import { rejectPayment } from '../services/db';
 import { useAuth } from '../hooks/useAuth';
 import clsx from 'clsx';
-import { SwipeableItem, type SwipeAction } from './SwipeableItem';
+import { AdaptiveActionRow } from './AdaptiveActionRow';
+import { type SwipeAction } from './SwipeableItem';
 
 import { useModal } from '../context/ModalContext';
 
@@ -21,27 +22,16 @@ interface HistoryListProps {
 export const HistoryList: React.FC<HistoryListProps> = ({ logs, currency, isLender, debtId }) => {
     const { showAlert, showConfirm } = useModal();
     const { user } = useAuth();
-    const [openMenuId, setOpenMenuId] = useState<string | null>(null);
     const [openRowId, setOpenRowId] = useState<string | null>(null);
 
     // Auto-Reset: Click anywhere else closes row
     useEffect(() => {
         const handleClickOutside = () => {
             if (openRowId) setOpenRowId(null);
-            if (openMenuId) setOpenMenuId(null);
         };
         window.addEventListener('click', handleClickOutside);
         return () => window.removeEventListener('click', handleClickOutside);
-    }, [openRowId, openMenuId]);
-
-    const toggleMenu = (id: string, e: React.MouseEvent) => {
-        e.stopPropagation();
-        if (openMenuId === id) {
-            setOpenMenuId(null);
-        } else {
-            setOpenMenuId(id);
-        }
-    };
+    }, [openRowId]);
 
     const handleReject = async (paymentId: string) => {
         if (!user) return;
@@ -94,7 +84,7 @@ export const HistoryList: React.FC<HistoryListProps> = ({ logs, currency, isLend
                     }
 
                     return (
-                        <SwipeableItem
+                        <AdaptiveActionRow
                             key={log.id}
                             rightActions={rightActions}
                             isOpen={openRowId === `${log.id}_right` ? 'right' : null}
@@ -128,7 +118,7 @@ export const HistoryList: React.FC<HistoryListProps> = ({ logs, currency, isLend
                                         </div>
                                     </div>
 
-                                    {/* Right Side: Amount + Menu */}
+                                    {/* Right Side: Amount */}
                                     <div className="flex items-center gap-2">
                                         {log.amountPaid && (
                                             <p className={clsx(
@@ -137,34 +127,6 @@ export const HistoryList: React.FC<HistoryListProps> = ({ logs, currency, isLend
                                             )}>
                                                 +{formatCurrency(log.amountPaid, currency)}
                                             </p>
-                                        )}
-
-                                        {/* Action Menu Trigger - only if rejectable */}
-                                        {canReject(log) && (
-                                            <div className="relative">
-                                                <button
-                                                    onClick={(e) => toggleMenu(log.id, e)}
-                                                    className="p-1 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-200 transition-colors"
-                                                >
-                                                    <MoreVertical size={16} />
-                                                </button>
-
-                                                {/* Dropdown Menu */}
-                                                {openMenuId === log.id && (
-                                                    <div className="absolute right-0 top-full mt-1 w-32 bg-white rounded-lg shadow-lg border border-gray-100 z-10 py-1 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
-                                                        <button
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                handleReject(log.id);
-                                                                setOpenMenuId(null);
-                                                            }}
-                                                            className="w-full text-left px-3 py-2 text-xs font-medium text-red-600 hover:bg-red-50 flex items-center gap-2"
-                                                        >
-                                                            <X size={14} /> Reddet / İptal
-                                                        </button>
-                                                    </div>
-                                                )}
-                                            </div>
                                         )}
                                     </div>
                                 </div>
@@ -180,7 +142,7 @@ export const HistoryList: React.FC<HistoryListProps> = ({ logs, currency, isLend
                                     </div>
                                 )}
                             </div>
-                        </SwipeableItem>
+                        </AdaptiveActionRow>
                     );
                 })}
             </div>

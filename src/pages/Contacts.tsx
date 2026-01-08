@@ -4,7 +4,8 @@ import { getContacts, deleteContact, updateContact, createDebt, batchAddContacts
 import type { Contact } from '../types';
 import { Search, ArrowLeft, Wallet, X, Ban, Edit2, Trash2 } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { SwipeableItem, type SwipeAction } from '../components/SwipeableItem';
+import { AdaptiveActionRow } from '../components/AdaptiveActionRow';
+import { type SwipeAction } from '../components/SwipeableItem';
 import { Avatar } from '../components/Avatar';
 import { formatPhoneForDisplay as formatPhoneNumber } from '../utils/phoneUtils';
 import { CreateDebtModal } from '../components/CreateDebtModal';
@@ -351,7 +352,7 @@ export const Contacts = () => {
                                         ];
 
                                         return (
-                                            <SwipeableItem
+                                            <AdaptiveActionRow
                                                 key={contact.id}
                                                 rightActions={rightActions}
                                                 isOpen={openRowId === `${contact.id}_right` ? 'right' : null}
@@ -431,7 +432,7 @@ export const Contacts = () => {
                                                         )}
                                                     </div>
                                                 </div>
-                                            </SwipeableItem>
+                                            </AdaptiveActionRow>
                                         );
                                     })}
                                 </div>

@@ -16,6 +16,7 @@ import { Layout } from './components/Layout';
 import { useAuth } from './hooks/useAuth';
 import { ActiveSessions } from './pages/ActiveSessions';
 import { AccountSettings } from './pages/AccountSettings';
+import { TestAdaptiveRow } from './pages/TestAdaptiveRow';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
@@ -41,6 +42,7 @@ function App() {
               <Routes>
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
+                <Route path="/test-adaptive" element={<TestAdaptiveRow />} />
 
                 <Route element={
                   <ProtectedRoute>

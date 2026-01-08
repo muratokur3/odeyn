@@ -23,7 +23,8 @@ import { db } from '../services/firebase';
 import { useModal } from '../context/ModalContext';
 import type { User, Contact } from '../types';
 import { useLedger } from '../hooks/useLedger';
-import { SwipeableItem, type SwipeAction } from '../components/SwipeableItem';
+import { AdaptiveActionRow } from '../components/AdaptiveActionRow';
+import { type SwipeAction } from '../components/SwipeableItem';
 
 export const PersonStream = () => {
     const { id } = useParams<{ id: string }>();
@@ -472,7 +473,7 @@ export const PersonStream = () => {
                                 ];
 
                                 return (
-                                    <SwipeableItem
+                                    <AdaptiveActionRow
                                         key={debt.id}
                                         leftActions={leftActions}
                                         rightActions={rightActions}
@@ -490,7 +491,7 @@ export const PersonStream = () => {
                                             disabled={isBlocked}
                                             variant="default"
                                         />
-                                    </SwipeableItem>
+                                    </AdaptiveActionRow>
                                 );
                             })}
                         </div>

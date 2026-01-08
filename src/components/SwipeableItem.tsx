@@ -153,13 +153,13 @@ export const SwipeableItem: React.FC<SwipeableItemProps> = ({
 
             {/* Foreground Content */}
             <motion.div
-                drag="x"
+                drag={isMobile ? "x" : false}
                 dragConstraints={{ left: -rightWidth, right: leftWidth }}
                 dragElastic={0.1}
                 onDragEnd={handleDragEnd}
                 animate={controls}
                 className={clsx("relative z-10 bg-background", contentClassName)} // Ensure bg is set to cover buttons
-                whileTap={{ cursor: "grabbing" }}
+                whileTap={isMobile ? { cursor: "grabbing" } : undefined}
                 style={{ x: 0 }} // Managed by controls
             >
                 {children}

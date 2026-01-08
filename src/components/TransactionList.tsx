@@ -14,7 +14,8 @@ import { useAuth } from '../hooks/useAuth';
 import { useModal } from '../context/ModalContext';
 import clsx from 'clsx';
 import type { Transaction, User, Contact, Debt } from '../types';
-import { SwipeableItem, type SwipeAction } from './SwipeableItem';
+import { AdaptiveActionRow } from './AdaptiveActionRow';
+import { type SwipeAction } from './SwipeableItem';
 import { CreateDebtModal } from './CreateDebtModal';
 
 interface TransactionListProps {
@@ -175,7 +176,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                 );
 
                 return (
-                    <SwipeableItem
+                    <AdaptiveActionRow
                         key={tx.id}
                         leftActions={leftActions}
                         rightActions={rightActions}
@@ -184,7 +185,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                         isOpen={openRowId === `${tx.id}_left` ? 'left' : (openRowId === `${tx.id}_right` ? 'right' : null)}
                     >
                         {content}
-                    </SwipeableItem>
+                    </AdaptiveActionRow>
                 );
             })}
 
