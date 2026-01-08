@@ -6,7 +6,11 @@ import { TransactionList } from '../components/TransactionList';
 import { Avatar } from '../components/Avatar';
 import { useLedger } from '../hooks/useLedger';
 import { cleanPhone as cleanPhoneNumber, formatPhoneForDisplay as formatPhoneNumber } from '../utils/phoneUtils';
-import { useMemo, useRef, useEffect } from 'react';
+import { useMemo, useRef, useEffect, useState } from 'react';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../services/firebase';
+import type { User, Contact } from '../types';
+import { searchUserByPhone, getContacts } from '../services/db';
 
 export const StreamHistory = () => {
     const { id } = useParams<{ id: string }>();
@@ -14,6 +18,34 @@ export const StreamHistory = () => {
     const navigate = useNavigate();
     const { resolveName } = useContactName();
     const scrollRef = useRef<HTMLDivElement>(null);
+
+    // Target User Object Resolution (Needed for Edit Modal in TransactionList)
+    const [targetUserObject, setTargetUserObject] = useState<User | Contact | null>(null);
+
+    useEffect(() => {
+        if (!user || !id) return;
+        const fetchTarget = async () => {
+            const cleanId = cleanPhoneNumber(id);
+            if (id.length > 20) {
+                const userDoc = await getDoc(doc(db, 'users', id));
+                if (userDoc.exists()) {
+                    setTargetUserObject({ uid: userDoc.id, ...userDoc.data() } as User);
+                }
+            } else {
+                const foundUser = await searchUserByPhone(cleanId);
+                if (foundUser) {
+                    setTargetUserObject(foundUser);
+                } else {
+                     // Check contacts
+                     const contacts = await getContacts(user.uid);
+                     const contact = contacts.find(c => cleanPhoneNumber(c.phoneNumber) === cleanId || c.id === id);
+                     if (contact) setTargetUserObject(contact);
+                }
+            }
+        };
+        fetchTarget();
+    }, [user, id]);
+
 
     const personInfo = useMemo(() => {
         const { displayName } = resolveName(id || '', '');
@@ -74,7 +106,11 @@ export const StreamHistory = () => {
                     <div className="h-full flex items-center justify-center text-text-secondary">Yükleniyor...</div>
                 ) : ledgerId && transactions.length > 0 ? (
                     <div className="min-h-full flex flex-col justify-end">
-                        <TransactionList transactions={transactions} ledgerId={ledgerId} />
+                        <TransactionList
+                            transactions={transactions}
+                            ledgerId={ledgerId}
+                            targetUser={targetUserObject}
+                        />
                     </div>
                 ) : (
                     <div className="h-full flex flex-col items-center justify-center text-text-secondary">

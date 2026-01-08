@@ -3,53 +3,81 @@
  * Chat-style list of Cari transactions
  */
 
-import { format, differenceInMinutes } from 'date-fns';
+import React, { useState, useEffect } from 'react';
+import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
-import { ArrowUpRight, ArrowDownLeft, Trash2, Edit2 } from 'lucide-react';
+import { Trash2, Edit2, CheckCircle, EyeOff } from 'lucide-react';
 import { formatCurrency } from '../utils/format';
 import { deleteLedgerTransaction } from '../services/transactionService';
 import { isTransactionEditable } from '../services/db'; // New helper
 import { useAuth } from '../hooks/useAuth';
 import { useModal } from '../context/ModalContext';
 import clsx from 'clsx';
-import type { Transaction } from '../types';
-import { SwipeableItem } from './SwipeableItem';
-import { useState } from 'react';
+import type { Transaction, User, Contact, Debt } from '../types';
+import { AdaptiveActionRow } from './AdaptiveActionRow';
+import { type SwipeAction } from './SwipeableItem';
 import { CreateDebtModal } from './CreateDebtModal';
 
 interface TransactionListProps {
     transactions: Transaction[];
-    ledgerId: string; // Shared ledger ID
+    ledgerId: string;
+    targetUser?: User | Contact | null;
     onRefresh?: () => void;
 }
 
 export const TransactionList: React.FC<TransactionListProps> = ({
     transactions,
-    ledgerId
+    ledgerId,
+    targetUser
 }) => {
     const { user } = useAuth();
     const { showConfirm, showAlert } = useModal();
     const [editingTx, setEditingTx] = useState<Transaction | null>(null);
+    const [openRowId, setOpenRowId] = useState<string | null>(null);
+
+    // Auto-Reset: Click anywhere else closes row
+    useEffect(() => {
+        const handleClickOutside = () => {
+             if (openRowId) setOpenRowId(null);
+        };
+        // Add listener to window with capture to detect interactions outside
+        window.addEventListener('click', handleClickOutside);
+        return () => window.removeEventListener('click', handleClickOutside);
+    }, [openRowId]);
+
 
     const handleDelete = async (txId: string) => {
         if (!user) return;
         
-        showConfirm(
+        const confirmed = await showConfirm(
             "Kaydı Sil",
             "Bu işlem geri alınamaz. Kayıt tamamen silinecek. Emin misin?",
-            async () => {
-                try {
-                    await deleteLedgerTransaction(ledgerId, txId);
-                } catch (error) {
-                    console.error(error);
-                    showAlert("Hata", "Silme işlemi başarısız.", "error");
-                }
-            }
+            "warning"
         );
+
+        if (confirmed) {
+            try {
+                await deleteLedgerTransaction(ledgerId, txId);
+                showAlert("Silindi", "Kayıt başarıyla silindi.", "success");
+            } catch (error) {
+                console.error(error);
+                showAlert("Hata", "Silme işlemi başarısız.", "error");
+            }
+        }
     };
 
     const handleEdit = (tx: Transaction) => {
         setEditingTx(tx);
+    };
+
+    const handleComplete = (tx: Transaction) => {
+        // Implement completion logic (e.g., mark as paid/reconciled) if applicable
+        showAlert("Bilgi", "Tamamlama işlemi henüz aktif değil.", "info");
+    };
+
+    const handleHide = (tx: Transaction) => {
+        // Implement hide/archive logic
+        showAlert("Bilgi", "Gizleme işlemi henüz aktif değil.", "info");
     };
 
     if (transactions.length === 0) {
@@ -72,10 +100,48 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                 const createdAt = tx.createdAt?.toDate ? tx.createdAt.toDate() : new Date();
                 const isEditable = isMine && isTransactionEditable(createdAt);
 
+                // Configure Actions
+                const rightActions: SwipeAction[] = [];
+                if (isEditable) {
+                    rightActions.push({
+                        key: 'edit',
+                        icon: <Edit2 size={20} />,
+                        label: 'Düzenle',
+                        color: 'bg-blue-500',
+                        onClick: () => handleEdit(tx)
+                    });
+                    rightActions.push({
+                        key: 'delete',
+                        icon: <Trash2 size={20} />,
+                        label: 'Sil',
+                        color: 'bg-red-500',
+                        onClick: () => handleDelete(tx.id)
+                    });
+                }
+
+                // Left Actions (Complete/Hide) - Always available? Or conditional?
+                // Request implies they exist.
+                const leftActions: SwipeAction[] = [
+                    {
+                        key: 'complete',
+                        icon: <CheckCircle size={20} />,
+                        label: 'Tamamla',
+                        color: 'bg-green-500',
+                        onClick: () => handleComplete(tx)
+                    },
+                    {
+                        key: 'hide',
+                        icon: <EyeOff size={20} />,
+                        label: 'Gizle',
+                        color: 'bg-gray-600',
+                        onClick: () => handleHide(tx)
+                    }
+                ];
+
                 const content = (
                     <div
                         className={clsx(
-                            "flex w-full relative",
+                            "flex w-full relative h-full",
                             isMine ? "justify-end" : "justify-start"
                         )}
                     >
@@ -109,25 +175,18 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                     </div>
                 );
 
-                if (isEditable) {
-                    return (
-                        <SwipeableItem
-                            key={tx.id}
-                            onSwipeLeft={() => handleDelete(tx.id)}
-                            leftActionColor="bg-red-500"
-                            leftActionIcon={<Trash2 className="text-white" size={20} />}
-
-                            // Right Swipe for Edit
-                            onSwipeRight={() => handleEdit(tx)}
-                            rightActionColor="bg-blue-500"
-                            rightActionIcon={<Edit2 className="text-white" size={20} />}
-                        >
-                            {content}
-                        </SwipeableItem>
-                    );
-                }
-
-                return <div key={tx.id}>{content}</div>;
+                return (
+                    <AdaptiveActionRow
+                        key={tx.id}
+                        leftActions={leftActions}
+                        rightActions={rightActions}
+                        onOpen={(dir) => setOpenRowId(`${tx.id}_${dir}`)}
+                        onClose={() => setOpenRowId(null)}
+                        isOpen={openRowId === `${tx.id}_left` ? 'left' : (openRowId === `${tx.id}_right` ? 'right' : null)}
+                    >
+                        {content}
+                    </AdaptiveActionRow>
+                );
             })}
 
             {/* Edit Modal (Reusing CreateDebtModal) */}
@@ -136,32 +195,22 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                     isOpen={!!editingTx}
                     onClose={() => setEditingTx(null)}
                     editMode={true}
+                    targetUser={targetUser}
                     initialData={{
-                        // Mapping Transaction to Debt-like structure for the modal
                         id: editingTx.id,
-                        lenderId: editingTx.direction === 'OUTGOING' ? (user?.uid || '') : '', // If Outgoing, I am lender
-                        borrowerId: editingTx.direction === 'INCOMING' ? (user?.uid || '') : '',
-                        // Names might be missing in Tx object, but Modal handles display logic or we can fetch/pass?
-                        // Transaction object usually lacks names. But CreateDebtModal expects names for rendering card.
-                        // However, editMode uses initialData primarily for amounts/notes.
-                        // It will try to show "User Card" which might be empty if we don't pass name.
-                        // Let's rely on the fact that Transaction List is for a specific person usually?
-                        // Wait, TransactionList is used in PersonStream? Yes.
-                        // So we know the other person. But we don't have it passed here explicitly as a user object.
-                        // Let's modify TransactionList to accept targetUser?
-                        // Or just let Modal handle "Shadow User" logic.
-                        // We need to pass valid IDs.
+                        lenderId: editingTx.direction === 'OUTGOING' ? (user?.uid || '') : (targetUser && 'uid' in targetUser ? targetUser.uid : ''),
+                        borrowerId: editingTx.direction === 'INCOMING' ? (user?.uid || '') : (targetUser && 'uid' in targetUser ? targetUser.uid : ''),
+                        lenderName: editingTx.direction === 'OUTGOING' ? (user?.displayName || 'Ben') : (targetUser && 'name' in targetUser ? targetUser.name : (targetUser as User)?.displayName || ''),
+                        borrowerName: editingTx.direction === 'INCOMING' ? (user?.displayName || 'Ben') : (targetUser && 'name' in targetUser ? targetUser.name : (targetUser as User)?.displayName || ''),
                         originalAmount: editingTx.amount,
-                        remainingAmount: editingTx.amount, // Irrelevant for edit display
+                        remainingAmount: editingTx.amount,
                         currency: editingTx.currency || 'TRY',
                         note: editingTx.description,
                         createdAt: editingTx.createdAt,
                         createdBy: editingTx.createdBy,
                         status: 'ACTIVE',
-                        participants: [],
-                        lenderName: '',
-                        borrowerName: ''
-                    }}
+                        participants: []
+                    } as Debt}
                 />
             )}
         </div>

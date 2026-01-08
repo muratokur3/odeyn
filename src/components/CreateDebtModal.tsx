@@ -426,8 +426,8 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                         originalAmount: numAmount,
                         currency,
                         note,
-                        ...(dueDate ? { dueDate: Timestamp.fromDate(new Date(dueDate)) } : { dueDate: null }),
-                        ...(generatedInstallments ? { installments: generatedInstallments } : { installments: null }),
+                        ...(dueDate ? { dueDate: Timestamp.fromDate(new Date(dueDate)) } : { dueDate: undefined }),
+                        ...(generatedInstallments ? { installments: generatedInstallments } : { installments: undefined }),
                         canBorrowerAddPayment,
                         // Update status logic handled in service based on remaining
                     },
@@ -619,7 +619,7 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                                 phoneNumber={phoneNumber}
                                 status={foundUser ? 'system' : (foundContact ? 'contact' : 'none')}
                                 uid={foundUser ? foundUser.uid : foundContact?.linkedUserId}
-                                onClear={editMode ? undefined : () => { // Disable clearing user in edit mode
+                                onClear={editMode ? () => {} : () => { // Provide empty function for editMode
                                     setFoundContact(null);
                                     setFoundUser(null);
                                     setPhoneNumber('');

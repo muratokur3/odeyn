@@ -2,7 +2,7 @@ import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDebtDetails } from '../hooks/useDebtDetails';
 import { usePayment } from '../hooks/usePayment';
-import { addPayment, softDeleteDebt, updateDebt, deletePendingDebt, forgiveDebt } from '../services/db'; // Added new services
+import { addPayment, softDeleteDebt, updateDebt, deletePendingDebt, forgiveDebt, isTransactionEditable } from '../services/db'; // Added new services
 import { checkBlockStatus } from '../services/blockService'; // Import block check
 import { useAuth } from '../hooks/useAuth';
 import { HistoryList } from '../components/HistoryList';
@@ -35,6 +35,9 @@ export const DebtDetail = () => {
     const isLender = user?.uid === debt?.lenderId;
     const isBorrower = user?.uid === debt?.borrowerId;
 
+    const createdAt = debt?.createdAt?.toDate ? debt.createdAt.toDate() : new Date();
+    const isEditable = debt && user && debt.createdBy === user.uid && isTransactionEditable(createdAt);
+
     // Check block status
     useEffect(() => {
         const check = async () => {
@@ -52,29 +55,27 @@ export const DebtDetail = () => {
     const handleDelete = async () => {
         if (!debt || !user) return;
 
+        if (!isEditable) {
+             showAlert("Süre Doldu", "Bu kayıt oluşturulalı 1 saatten fazla olduğu için silinemez.", "error");
+             return;
+        }
+
         // Logic for Pending Deletion (Hard Delete) vs Active (Soft/Forgive)
-        if (debt.status === 'PENDING' && debt.createdBy === user.uid) {
-            const confirmed = await showConfirm(
-                "Borcu İptal Et",
-                "Bu bekleyen borç kaydını tamamen silmek istediğinize emin misiniz? Bu işlem geri alınamaz.",
-                "warning"
-            );
-            if (confirmed) {
+        // Hard Delete for 1-Hour Rule or PENDING
+        const confirmed = await showConfirm(
+            "Borcu Sil",
+            "Bu borç kaydını tamamen silmek istediğinize emin misiniz? Bu işlem geri alınamaz.",
+            "warning"
+        );
+        if (confirmed) {
+            try {
+                // deleteDebt takes 2 arguments: debtId, currentUserId
                 await deletePendingDebt(debt.id, user.uid);
                 navigate(-1);
                 showAlert("Başarılı", "Borç kaydı silindi.", "success");
-            }
-        } else {
-            // Fallback to soft delete for others or use Archive logic
-            const confirmed = await showConfirm(
-                "Arşivle",
-                "Bu borç kaydını arşivlemek/gizlemek istediğinize emin misiniz?",
-                "info"
-            );
-            if (confirmed) {
-                await softDeleteDebt(debt.id);
-                navigate(-1);
-                showAlert("Başarılı", "Kayıt arşivlendi.", "success");
+            } catch (error) {
+                console.error(error);
+                showAlert("Hata", "Silme başarısız. Süre dolmuş olabilir.", "error");
             }
         }
     };
@@ -227,7 +228,7 @@ export const DebtDetail = () => {
                         )}
 
                         {/* Edit Button (Creator or allowed) */}
-                        {user?.uid === debt.createdBy && debt.status !== 'PAID' && !isBlocked && (
+                        {isEditable && debt.status !== 'PAID' && !isBlocked && (
                             <button
                                 onClick={() => setIsEditModalOpen(true)}
                                 className="p-2 text-blue-500 hover:bg-blue-50 rounded-full"
@@ -238,14 +239,14 @@ export const DebtDetail = () => {
                         )}
 
                         {/* Delete/Cancel Button */}
-                        {(user?.uid === debt.createdBy || debt.status === 'PENDING') && (
+                        {isEditable && (
                             <button
                                 onClick={handleDelete}
                                 className="p-2 text-red-500 hover:bg-red-50 rounded-full"
-                                title={debt.status === 'PENDING' ? 'İptal Et' : 'Arşivle'}
-                                aria-label={debt.status === 'PENDING' ? 'İptal Et' : 'Arşivle'}
+                                title="Sil"
+                                aria-label="Sil"
                             >
-                                {debt.status === 'PENDING' ? <XCircle size={20} /> : <Trash2 size={20} />}
+                                <Trash2 size={20} />
                             </button>
                         )}
                     </div>

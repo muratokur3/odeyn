@@ -14,7 +14,6 @@ import { PersonProfile } from './pages/PersonProfile';
 import { PendingRequests } from './pages/PendingRequests';
 import { Layout } from './components/Layout';
 import { useAuth } from './hooks/useAuth';
-import { Trash } from './pages/Trash';
 import { ActiveSessions } from './pages/ActiveSessions';
 import { AccountSettings } from './pages/AccountSettings';
 
@@ -62,8 +61,6 @@ function App() {
                   <Route path="/settings/sessions" element={<ActiveSessions />} />
                   <Route path="/settings/blocked" element={<BlockedUsers />} />
                   <Route path="/settings/muted" element={<MutedUsers />} />
-                  <Route path="/trash" element={<Trash />} />
-                  <Route path="/trash" element={<Trash />} />
                   <Route path="/pending-requests" element={<PendingRequests />} />
                 </Route>
               </Routes>
