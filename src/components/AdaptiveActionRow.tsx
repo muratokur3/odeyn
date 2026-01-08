@@ -89,7 +89,8 @@ export const AdaptiveActionRow: React.FC<AdaptiveActionRowProps> = ({
                                         action.color.includes("blue") ? "bg-blue-100 text-blue-600 dark:bg-blue-900/30 dark:text-blue-400" :
                                         "bg-gray-100 text-gray-600 dark:bg-gray-800 dark:text-gray-400"
                                     )}>
-                                        {React.cloneElement(action.icon as React.ReactElement, { size: 16 })}
+                                        {/* Cast to ReactElement to satisfy type checker for cloneElement with props */}
+                                        {React.isValidElement(action.icon) ? React.cloneElement(action.icon as React.ReactElement<any>, { size: 16 }) : action.icon}
                                     </div>
                                     <span className={clsx(
                                         action.color.includes("red") ? "text-red-600 dark:text-red-400" : "text-gray-700 dark:text-gray-200"
