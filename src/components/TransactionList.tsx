@@ -6,7 +6,7 @@
 import React, { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
-import { Trash2, Edit2, CheckCircle, EyeOff } from 'lucide-react';
+import { Trash2, Edit2 } from 'lucide-react';
 import { formatCurrency } from '../utils/format';
 import { deleteLedgerTransaction } from '../services/transactionService';
 import { isTransactionEditable } from '../services/db'; // New helper
@@ -70,16 +70,6 @@ export const TransactionList: React.FC<TransactionListProps> = ({
         setEditingTx(tx);
     };
 
-    const handleComplete = (tx: Transaction) => {
-        // Implement completion logic (e.g., mark as paid/reconciled) if applicable
-        showAlert("Bilgi", "Tamamlama işlemi henüz aktif değil.", "info");
-    };
-
-    const handleHide = (tx: Transaction) => {
-        // Implement hide/archive logic
-        showAlert("Bilgi", "Gizleme işlemi henüz aktif değil.", "info");
-    };
-
     if (transactions.length === 0) {
         return (
             <div className="text-center py-12 text-text-secondary">
@@ -118,25 +108,6 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                         onClick: () => handleDelete(tx.id)
                     });
                 }
-
-                // Left Actions (Complete/Hide) - Always available? Or conditional?
-                // Request implies they exist.
-                const leftActions: SwipeAction[] = [
-                    {
-                        key: 'complete',
-                        icon: <CheckCircle size={20} />,
-                        label: 'Tamamla',
-                        color: 'bg-green-500',
-                        onClick: () => handleComplete(tx)
-                    },
-                    {
-                        key: 'hide',
-                        icon: <EyeOff size={20} />,
-                        label: 'Gizle',
-                        color: 'bg-gray-600',
-                        onClick: () => handleHide(tx)
-                    }
-                ];
 
                 const content = (
                     <div
@@ -178,7 +149,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                 return (
                     <AdaptiveActionRow
                         key={tx.id}
-                        leftActions={leftActions}
+                        leftActions={[]}
                         rightActions={rightActions}
                         onOpen={(dir) => setOpenRowId(`${tx.id}_${dir}`)}
                         onClose={() => setOpenRowId(null)}
