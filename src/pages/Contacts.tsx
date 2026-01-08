@@ -340,8 +340,15 @@ export const Contacts = () => {
                                     {groupedContacts[letter].map(contact => {
                                         const blocked = isContactBlocked(contact);
 
-                                        // Configure Right Actions (Delete)
+                                        // Configure Actions
                                         const rightActions: SwipeAction[] = [
+                                            {
+                                                key: 'edit',
+                                                icon: <Edit2 size={20} />,
+                                                label: 'Düzenle',
+                                                color: 'bg-gray-400', // Neutral color for edit
+                                                onClick: () => openEditModal(contact)
+                                            },
                                             {
                                                 key: 'delete',
                                                 icon: <Trash2 size={20} />,
@@ -351,11 +358,25 @@ export const Contacts = () => {
                                             }
                                         ];
 
+                                        const leftActions: SwipeAction[] = [
+                                            {
+                                                key: 'create_debt',
+                                                icon: <Wallet size={20} />,
+                                                label: 'Borç Ekle',
+                                                color: 'bg-blue-600',
+                                                onClick: () => {
+                                                    setSelectedContactForDebt(contact);
+                                                    setShowDebtModal(true);
+                                                }
+                                            }
+                                        ];
+
                                         return (
                                             <AdaptiveActionRow
                                                 key={contact.id}
+                                                leftActions={leftActions}
                                                 rightActions={rightActions}
-                                                isOpen={openRowId === `${contact.id}_right` ? 'right' : null}
+                                                isOpen={openRowId === `${contact.id}_left` ? 'left' : (openRowId === `${contact.id}_right` ? 'right' : null)}
                                                 onOpen={(dir) => setOpenRowId(`${contact.id}_${dir}`)}
                                                 onClose={() => setOpenRowId(null)}
                                                 className="mb-0"

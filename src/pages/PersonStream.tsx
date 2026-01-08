@@ -455,29 +455,11 @@ export const PersonStream = () => {
                                     });
                                 }
 
-                                const leftActions: SwipeAction[] = [
-                                    {
-                                        key: 'complete',
-                                        icon: <CheckCircle size={20} />,
-                                        label: 'Tamamla',
-                                        color: 'bg-green-500',
-                                        onClick: () => handleDebtComplete(debt)
-                                    },
-                                    {
-                                        key: 'hide',
-                                        icon: <EyeOff size={20} />,
-                                        label: 'Gizle',
-                                        color: 'bg-gray-600',
-                                        onClick: () => handleDebtHide(debt.id)
-                                    }
-                                ];
-
                                 return (
                                     <AdaptiveActionRow
                                         key={debt.id}
-                                        leftActions={leftActions}
                                         rightActions={rightActions}
-                                        isOpen={openRowId === `${debt.id}_left` ? 'left' : (openRowId === `${debt.id}_right` ? 'right' : null)}
+                                        isOpen={openRowId === `${debt.id}_right` ? 'right' : null}
                                         onOpen={(dir) => setOpenRowId(`${debt.id}_${dir}`)}
                                         onClose={() => setOpenRowId(null)}
                                         contentClassName="rounded-2xl" // Ensure rounded corners on content

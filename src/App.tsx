@@ -14,9 +14,9 @@ import { PersonProfile } from './pages/PersonProfile';
 import { PendingRequests } from './pages/PendingRequests';
 import { Layout } from './components/Layout';
 import { useAuth } from './hooks/useAuth';
+import { Trash } from './pages/Trash';
 import { ActiveSessions } from './pages/ActiveSessions';
 import { AccountSettings } from './pages/AccountSettings';
-import { TestAdaptiveRow } from './pages/TestAdaptiveRow';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
@@ -42,7 +42,6 @@ function App() {
               <Routes>
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
-                <Route path="/test-adaptive" element={<TestAdaptiveRow />} />
 
                 <Route element={
                   <ProtectedRoute>
@@ -63,6 +62,8 @@ function App() {
                   <Route path="/settings/sessions" element={<ActiveSessions />} />
                   <Route path="/settings/blocked" element={<BlockedUsers />} />
                   <Route path="/settings/muted" element={<MutedUsers />} />
+                  <Route path="/trash" element={<Trash />} />
+                  <Route path="/trash" element={<Trash />} />
                   <Route path="/pending-requests" element={<PendingRequests />} />
                 </Route>
               </Routes>
