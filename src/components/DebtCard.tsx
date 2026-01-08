@@ -20,9 +20,19 @@ interface DebtCardProps {
     disabled?: boolean;
     variant?: 'default' | 'chat';
     isNew?: boolean;
+    className?: string; // NEW: Accept className override
 }
 
-export const DebtCard: React.FC<DebtCardProps> = ({ debt, currentUserId, onClick, otherPartyStatus = 'none', disabled = false, variant = 'default', isNew = false }) => {
+export const DebtCard: React.FC<DebtCardProps> = ({
+    debt,
+    currentUserId,
+    onClick,
+    otherPartyStatus = 'none',
+    disabled = false,
+    variant = 'default',
+    isNew = false,
+    className
+}) => {
     const { resolveName } = useContactName();
     const { showConfirm, showAlert } = useModal();
     const [showMenu, setShowMenu] = useState(false);
@@ -126,7 +136,8 @@ export const DebtCard: React.FC<DebtCardProps> = ({ debt, currentUserId, onClick
                     "p-4 border-2 active:scale-[0.98] transition-all cursor-pointer relative shadow-sm hover:shadow-md bg-white dark:bg-slate-900 mb-3",
                     isChat ? "rounded-xl border-dashed" : "rounded-2xl",
                     isNew && !isChat && "ring-2 ring-green-500/20",
-                    isLender ? "border-purple-200 dark:border-purple-800" : "border-orange-200 dark:border-orange-800"
+                    isLender ? "border-purple-200 dark:border-purple-800" : "border-orange-200 dark:border-orange-800",
+                    className // Merge className if provided
                 )}
             >
                 <div className="flex items-start gap-4">
