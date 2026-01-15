@@ -6,7 +6,7 @@ import { SelectedUserCard } from './SelectedUserCard';
 import { searchUserByPhone, searchContacts, createDebt, updateDebtHardReset } from '../services/db';
 import { getOrCreateLedger, addLedgerTransaction } from '../services/transactionService';
 import { formatCurrency } from '../utils/format';
-import { cleanPhone as cleanPhoneNumber, formatPhoneForDisplay } from '../utils/phoneUtils';
+import { formatPhoneForDisplay } from '../utils/phoneUtils';
 import type { User, Contact, Installment, Debt } from '../types';
 import { useAuth } from '../hooks/useAuth';
 import { useContactSync } from '../hooks/useContactSync';
@@ -43,7 +43,7 @@ interface CreateDebtModalProps {
 export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
     isOpen,
     onClose,
-    onSubmit,
+    // onSubmit, // Removed unused variable
     initialPhoneNumber,
     targetUser,
     initialName: propInitialName,
@@ -131,6 +131,27 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                 setNote(initialData.note || '');
                 setPhoneNumber(initialData.lockedPhoneNumber || targetId); // Use locked phone if available
                 setBorrowerName(targetName);
+
+                // If targetId is a UID (User) and we don't have a locked phone, fetch accurate phone from User Profile
+                if (!initialData.lockedPhoneNumber && targetId.length > 20) {
+                     (async () => {
+                         try {
+                             const { doc, getDoc } = await import('firebase/firestore');
+                             const { db } = await import('../services/firebase');
+                             const snap = await getDoc(doc(db, 'users', targetId));
+                             if (snap.exists()) {
+                                 const u = snap.data() as User;
+                                 const realPhone = u.primaryPhoneNumber || u.phoneNumber || '';
+                                 if (realPhone) {
+                                     setPhoneNumber(realPhone);
+                                 }
+                                 setFoundUser(u);
+                             }
+                         } catch (e) {
+                             console.error("Failed to fetch user in Edit Mode", e);
+                         }
+                     })();
+                }
 
                 // Details
                 if (initialData.dueDate) {
@@ -221,7 +242,7 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
             setStep('SEARCH');
             setIsResolvingInitial(false);
         }
-    }, [isOpen, initialPhoneNumber, targetUser, user, propInitialName, editMode, initialData]);
+    }, [isOpen, initialPhoneNumber, targetUser, user, propInitialName, editMode, initialData, derivedInitialName, initialPhone, isSpecialDebt]);
 
     // Check blocked status whenever foundUser or foundContact changes
     useEffect(() => {
@@ -560,7 +581,7 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                                     type === 'LENDING' ? "bg-surface text-green-500 shadow-sm" : "text-text-secondary hover:text-text-primary"
                                 )}
                             >
-                                {editMode && type === 'LENDING' ? 'Borç Vermiştim' : 'Borç Veriyorum'}
+                                {editMode && type === 'LENDING' ? 'Vermiştim' : 'Veriyorum'}
                             </button>
                             <button
                                 type="button"
@@ -570,7 +591,7 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                                     type === 'BORROWING' ? "bg-surface text-red-500 shadow-sm" : "text-text-secondary hover:text-text-primary"
                                 )}
                             >
-                                {editMode && type === 'BORROWING' ? 'Borç Almıştım' : 'Borç Alıyorum'}
+                                {editMode && type === 'BORROWING' ? 'Almıştım' : 'Alıyorum'}
                             </button>
                         </div>
 
@@ -758,7 +779,7 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                                 rows={2}
                                 disabled={isTargetBlocked}
                                 className="w-full px-4 py-3 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary focus:ring-2 focus:ring-blue-900/50 outline-none transition-all resize-none disabled:opacity-50 disabled:cursor-not-allowed"
-                                placeholder="Borç ile ilgili not..."
+                                placeholder="İşlem ile ilgili not..."
                             />
                         </div>
 

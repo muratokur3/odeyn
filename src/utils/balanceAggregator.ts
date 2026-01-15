@@ -36,34 +36,48 @@ export const getCurrencySymbol = (currency: string): string => {
  * 
  * For other party's entries (reverse perspective)
  */
+export type CurrencySummary = {
+    net: number;
+    receivables: number;
+    payables: number;
+};
+
+export type DetailedBalances = Map<string, CurrencySummary>;
+
 export const calculateStreamBalance = (
     transactions: Transaction[],
     currentUserId: string
-): CurrencyBalances => {
-    const balances = new Map<string, number>();
+): DetailedBalances => {
+    const balances = new Map<string, CurrencySummary>();
     
     transactions.forEach(tx => {
-        const currency = tx.currency || 'TRY'; // Default to TRY if missing
-        const currentBalance = balances.get(currency) || 0;
+        const currency = tx.currency || 'TRY';
+        if (!balances.has(currency)) {
+            balances.set(currency, { net: 0, receivables: 0, payables: 0 });
+        }
+        
+        const summary = balances.get(currency)!;
         let change = 0;
 
         if (tx.createdBy === currentUserId) {
-            // I created this entry
             if (tx.direction === 'OUTGOING') {
-                change = tx.amount; // I gave, they owe me (Positive)
+                change = tx.amount;
+                summary.receivables += tx.amount;
             } else {
-                change = -tx.amount; // I took, I owe them (Negative)
+                change = -tx.amount;
+                summary.payables += tx.amount;
             }
         } else {
-            // They created this entry (reverse my perspective)
             if (tx.direction === 'OUTGOING') {
-                change = -tx.amount; // They gave me, I owe them (Negative)
+                change = -tx.amount;
+                summary.payables += tx.amount;
             } else {
-                change = tx.amount; // They took from me, they owe me (Positive)
+                change = tx.amount;
+                summary.receivables += tx.amount;
             }
         }
 
-        balances.set(currency, currentBalance + change);
+        summary.net += change;
     });
     
     return balances;
@@ -76,24 +90,30 @@ export const calculateStreamBalance = (
 export const calculateDebtsBalance = (
     debts: Debt[],
     currentUserId: string
-): CurrencyBalances => {
-    const balances = new Map<string, number>();
+): DetailedBalances => {
+    const balances = new Map<string, CurrencySummary>();
     
     debts.forEach(debt => {
         // Skip completed or rejected debts
-        if (debt.status === 'PAID' || debt.status === 'REJECTED' || debt.status === 'ARCHIVED') {
+        if (debt.status === 'PAID' || debt.status === 'REJECTED' || debt.status === 'ARCHIVED' || debt.status === 'REJECTED_BY_RECEIVER' || debt.status === 'AUTO_HIDDEN') {
             return;
         }
         
         const currency = debt.currency || 'TRY';
-        const currentBalance = balances.get(currency) || 0;
+        if (!balances.has(currency)) {
+            balances.set(currency, { net: 0, receivables: 0, payables: 0 });
+        }
+        
+        const summary = balances.get(currency)!;
         
         if (debt.lenderId === currentUserId) {
             // I'm the lender, they owe me
-            balances.set(currency, currentBalance + debt.remainingAmount);
+            summary.receivables += debt.remainingAmount;
+            summary.net += debt.remainingAmount;
         } else {
             // I'm the borrower, I owe them
-            balances.set(currency, currentBalance - debt.remainingAmount);
+            summary.payables += debt.remainingAmount;
+            summary.net -= debt.remainingAmount;
         }
     });
     
@@ -101,17 +121,29 @@ export const calculateDebtsBalance = (
 };
 
 /**
- * Merge two currency balance maps
+ * Merge two detailed currency balance maps
  */
 export const mergeBalances = (
-    balance1: CurrencyBalances,
-    balance2: CurrencyBalances
-): CurrencyBalances => {
-    const merged = new Map<string, number>(balance1);
+    balance1: DetailedBalances,
+    balance2: DetailedBalances
+): DetailedBalances => {
+    const merged = new Map<string, CurrencySummary>();
     
-    balance2.forEach((amount, currency) => {
-        const existing = merged.get(currency) || 0;
-        merged.set(currency, existing + amount);
+    // Copy first map
+    balance1.forEach((summary, currency) => {
+        merged.set(currency, { ...summary });
+    });
+    
+    // Add second map
+    balance2.forEach((summary, currency) => {
+        if (!merged.has(currency)) {
+            merged.set(currency, { ...summary });
+        } else {
+            const existing = merged.get(currency)!;
+            existing.net += summary.net;
+            existing.receivables += summary.receivables;
+            existing.payables += summary.payables;
+        }
     });
     
     return merged;

@@ -46,18 +46,15 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({ isOpen, 
                                 }}
                                 className={clsx(
                                     "p-3 rounded-xl border cursor-pointer transition-colors active:scale-95",
-                                    notif.type === 'REQUEST' ? "bg-blue-900/20 border-blue-800" :
-                                        notif.message.includes('gecikti') ? "bg-red-900/20 border-red-800" : "bg-slate-800/50 border-slate-700"
+                                    notif.message.includes('gecikti') ? "bg-red-900/20 border-red-800" : "bg-slate-800/50 border-slate-700"
                                 )}
                             >
                                 <div className="flex justify-between items-start mb-1">
                                     <span className={clsx(
                                         "text-xs font-bold px-2 py-0.5 rounded-full",
-                                        notif.type === 'REQUEST' ? "bg-blue-100 text-blue-700" :
-                                            notif.type === 'INSTALLMENT_DUE' ? "bg-purple-100 text-purple-700" : "bg-orange-100 text-orange-700"
+                                        notif.type === 'INSTALLMENT_DUE' ? "bg-purple-100 text-purple-700" : "bg-orange-100 text-orange-700"
                                     )}>
-                                        {notif.type === 'REQUEST' ? 'İstek' :
-                                            notif.type === 'INSTALLMENT_DUE' ? 'Taksit' : 'Vade'}
+                                        {notif.type === 'INSTALLMENT_DUE' ? 'Taksit' : 'Vade'}
                                     </span>
                                     <span className="text-xs text-text-secondary flex items-center gap-1">
                                         <Calendar size={10} />

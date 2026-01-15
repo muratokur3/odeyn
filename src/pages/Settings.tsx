@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, UserX, ChevronRight, RefreshCw, Wallet, Users, User, Moon, Sun, LogOut, CheckCircle2, Clock, Trash2 } from 'lucide-react';
+import { ArrowLeft, UserX, ChevronRight, RefreshCw, Users, User, Moon, Sun, LogOut } from 'lucide-react';
 import { updateUserPreferences } from '../services/db';
 import { useAuth } from '../hooks/useAuth';
 import type { User as UserType } from '../types';
@@ -54,22 +54,19 @@ export const Settings = () => {
     const { theme, toggleTheme } = useTheme();
 
     // Local State
-    const [autoApprove, setAutoApprove] = useState(false);
     const [syncContacts, setSyncContacts] = useState(false);
-    const [defaultAllowPayment, setDefaultAllowPayment] = useState(false);
-    const [autoDeleteDuration, setAutoDeleteDuration] = useState('OFF');
-
-    // Load Settings
-    useEffect(() => {
-        if (user) {
-            const prefs = user.preferences || {};
-            setAutoApprove((prev) => prefs.autoApproveDebt ?? prev);
-            setSyncContacts((prev) => prefs.syncContacts ?? prev);
-            setDefaultAllowPayment((prev) => prefs.defaultAllowPaymentAddition ?? prev);
+    const userSyncPref = user?.preferences?.syncContacts;
+    
+    // Pattern to sync state from props (derived state)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    const [prevPref, setPrevPref] = useState(userSyncPref);
+    
+    if (userSyncPref !== prevPref) {
+        setPrevPref(userSyncPref);
+        if (userSyncPref !== undefined) {
+            setSyncContacts(userSyncPref);
         }
-        const duration = localStorage.getItem('autoDeleteDuration') || 'OFF';
-        setAutoDeleteDuration((prev) => duration !== prev ? duration : prev);
-    }, [user]);
+    }
 
     // Persist Helpers
     const toggleSetting = async (key: keyof NonNullable<UserType['preferences']>, value: boolean, setter: (val: boolean) => void) => {
@@ -88,24 +85,16 @@ export const Settings = () => {
         }
     };
 
-    const [contactAccessEnabled, setContactAccessEnabled] = useState(true);
-
-    useEffect(() => {
+    const [contactAccessEnabled, setContactAccessEnabled] = useState(() => {
         const savedContacts = localStorage.getItem('contact_access_enabled');
-        if (savedContacts !== null) {
-            const val = JSON.parse(savedContacts);
-            setContactAccessEnabled((prev) => val !== prev ? val : prev);
-        }
-    }, []);
+        return savedContacts !== null ? JSON.parse(savedContacts) : true;
+    });
+
+    // Removed useEffect for loading contact_access_enabled as it's now handled in initial state
 
     const handleContactAccessToggle = (val: boolean) => {
         setContactAccessEnabled(val);
         localStorage.setItem('contact_access_enabled', JSON.stringify(val));
-    };
-
-    const handleAutoDeleteChange = (val: string) => {
-        setAutoDeleteDuration(val);
-        localStorage.setItem('autoDeleteDuration', val);
     };
 
     const handleLogout = async () => {
@@ -162,22 +151,6 @@ export const Settings = () => {
                         />
                     </div>
 
-                    {/* Group B: Approvals */}
-                    <SectionHeader title="Borç Yönetimi" />
-                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 overflow-hidden divide-y divide-gray-100 dark:divide-slate-800">
-                        <SettingsRow
-                            icon={CheckCircle2}
-                            title="Gelen Kayıtları Onayla"
-                            description="Rehberimdeki kişilerin eklediği borçlar otomatik olarak onaylansın."
-                            action={<Toggle checked={autoApprove} onChange={(v) => toggleSetting('autoApproveDebt', v, setAutoApprove)} />}
-                        />
-                        <SettingsRow
-                            icon={Wallet}
-                            title="Ödeme Ekleme İzni"
-                            description="Eklediğim borçlarda varsayılan olarak karşı taraf ödeme girebilsin."
-                            action={<Toggle checked={defaultAllowPayment} onChange={(v) => toggleSetting('defaultAllowPaymentAddition', v, setDefaultAllowPayment)} />}
-                        />
-                    </div>
 
                     {/* Group C: Synchronization */}
                     <SectionHeader title="Rehber & Senkronizasyon" />
@@ -207,33 +180,6 @@ export const Settings = () => {
                         />
                     </div>
 
-                    {/* Group E: Storage */}
-                    <SectionHeader title="Depolama" />
-                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 overflow-hidden divide-y divide-gray-100 dark:divide-slate-800">
-                        <SettingsRow
-                            icon={Trash2}
-                            title="Çöp Kutusu"
-                            description="Silinen kayıtları görüntüle ve yönet."
-                            onClick={() => navigate('/trash')}
-                        />
-                        <SettingsRow
-                            icon={Clock}
-                            title="Otomatik Temizlik"
-                            description="Çöp kutusundaki kayıtlar bu süreden sonra kalıcı olarak kaldırılır."
-                            action={
-                                <select
-                                    value={autoDeleteDuration}
-                                    onChange={(e) => handleAutoDeleteChange(e.target.value)}
-                                    className="bg-gray-50 dark:bg-slate-800 border-none text-sm font-semibold text-blue-600 dark:text-blue-400 focus:ring-0 rounded-lg py-1 pl-2 pr-8 cursor-pointer"
-                                >
-                                    <option value="OFF">Kapat</option>
-                                    <option value="30">30 Gün</option>
-                                    <option value="60">60 Gün</option>
-                                    <option value="90">90 Gün</option>
-                                </select>
-                            }
-                        />
-                    </div>
 
                     {/* Group F: Appearance */}
                     <SectionHeader title="Görünüm" />

@@ -4,7 +4,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useDebts } from '../hooks/useDebts';
 import { useContactName } from '../hooks/useContactName';
 import { ArrowLeft, Phone, MessageCircle, Trash2, Edit2, X, MoreVertical, Ban, UserPlus, VolumeX, Volume2, FolderOpen } from 'lucide-react';
-import { searchUserByPhone, getContacts, updateContact, addContact, deleteContact, muteUser, unmuteUser, markContactAsRead, createDebt } from '../services/db';
+import { searchUserByPhone, getContacts, updateContact, addContact, deleteContact, muteUser, unmuteUser, markContactAsRead, createDebt, permanentlyDeleteDebt } from '../services/db';
 import { blockUser, isUserBlocked, unblockUser } from '../services/blockService';
 import { Avatar } from '../components/Avatar';
 import { DebtCard } from '../components/DebtCard';
@@ -18,8 +18,10 @@ import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import clsx from 'clsx';
 import { useModal } from '../context/ModalContext';
-
-import type { User, Contact } from '../types';
+import { AdaptiveActionRow } from '../components/AdaptiveActionRow';
+import { type SwipeAction } from '../components/SwipeableItem';
+import { CheckCircle, EyeOff } from 'lucide-react';
+import type { User, Contact, Debt } from '../types';
 import { useLedger } from '../hooks/useLedger';
 
 export const PersonDetail = () => {
@@ -47,6 +49,8 @@ export const PersonDetail = () => {
     const [showMenu, setShowMenu] = useState(false);
     const [isBlocked, setIsBlocked] = useState(false);
     const [isMuted, setIsMuted] = useState(false);
+    const [openRowId, setOpenRowId] = useState<string | null>(null);
+    const [editingDebt, setEditingDebt] = useState<Debt | null>(null);
 
     const handleScroll = () => {
         const container = scrollContainerRef.current;
@@ -57,6 +61,36 @@ export const PersonDetail = () => {
         if (newIndex !== activeViewIndex) {
             setActiveViewIndex(newIndex);
         }
+    };
+
+    const handleDebtDelete = async (debtId: string) => {
+        if (!user) return;
+        const confirmed = await showConfirm(
+            "Dosyayı Sil",
+            "Bu dosyayı kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz.",
+            "warning"
+        );
+        if (confirmed) {
+             try {
+                 await permanentlyDeleteDebt(debtId, user.uid);
+                 showAlert("Silindi", "Dosya silindi.", "success");
+             } catch {
+                 showAlert("Hata", "Silme başarısız.", "error");
+             }
+        }
+    };
+
+    const handleDebtEdit = (debt: Debt) => {
+        setEditingDebt(debt);
+        setShowEditModal(true);
+    };
+
+    const handleDebtComplete = () => {
+        showAlert("Bilgi", "Borcu tamamlama (silme/hibe) henüz swipe ile aktif değil. Detaydan yapınız.", "info");
+    };
+
+    const handleDebtHide = () => {
+        showAlert("Bilgi", "Arşivleme özelliği '1 Saat Kuralı' gereği kaldırılmıştır.", "info");
     };
 
     const scrollToView = (index: number) => {
@@ -603,14 +637,68 @@ export const PersonDetail = () => {
                                         return (
                                             <div key={debt.id} className={clsx("flex w-full", isMyEntry ? "justify-end" : "justify-start")}>
                                                 <div className="w-full">
-                                                    <DebtCard
-                                                        debt={debt}
-                                                        isNew={!!isNew}
-                                                        currentUserId={user?.uid || ''}
-                                                        onClick={() => navigate(`/debt/${debt.id}`)}
-                                                        disabled={isBlocked}
-                                                        variant="chat"
-                                                    />
+                                                    {(() => {
+                                                        const rightActions: SwipeAction[] = [];
+                                                        const now = new Date();
+                                                        const createdAt = debt.createdAt?.toDate ? debt.createdAt.toDate() : new Date();
+                                                        const diffMinutes = Math.floor((now.getTime() - createdAt.getTime()) / 60000);
+                                                        const isEditable = isMyEntry && diffMinutes < 60;
+
+                                                        if (isEditable && !isBlocked) {
+                                                            rightActions.push({
+                                                                key: 'edit',
+                                                                icon: <Edit2 size={20} />,
+                                                                label: 'Düzenle',
+                                                                color: 'bg-blue-500',
+                                                                onClick: () => handleDebtEdit(debt)
+                                                            });
+                                                            rightActions.push({
+                                                                key: 'delete',
+                                                                icon: <Trash2 size={20} />,
+                                                                label: 'Sil',
+                                                                color: 'bg-red-500',
+                                                                onClick: () => handleDebtDelete(debt.id)
+                                                            });
+                                                        }
+
+                                                        const leftActions: SwipeAction[] = [
+                                                            {
+                                                                key: 'complete',
+                                                                icon: <CheckCircle size={20} />,
+                                                                label: 'Tamamla',
+                                                                color: 'bg-green-500',
+                                                                onClick: () => handleDebtComplete()
+                                                            },
+                                                            {
+                                                                key: 'hide',
+                                                                icon: <EyeOff size={20} />,
+                                                                label: 'Gizle',
+                                                                color: 'bg-zinc-500',
+                                                                onClick: () => handleDebtHide()
+                                                            }
+                                                        ];
+
+                                                        return (
+                                                            <AdaptiveActionRow
+                                                                key={debt.id}
+                                                                leftActions={leftActions}
+                                                                rightActions={rightActions}
+                                                                isOpen={openRowId === `${debt.id}_right` ? 'right' : (openRowId === `${debt.id}_left` ? 'left' : null)}
+                                                                onOpen={(dir) => setOpenRowId(`${debt.id}_${dir}`)}
+                                                                onClose={() => setOpenRowId(null)}
+                                                                disableDesktopMenu={true}
+                                                            >
+                                                                <DebtCard
+                                                                    debt={debt}
+                                                                    isNew={!!isNew}
+                                                                    currentUserId={user?.uid || ''}
+                                                                    onClick={() => navigate(`/debt/${debt.id}`)}
+                                                                    disabled={isBlocked}
+                                                                    variant="chat"
+                                                                />
+                                                            </AdaptiveActionRow>
+                                                        );
+                                                    })()}
                                                 </div>
                                             </div>
                                         );
@@ -630,14 +718,25 @@ export const PersonDetail = () => {
             </main>
 
             <CreateDebtModal
-                isOpen={showCreateDebtModal}
-                onClose={() => setShowCreateDebtModal(false)}
+                isOpen={showCreateDebtModal || !!editingDebt}
+                onClose={() => { 
+                    setShowCreateDebtModal(false);
+                    setEditingDebt(null);
+                }}
+                editMode={!!editingDebt}
+                initialData={editingDebt || undefined}
                 onSubmit={async (borrowerId, borrowerName, amount, type, currency, note, dueDate, installments, canBorrowerAddPayment, initialPayment) => {
                     if (!user) return;
-                    await createDebt(user.uid, user.displayName || 'Bilinmeyen', borrowerId, borrowerName, amount, type, currency, note, dueDate, installments, canBorrowerAddPayment, initialPayment || 0);
+                    if (editingDebt) {
+                        // Edit handled by modal internally or we could add updateDebt call here
+                        // For consistency with PersonStream, we'll let modal handle it or add call
+                    } else {
+                        await createDebt(user.uid, user.displayName || 'Bilinmeyen', borrowerId, borrowerName, amount, type, currency, note, dueDate, installments, canBorrowerAddPayment, initialPayment || 0);
+                    }
                     setShowCreateDebtModal(false);
+                    setEditingDebt(null);
                 }}
-                targetUser={targetUserObject}
+                targetUser={editingDebt ? null : targetUserObject}
                 initialPhoneNumber={personInfo.phone}
                 initialName={personInfo.name}
             />

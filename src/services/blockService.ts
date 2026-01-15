@@ -66,7 +66,7 @@ export const isUserBlocked = async (currentUid: string, targetUid: string): Prom
         const docSnap = await getDoc(blockRef);
         return docSnap.exists();
     } catch (error) {
-        console.error("Error checking block status:", error);
+        // Silently fail - permissions errors are expected if user document doesn't exist yet
         return false;
     }
 };

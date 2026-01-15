@@ -66,15 +66,15 @@ export const StreamHistory = () => {
 
     // Scroll to bottom on load
     useEffect(() => {
-        if (scrollRef.current && transactions.length > 0) {
-            scrollRef.current.scrollTop = scrollRef.current.scrollHeight;
+        if (transactions.length > 0) {
+            window.scrollTo({ top: document.body.scrollHeight, behavior: 'smooth' });
         }
     }, [transactions]);
 
     if (!user) return null;
 
     return (
-        <div className="flex flex-col h-screen bg-background">
+        <div className="flex flex-col min-h-screen bg-background pb-12">
             {/* Header */}
             <header className="sticky top-0 z-30 bg-surface/95 backdrop-blur-md border-b border-border px-4 py-3 flex items-center gap-3 shrink-0">
                 <button
@@ -100,7 +100,7 @@ export const StreamHistory = () => {
             {/* Content */}
             <div
                 ref={scrollRef}
-                className="flex-1 overflow-y-auto px-4 py-4 scroll-smooth"
+                className="flex-1 px-4 py-4"
             >
                 {txLoading ? (
                     <div className="h-full flex items-center justify-center text-text-secondary">Yükleniyor...</div>

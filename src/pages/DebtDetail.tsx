@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useDebtDetails } from '../hooks/useDebtDetails';
-import { usePayment } from '../hooks/usePayment';
-import { addPayment, softDeleteDebt, updateDebt, deletePendingDebt, forgiveDebt, isTransactionEditable } from '../services/db'; // Added new services
+// Removed unused usePayment
+import { addPayment, updateDebt, deleteDebt, forgiveDebt, isTransactionEditable } from '../services/db'; // Added new services
 import { checkBlockStatus } from '../services/blockService'; // Import block check
 import { useAuth } from '../hooks/useAuth';
 import { HistoryList } from '../components/HistoryList';
@@ -10,7 +10,7 @@ import { PaymentModal } from '../components/PaymentModal';
 import { InstallmentList } from '../components/InstallmentList';
 import { EditDebtModal } from '../components/EditDebtModal';
 import { formatCurrency } from '../utils/format';
-import { ArrowLeft, Trash2, Edit2, MessageCircle, Phone, XCircle, CheckCircle, Ban } from 'lucide-react'; // Added icons
+import { ArrowLeft, Trash2, Edit2, CheckCircle, Ban } from 'lucide-react'; // Removed unused icons
 import type { Debt } from '../types';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
@@ -23,7 +23,7 @@ export const DebtDetail = () => {
     const navigate = useNavigate();
     const { debt, logs, loading } = useDebtDetails(id);
     const { user } = useAuth();
-    const { pay } = usePayment();
+    // Removed unused pay
     const { showAlert, showConfirm } = useModal();
     const [isPaymentModalOpen, setIsPaymentModalOpen] = useState(false);
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -31,6 +31,17 @@ export const DebtDetail = () => {
     const [paymentInitialAmount, setPaymentInitialAmount] = useState<number | undefined>(undefined);
     const [paymentInitialNote, setPaymentInitialNote] = useState<string>('');
     const [isBlocked, setIsBlocked] = useState(false);
+
+    // Filter logs to hide history from before a Hard Reset (check createdAt)
+    const filteredLogs = logs.filter(log => {
+        if (!debt?.createdAt || !log.timestamp) return true;
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const getTime = (t: any) => (t?.toDate ? t.toDate().getTime() : new Date(t).getTime());
+        const debtTime = getTime(debt.createdAt);
+        const logTime = getTime(log.timestamp);
+        // Allow a small buffer or exact match (Reset logs happen at same time as createdAt update)
+        return logTime >= debtTime - 1000; // 1 second buffer just in case of slight drift between multiple writes if not atomic
+    });
 
     const isLender = user?.uid === debt?.lenderId;
     const isBorrower = user?.uid === debt?.borrowerId;
@@ -70,7 +81,7 @@ export const DebtDetail = () => {
         if (confirmed) {
             try {
                 // deleteDebt takes 2 arguments: debtId, currentUserId
-                await deletePendingDebt(debt.id, user.uid);
+                await deleteDebt(debt.id, user.uid);
                 navigate(-1);
                 showAlert("Başarılı", "Borç kaydı silindi.", "success");
             } catch (error) {
@@ -292,8 +303,43 @@ export const DebtDetail = () => {
                         <span>{debt.createdAt ? format(debt.createdAt.toDate(), 'd MMM yyyy HH:mm', { locale: tr }) : '-'}</span>
                     </div>
                 </div>
+                
+                {debt.status !== 'PAID' && !isBlocked && (
+                    <div className="flex flex-col gap-3">
+                        {/* Dynamic Interim Payment Button */}
+                        <button
+                            onClick={() => {
+                                setPaymentInitialNote('Ara ödeme yapıldı');
+                                setIsPaymentModalOpen(true);
+                            }}
+                            className="w-full py-4 bg-primary text-white rounded-2xl font-bold shadow-lg shadow-blue-500/20 active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                        >
+                            <CheckCircle size={20} />
+                            Ara Ödeme Yap
+                        </button>
 
-                {/* REMOVED INLINE ACTION BUTTON - It is now the FAB */}
+                        {/* Smart "Pay Next Installment" Button */}
+                        {(() => {
+                            const nextInst = debt.installments?.find(i => !i.isPaid);
+                            if (!nextInst) return null;
+
+                            // Calculate installment index for the label
+                            const instIndex = debt.installments?.indexOf(nextInst) || 0;
+
+                            return (
+                                <button
+                                    onClick={() => handleInstallmentPayment(nextInst.amount, `${instIndex + 1}. Taksit Ödemesi`, nextInst.id)}
+                                    className="w-full py-4 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800 rounded-2xl font-bold active:scale-[0.98] transition-all flex items-center justify-center gap-2"
+                                >
+                                    <div className="bg-green-500 text-white rounded-full p-0.5">
+                                        <CheckCircle size={14} />
+                                    </div>
+                                    Sıradaki Taksiti Öde ({formatCurrency(nextInst.amount, debt.currency)})
+                                </button>
+                            );
+                        })()}
+                    </div>
+                )}
 
                 {/* Installments */}
                 {debt.installments && debt.installments.length > 0 && (
@@ -307,7 +353,7 @@ export const DebtDetail = () => {
 
                 {/* History */}
                 <HistoryList
-                    logs={logs}
+                    logs={filteredLogs}
                     currency={debt.currency}
                     isLender={!!isLender}
                     debtId={debt.id}

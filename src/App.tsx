@@ -11,7 +11,6 @@ import { Tools } from './pages/Tools';
 import { PersonStream } from './pages/PersonStream';
 import { StreamHistory } from './pages/StreamHistory';
 import { PersonProfile } from './pages/PersonProfile';
-import { PendingRequests } from './pages/PendingRequests';
 import { Layout } from './components/Layout';
 import { useAuth } from './hooks/useAuth';
 import { ActiveSessions } from './pages/ActiveSessions';
@@ -61,7 +60,6 @@ function App() {
                   <Route path="/settings/sessions" element={<ActiveSessions />} />
                   <Route path="/settings/blocked" element={<BlockedUsers />} />
                   <Route path="/settings/muted" element={<MutedUsers />} />
-                  <Route path="/pending-requests" element={<PendingRequests />} />
                 </Route>
               </Routes>
             </Router>

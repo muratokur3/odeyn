@@ -9,19 +9,20 @@ import { useAuth } from '../hooks/useAuth';
 import { useDebts } from '../hooks/useDebts';
 import { useContactName } from '../hooks/useContactName';
 import { ArrowLeft, FolderOpen, MoreVertical, Edit2, UserPlus, Volume2, VolumeX, Ban, Trash2, CheckCircle, EyeOff } from 'lucide-react';
-import { searchUserByPhone, getContacts, markContactAsRead, createDebt, addContact, updateContact, deleteContact, muteUser, unmuteUser, softDeleteDebt, updateDebt, permanentlyDeleteDebt, isTransactionEditable } from '../services/db';
+import { searchUserByPhone, getContacts, markContactAsRead, createDebt, addContact, updateContact, deleteContact, muteUser, unmuteUser, permanentlyDeleteDebt, isTransactionEditable } from '../services/db';
 import { isUserBlocked, blockUser, unblockUser } from '../services/blockService';
 import { Avatar } from '../components/Avatar';
 import { DebtCard } from '../components/DebtCard';
 import { CreateDebtModal } from '../components/CreateDebtModal';
-import { CurrencyChips } from '../components/CurrencyChips';
+import { SummaryCard } from '../components/SummaryCard';
 import { PhoneInput } from '../components/PhoneInput';
-import { calculateStreamBalance } from '../utils/balanceAggregator';
+import { fetchRates, convertToTRY, type CurrencyRates } from '../services/currency';
+import { calculateStreamBalance, type DetailedBalances } from '../utils/balanceAggregator';
 import { cleanPhone as cleanPhoneNumber, formatPhoneForDisplay as formatPhoneNumber } from '../utils/phoneUtils';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { useModal } from '../context/ModalContext';
-import type { User, Contact } from '../types';
+import type { User, Contact, Debt } from '../types';
 import { useLedger } from '../hooks/useLedger';
 import { AdaptiveActionRow } from '../components/AdaptiveActionRow';
 import { type SwipeAction } from '../components/SwipeableItem';
@@ -50,7 +51,17 @@ export const PersonStream = () => {
     const [lastReadTimestamp, setLastReadTimestamp] = useState<number | null>(null);
     const [openRowId, setOpenRowId] = useState<string | null>(null);
 
-    const [editingDebt, setEditingDebt] = useState<any | null>(null);
+    const [editingDebt, setEditingDebt] = useState<Debt | null>(null);
+    const [rates, setRates] = useState<CurrencyRates | null>(null);
+    const [toggledCards, setToggledCards] = useState<Record<string, boolean>>({});
+
+    useEffect(() => {
+        fetchRates().then(setRates);
+    }, []);
+
+    const toggleCardCurrency = (currency: string) => {
+        setToggledCards(prev => ({ ...prev, [currency]: !prev[currency] }));
+    };
 
     // Auto-Reset: Click anywhere else closes row
     useEffect(() => {
@@ -62,14 +73,17 @@ export const PersonStream = () => {
     }, [openRowId]);
 
     // Get target UID
-    const getTargetUid = () => {
-        if (id && id.length > 20) return id;
-        if (targetUserObject) {
-            if ('uid' in targetUserObject) return targetUserObject.uid;
-            if ('linkedUserId' in targetUserObject && targetUserObject.linkedUserId) return targetUserObject.linkedUserId;
+    // Get target UID
+    const getTargetUid = useMemo(() => {
+        return () => {
+             if (id && id.length > 20) return id;
+             if (targetUserObject) {
+                 if ('uid' in targetUserObject) return targetUserObject.uid;
+                 if ('linkedUserId' in targetUserObject && targetUserObject.linkedUserId) return targetUserObject.linkedUserId;
+             }
+             return null;
         }
-        return null;
-    };
+    }, [id, targetUserObject]);
 
     // Fetch user/contact info
     useEffect(() => {
@@ -129,7 +143,7 @@ export const PersonStream = () => {
 
         fetchTarget();
         markContactAsRead(user.uid, id);
-    }, [user, id]);
+    }, [user, id, contactId, resolveName, getTargetUid, targetUserObject]);
 
     // Listen for Global FAB Trigger
     useEffect(() => {
@@ -169,7 +183,7 @@ export const PersonStream = () => {
 
     // Calculate Stream Balance
     const streamBalance = useMemo(() => {
-        if (!user) return new Map();
+        if (!user) return new Map() as DetailedBalances;
         return calculateStreamBalance(transactions, user.uid);
     }, [transactions, user]);
 
@@ -287,22 +301,22 @@ export const PersonStream = () => {
              try {
                  await permanentlyDeleteDebt(debtId, user.uid);
                  showAlert("Silindi", "Dosya silindi.", "success");
-             } catch (e) {
+             } catch {
                  showAlert("Hata", "Silme başarısız.", "error");
              }
         }
     };
 
-    const handleDebtEdit = (debt: any) => {
+    const handleDebtEdit = (debt: Debt) => {
         setEditingDebt(debt);
     };
 
-    const handleDebtComplete = async (debt: any) => {
+    const handleDebtComplete = async () => {
         // "Tamamla" -> Mark as Paid / Forgive?
         showAlert("Bilgi", "Borcu tamamlama (silme/hibe) henüz swipe ile aktif değil. Detaydan yapınız.", "info");
     };
 
-    const handleDebtHide = async (debtId: string) => {
+    const handleDebtHide = async () => {
         // Hide/Archive is disabled per "1 Hour Rule" / "Exist or Don't Exist" policy.
         showAlert("Bilgi", "Arşivleme özelliği '1 Saat Kuralı' gereği kaldırılmıştır.", "info");
     };
@@ -375,28 +389,74 @@ export const PersonStream = () => {
 
             <main className="p-4 space-y-6">
                 {/* A. Akış Özeti (Stream Summary) */}
-                <section>
-                    <h2 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-3 px-1">Akış Özeti</h2>
-                    <div 
-                        onClick={() => navigate(`/person/${id}/history`)}
-                        className="bg-surface rounded-2xl p-5 border border-border shadow-sm cursor-pointer hover:bg-slate-50 dark:hover:bg-slate-800/50 transition-colors group relative"
-                    >
-                        <div className="absolute right-4 top-1/2 -translate-y-1/2 text-text-tertiary group-hover:translate-x-1 transition-transform">
-                            <ArrowLeft className="rotate-180" size={20} />
-                        </div>
-
-                        <div className="pr-8">
-                            {transactions.length > 0 ? (
-                                <CurrencyChips balances={streamBalance} size="md" />
-                            ) : (
-                                <div className="text-text-secondary flex items-center gap-2">
-                                    <span className="text-2xl">💬</span>
-                                    <span>Henüz akış kaydı yok</span>
-                                </div>
-                            )}
-                            <p className="text-xs text-text-tertiary mt-2 font-medium">Detaylı geçmiş için dokunun</p>
-                        </div>
+                <section className="relative group">
+                    <div className="flex justify-between items-center mb-3 px-1">
+                        <h2 className="text-sm font-semibold text-text-secondary uppercase tracking-wider">Akış Özeti</h2>
+                        <button 
+                            onClick={() => navigate(`/person/${id}/history`)}
+                            className="text-xs text-primary font-medium flex items-center gap-1 hover:underline"
+                        >
+                            Tüm Geçmiş
+                            <ArrowLeft className="rotate-180" size={14} />
+                        </button>
                     </div>
+
+                    {transactions.length > 0 ? (
+                        <div className="flex gap-3 overflow-x-auto pb-4 min-h-[140px] snap-x snap-mandatory scrollbar-hide pt-1">
+                            {/* Grand Total in TRY for this Person */}
+                            {(() => {
+                                const entries = Array.from(streamBalance.entries());
+                                const totalNet = entries.reduce((sum, [curr, b]) => sum + (rates ? convertToTRY(b.net, curr, rates) : 0), 0);
+                                const totalRec = entries.reduce((sum, [curr, b]) => sum + (rates ? convertToTRY(b.receivables, curr, rates) : 0), 0);
+                                const totalPay = entries.reduce((sum, [curr, b]) => sum + (rates ? convertToTRY(b.payables, curr, rates) : 0), 0);
+                                
+                                return (
+                                    <SummaryCard
+                                        title="Toplam Varlık"
+                                        currency="TRY"
+                                        net={totalNet}
+                                        receivables={totalRec}
+                                        payables={totalPay}
+                                        variant="auto"
+                                        className="!w-[220px]"
+                                    />
+                                );
+                            })()}
+
+                            {/* Individual Currencies */}
+                            {Array.from(streamBalance.entries())
+                                .sort((a, b) => (a[0] === 'TRY' ? -1 : b[0] === 'TRY' ? 1 : 0))
+                                .map(([currency, balance]) => {
+                                    const isToggled = toggledCards[currency];
+
+                                    const net = (isToggled && rates) ? convertToTRY(balance.net, currency, rates) : balance.net;
+                                    const receivables = (isToggled && rates) ? convertToTRY(balance.receivables, currency, rates) : balance.receivables;
+                                    const payables = (isToggled && rates) ? convertToTRY(balance.payables, currency, rates) : balance.payables;
+
+                                    return (
+                                        <SummaryCard
+                                            key={currency}
+                                            title={`Varlık (${currency})`}
+                                            currency={currency}
+                                            net={net}
+                                            receivables={receivables}
+                                            payables={payables}
+                                            isToggled={isToggled}
+                                            onToggle={() => toggleCardCurrency(currency)}
+                                            showToggle={currency !== 'TRY'}
+                                            variant={balance.net >= 0 ? 'emerald' : 'rose'}
+                                            className="!w-[220px]"
+                                        />
+                                    );
+                                })}
+                        </div>
+                    ) : (
+                        <div className="bg-surface rounded-2xl p-8 text-center border border-dashed border-border shadow-sm">
+                            <span className="text-3xl mb-2 block">💬</span>
+                            <p className="text-text-secondary font-medium">Henüz akış kaydı yok</p>
+                            <p className="text-xs text-text-tertiary mt-1">Yapılan borç/alacak işlemleri burada özetlenir</p>
+                        </div>
+                    )}
                 </section>
 
                 {/* B. Özel Borçlar Listesi (Special Debts List) */}
@@ -440,14 +500,14 @@ export const PersonStream = () => {
                                     icon: <CheckCircle size={20} />,
                                     label: 'Tamamla',
                                     color: 'bg-green-500',
-                                    onClick: () => handleDebtComplete(debt)
+                                    onClick: () => handleDebtComplete()
                                 });
                                 leftActions.push({
                                     key: 'hide',
                                     icon: <EyeOff size={20} />,
                                     label: 'Gizle',
                                     color: 'bg-zinc-500',
-                                    onClick: () => handleDebtHide(debt.id)
+                                    onClick: () => handleDebtHide()
                                 });
 
                                 return (
@@ -459,7 +519,8 @@ export const PersonStream = () => {
                                         onOpen={(dir) => setOpenRowId(`${debt.id}_${dir}`)}
                                         onClose={() => setOpenRowId(null)}
                                         contentClassName="rounded-2xl"
-                                        className="rounded-2xl mb-3 shadow-sm" // Moved mb-3 here to fix overflow bleeding
+                                        className="rounded-2xl mb-3 shadow-sm"
+                                        disableDesktopMenu={true}
                                     >
                                         <DebtCard
                                             debt={debt}
@@ -468,7 +529,7 @@ export const PersonStream = () => {
                                             onClick={() => navigate(`/debt/${debt.id}`)}
                                             disabled={isBlocked}
                                             variant="default"
-                                            className="!mb-0 !shadow-none" // Remove margin and shadow from card to let wrapper handle it
+                                            className="!mb-0 !shadow-none"
                                         />
                                     </AdaptiveActionRow>
                                 );

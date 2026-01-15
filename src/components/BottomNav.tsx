@@ -1,15 +1,18 @@
-import { Home, BookUser, GripHorizontal, Calculator, Plus, Settings, Wallet } from 'lucide-react';
+import { Home, BookUser, Calculator, Plus, Settings } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { clsx } from 'clsx';
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { CreateDebtModal } from './CreateDebtModal';
 import { ContactModal } from './ContactModal';
-import { createDebt } from '../services/db';
+import { createDebt, searchUserByPhone } from '../services/db';
 import { useContactName } from '../hooks/useContactName';
 import { useContacts } from '../hooks/useContacts';
 import { cleanPhone } from '../utils/phoneUtils';
-import type { Contact, User } from '../types';
+import { checkBlockStatus } from '../services/blockService';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../services/firebase';
+import type { Contact, User, Installment } from '../types';
 
 export const BottomNav = () => {
     const navigate = useNavigate();
@@ -17,31 +20,81 @@ export const BottomNav = () => {
     const [showDebtModal, setShowDebtModal] = useState(false);
     const [showContactModal, setShowContactModal] = useState(false);
     const { user } = useAuth(); // Need auth for creating debt
-    const { contactsMap, contacts } = useContacts();
+    const { contactsMap } = useContacts();
 
     const isContacts = location.pathname === '/contacts';
 
+    // Check for Context: User Detail Page
+    const personMatch = location.pathname.match(/^\/person\/([^/]+)/);
+    const personId = personMatch ? personMatch[1] : undefined;
+
     // Check for Context: Debt Detail Page
     const debtMatch = location.pathname.match(/^\/debt\/([^/]+)$/);
-    const isDebtDetail = !!debtMatch;
+    const debtId = debtMatch ? debtMatch[1] : undefined;
 
-    // Check for Context: User Detail Page
-    // Using regex match on location.pathname provided by useLocation hook
-    const personMatch = location.pathname.match(/^\/person\/([^/]+)$/);
-    const isPersonDetail = !!personMatch;
-    const personId = personMatch ? personMatch[1] : undefined;
+    const isPersonContext = !!personId || !!debtId;
 
     // Resolve Person Name for Context
     const { resolveName } = useContactName();
     const locationState = location.state as { name?: string } | undefined;
 
-    let personName = '';
-    let targetUserObject: Contact | User | null = null;
+    const [contextPersonName, setContextPersonName] = useState('');
+    const [contextTargetUser, setContextTargetUser] = useState<Contact | User | null>(null);
+    const [isContextBlocked, setIsContextBlocked] = useState(false);
 
-    if (isPersonDetail && personId) {
-        // ... (Existing logic) ...
-        // ...
-    }
+    // Context Resolution Effect
+    useEffect(() => {
+        const resolveContext = async () => {
+            if (!user) return;
+            
+            let targetId = personId;
+            let targetObject: Contact | User | null = null;
+
+            // 1. If we have a debtId, we need to find the OTHER party
+            if (debtId) {
+                const debtDoc = await getDoc(doc(db, 'debts', debtId));
+                if (debtDoc.exists()) {
+                    const d = debtDoc.data();
+                    targetId = d.lenderId === user.uid ? d.borrowerId : d.lenderId;
+                }
+            }
+
+            if (!targetId) {
+                setContextPersonName('');
+                setContextTargetUser(null);
+                return;
+            }
+
+            // 2. Resolve targetObject
+            const cleanTargetId = cleanPhone(targetId);
+            if (targetId.length > 20) {
+                const userDoc = await getDoc(doc(db, 'users', targetId));
+                if (userDoc.exists()) targetObject = { uid: userDoc.id, ...userDoc.data() } as User;
+            } else {
+                const foundUser = await searchUserByPhone(cleanTargetId);
+                if (foundUser) targetObject = foundUser;
+            }
+
+            // 3. Fallback to contactsMap if not system user
+            if (!targetObject) {
+                targetObject = contactsMap.get(targetId) || contactsMap.get(cleanTargetId) || null;
+            }
+
+            setContextTargetUser(targetObject);
+
+            // 4. Resolve Name
+            const { displayName } = resolveName(targetId, targetObject ? ('displayName' in targetObject ? targetObject.displayName : targetObject.name) : (locationState?.name || ''));
+            setContextPersonName(displayName);
+
+            // 5. Block Check
+            if (targetId.length > 20) {
+                const blocked = await checkBlockStatus(user.uid, targetId);
+                setIsContextBlocked(blocked);
+            }
+        };
+
+        resolveContext();
+    }, [personId, debtId, user, contactsMap, resolveName, location.state]);
 
     // Submit handler for CreateDebtModal
     const handleCreateDebtSubmit = async (
@@ -52,7 +105,7 @@ export const BottomNav = () => {
         currency: string,
         note?: string,
         dueDate?: Date,
-        installments?: any[],
+        installments?: Installment[],
         canBorrowerAddPayment?: boolean,
         initialPayment?: number
     ) => {
@@ -85,39 +138,33 @@ export const BottomNav = () => {
         onClick?: () => void;
     };
 
+
     const navItems: NavItem[] = [
         { path: '/', icon: Home, label: 'Anasayfa' },
         { path: '/tools', icon: Calculator, label: 'Araçlar' },
         // Dynamic Center Item
-        isDebtDetail
+        isPersonContext
             ? {
-                path: '#add-payment-context',
-                icon: Wallet,
-                label: 'Ödeme Ekle',
+                path: '#context-action',
+                icon: Plus,
+                label: 'İşlem Ekle',
                 isCenter: true,
-                isPaymentAction: true, // Green styling
-                onClick: () => window.dispatchEvent(new Event('trigger-fab-action'))
-            }
-            : (isPersonDetail
-                ? {
-                    path: '#create-transaction-context',
-                    icon: Plus,
-                    label: 'İşlem Ekle',
-                    isCenter: true,
-                    isContextAction: true, // Purple styling
-                    onClick: () => window.dispatchEvent(new Event('trigger-person-fab-action'))
+                isContextAction: true,
+                onClick: () => {
+                   if (isContextBlocked) return;
+                   setShowDebtModal(true);
                 }
-                : (isContacts
-                    ? {
-                        path: '#add-contact',
-                        icon: Plus,
-                        label: 'Kişi Ekle',
-                        isCenter: true,
-                        isContactAction: true, // Orange styling
-                        onClick: () => setShowContactModal(true)
-                    }
-                    : { path: '#create-debt', icon: Plus, label: 'Yeni Ekle', isCenter: true, onClick: () => setShowDebtModal(true) }
-                )
+            }
+            : (isContacts
+                ? {
+                    path: '#add-contact',
+                    icon: Plus,
+                    label: 'Kişi Ekle',
+                    isCenter: true,
+                    isContactAction: true,
+                    onClick: () => setShowContactModal(true)
+                }
+                : { path: '#create-debt', icon: Plus, label: 'Yeni Ekle', isCenter: true, onClick: () => setShowDebtModal(true) }
             ),
         { path: '/contacts', icon: BookUser, label: 'Rehber' },
         { path: '/settings', icon: Settings, label: 'Ayarlar' },
@@ -129,16 +176,13 @@ export const BottomNav = () => {
                 <div className="w-full max-w-3xl mx-auto flex justify-around items-center h-16 px-2">
                     {navItems.map((item) => {
                         const Icon = item.icon;
-                        const isActive = location.pathname === item.path;
-                        // @ts-ignore
-                        const isCenter = item.isCenter;
+                        const isCenterItem = item.isCenter;
 
-                        if (isCenter) {
+                        if (isCenterItem) {
                             return (
                                 <button
                                     key={item.path}
                                     onClick={() => {
-                                        // @ts-ignore
                                         if (item.onClick) item.onClick();
                                         else navigate(item.path);
                                     }}
@@ -146,15 +190,12 @@ export const BottomNav = () => {
                                 >
                                     <div className={clsx(
                                         "p-4 rounded-full shadow-lg shadow-blue-500/40 text-white hover:scale-105 transition-transform active:scale-95 border-4 border-white dark:border-slate-900",
-                                        // @ts-ignore
                                         item.isContextAction
                                             ? "bg-purple-600 shadow-purple-500/40"
                                             : (
-                                                // @ts-ignore
                                                 item.isContactAction
                                                     ? "bg-orange-500 shadow-orange-500/40"
                                                     : (
-                                                        // @ts-ignore
                                                         item.isPaymentAction
                                                             ? "bg-emerald-500 shadow-emerald-500/40"
                                                             : "bg-primary shadow-blue-500/40"
@@ -167,6 +208,7 @@ export const BottomNav = () => {
                             );
                         }
 
+                        const isActive = location.pathname === item.path;
                         return (
                             <button
                                 key={item.path}
@@ -188,9 +230,9 @@ export const BottomNav = () => {
                 isOpen={showDebtModal}
                 onClose={() => setShowDebtModal(false)}
                 onSubmit={handleCreateDebtSubmit}
-                initialPhoneNumber={personId}
-                initialName={personName}
-                targetUser={targetUserObject}
+                initialPhoneNumber={contextTargetUser ? ('phoneNumber' in contextTargetUser ? contextTargetUser.phoneNumber : (contextTargetUser as User).primaryPhoneNumber) : (personId || undefined)}
+                initialName={contextPersonName}
+                targetUser={contextTargetUser}
             />
 
             <ContactModal

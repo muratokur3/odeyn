@@ -1,9 +1,9 @@
-import { respondToDebtRequest, deletePendingDebt, permanentlyDeleteDebt } from '../services/db';
+import { permanentlyDeleteDebt } from '../services/db';
 import { useContactName } from '../hooks/useContactName';
-import type { Debt } from '../types';
+import type { Debt, User, Contact } from '../types';
 import { format, differenceInMinutes } from 'date-fns';
 import { tr } from 'date-fns/locale';
-import { CheckCheck, Clock, Ban, MoreVertical, Trash2, Archive, AlertTriangle, Edit2 } from 'lucide-react';
+import { MoreVertical, Trash2, Edit2, CheckCircle, EyeOff } from 'lucide-react';
 import { formatCurrency } from '../utils/format';
 import { formatPhoneForDisplay as formatPhoneNumber } from '../utils/phoneUtils';
 import { Avatar } from './Avatar';
@@ -11,6 +11,7 @@ import clsx from 'clsx';
 import { useState } from 'react';
 import { useModal } from '../context/ModalContext';
 import { CreateDebtModal } from './CreateDebtModal';
+import { useMediaQuery } from '../hooks/useMediaQuery';
 
 interface DebtCardProps {
     debt: Debt;
@@ -37,7 +38,9 @@ export const DebtCard: React.FC<DebtCardProps> = ({
 }) => {
     const { resolveName } = useContactName();
     const { showConfirm, showAlert } = useModal();
+    const isDesktop = useMediaQuery('(min-width: 1024px)');
     const [showMenu, setShowMenu] = useState(false);
+    const [openUpwards, setOpenUpwards] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
 
     const isLender = debt.lenderId === currentUserId;
@@ -46,7 +49,9 @@ export const DebtCard: React.FC<DebtCardProps> = ({
     const lockedPhone = debt.lockedPhoneNumber;
 
     // Name Resolution
-    let { displayName: otherPartyName, source, linkedUserId } = resolveName(otherId, rawOtherName);
+    const initialResolution = resolveName(otherId, rawOtherName);
+    let { displayName: otherPartyName, source } = initialResolution;
+    const { linkedUserId } = initialResolution;
 
     if (source !== 'contact' && lockedPhone) {
         const lockedResolution = resolveName(lockedPhone, rawOtherName);
@@ -71,9 +76,7 @@ export const DebtCard: React.FC<DebtCardProps> = ({
     }
 
     const isPaid = debt.status === 'PAID';
-    const isPending = debt.status === 'PENDING';
     const isRejectedByReceiver = debt.status === 'REJECTED_BY_RECEIVER';
-    const isActive = debt.status === 'ACTIVE';
 
     const totalInstallments = debt.installments?.length || 0;
     const paidInstallments = debt.installments?.filter(i => i.isPaid).length || 0;
@@ -119,12 +122,18 @@ export const DebtCard: React.FC<DebtCardProps> = ({
         setShowEditModal(true);
     };
 
-    const handleArchive = async (e: React.MouseEvent) => {
+    const handleComplete = (e: React.MouseEvent) => {
         e.stopPropagation();
         setShowMenu(false);
-        // Implement Archive logic or Soft Delete logic
-        showAlert("Bilgi", "Arşivleme özelliği yakında eklenecek.", "info");
+        showAlert("Bilgi", "Borcu tamamlama (silme/hibe) henüz swipe ile aktif değil. Detaydan yapınız.", "info");
     };
+
+    const handleHide = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setShowMenu(false);
+        showAlert("Bilgi", "Arşivleme özelliği '1 Saat Kuralı' gereği kaldırılmıştır.", "info");
+    };
+
 
 
     // Visual Styling
@@ -171,7 +180,7 @@ export const DebtCard: React.FC<DebtCardProps> = ({
                                                 ? "bg-purple-50 text-purple-700 border-purple-200"
                                                 : "bg-orange-50 text-orange-700 border-orange-200"
                                         )}>
-                                            {isLender ? "ALACAK" : "BORÇ"}
+                                            {isLender ? "VERİLEN" : "ALINAN"}
                                         </span>
                                         {hasInstallments && (
                                             <span className="text-[10px] font-medium text-gray-500 bg-gray-100 px-1.5 py-0.5 rounded">
@@ -197,11 +206,16 @@ export const DebtCard: React.FC<DebtCardProps> = ({
                         </div>
                     </div>
 
-                    {/* Three Dot Menu */}
-                    {!hideMenu && (
+                    {/* Three Dot Menu (Desktop Only) */}
+                    {!hideMenu && isDesktop && (
                         <div className="relative" onClick={e => e.stopPropagation()}>
                             <button
-                                onClick={() => setShowMenu(!showMenu)}
+                                onClick={(e) => {
+                                    const rect = e.currentTarget.getBoundingClientRect();
+                                    const spaceBelow = window.innerHeight - rect.bottom;
+                                    setOpenUpwards(spaceBelow < 200);
+                                    setShowMenu(!showMenu);
+                                }}
                                 className="p-1 -mr-2 text-gray-400 hover:text-gray-600 rounded-full hover:bg-gray-100 dark:hover:bg-slate-800"
                             >
                                 <MoreVertical size={20} />
@@ -209,7 +223,10 @@ export const DebtCard: React.FC<DebtCardProps> = ({
                             {showMenu && (
                                 <>
                                     <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)}></div>
-                                    <div className="absolute right-0 top-full mt-1 w-36 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-gray-200 dark:border-slate-700 z-20 overflow-hidden">
+                                    <div className={clsx(
+                                        "absolute right-0 w-36 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-gray-200 dark:border-slate-700 z-[100] overflow-hidden animate-in fade-in zoom-in-95 duration-200",
+                                        openUpwards ? "bottom-full mb-1" : "top-full mt-1"
+                                    )}>
                                         {isEditable && (
                                             <>
                                                 <button
@@ -227,11 +244,19 @@ export const DebtCard: React.FC<DebtCardProps> = ({
                                             </>
                                         )}
 
-                                        {!isEditable && (
-                                            <div className="px-4 py-3 text-sm text-gray-400 dark:text-gray-500 italic text-center">
-                                                İşlem yapılamaz (Süre doldu)
-                                            </div>
-                                        )}
+                                        {/* Always show Complete and Hide options */}
+                                        <button
+                                            onClick={handleComplete}
+                                            className="w-full text-left px-4 py-3 text-sm font-medium text-green-600 hover:bg-green-50 dark:hover:bg-green-900/10 flex items-center gap-2 border-t border-gray-100 dark:border-slate-700"
+                                        >
+                                            <CheckCircle size={16} /> Tamamla
+                                        </button>
+                                        <button
+                                            onClick={handleHide}
+                                            className="w-full text-left px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700 flex items-center gap-2"
+                                        >
+                                            <EyeOff size={16} /> Gizle
+                                        </button>
                                     </div>
                                 </>
                             )}
@@ -247,8 +272,8 @@ export const DebtCard: React.FC<DebtCardProps> = ({
                 editMode={true}
                 initialData={debt}
                 targetUser={
-                    linkedUserId ? { uid: linkedUserId, displayName: finalDisplayName } as any :
-                    { name: finalDisplayName, phoneNumber: lockedPhone || '' } as any
+                    linkedUserId ? { uid: linkedUserId, displayName: finalDisplayName } as User :
+                    { name: finalDisplayName, phoneNumber: lockedPhone || '' } as Contact
                 }
             />
         </>

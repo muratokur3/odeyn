@@ -5,7 +5,7 @@ import { differenceInDays } from 'date-fns';
 
 export interface Notification {
     id: string;
-    type: 'DUE_SOON' | 'INSTALLMENT_DUE' | 'REQUEST';
+    type: 'DUE_SOON' | 'INSTALLMENT_DUE';
     message: string;
     date: Date;
     debtId: string;
@@ -24,17 +24,6 @@ export const useNotifications = () => {
         debts.forEach(debt => {
             const isBorrower = debt.borrowerId === user.uid;
 
-            // 1. Pending Requests (Incoming)
-            if (debt.status === 'PENDING' && debt.createdBy !== user.uid) {
-                notifs.push({
-                    id: `req-${debt.id}`,
-                    type: 'REQUEST',
-                    message: `${debt.createdBy === debt.lenderId ? debt.lenderName : debt.borrowerName} size bir borç kaydı gönderdi.`,
-                    date: debt.createdAt.toDate(),
-                    debtId: debt.id,
-                    read: false
-                });
-            }
 
             // 2. Due Date Approaching (for whole debt)
             if (isBorrower && debt.status === 'ACTIVE' && debt.dueDate) {

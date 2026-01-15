@@ -26,12 +26,12 @@ import { checkBlockStatus } from './blockService';
 /**
  * Checks if a transaction is editable (created within the last 60 minutes).
  */
-export const isTransactionEditable = (createdAt: Timestamp | Date | any): boolean => {
+export const isTransactionEditable = (createdAt: Timestamp | Date | number | string): boolean => {
     if (!createdAt) return false;
 
     // Normalize timestamp to Date object
     let created: Date;
-    if (createdAt.toDate) {
+    if (createdAt instanceof Timestamp) {
         created = createdAt.toDate();
     } else if (createdAt instanceof Date) {
         created = createdAt;
@@ -354,185 +354,164 @@ export const updateDebtHardReset = async (
 
             const currentData = debtDoc.data() as Debt;
 
-            // 1. Check 1-Hour Rule
+            // 2. Check 1-Hour Rule
             if (!isTransactionEditable(currentData.createdAt)) {
                 throw new Error("Zaman aşımı: Bu kayıt artık düzenlenemez (1 saat kuralı).");
             }
 
-            // 2. Check Ownership
+            // 3. Check Ownership
             if (currentData.createdBy !== currentUserId) {
                 throw new Error("Bu kaydı sadece oluşturan kişi düzenleyebilir.");
             }
 
-            // 3. Wipe History (Delete all logs)
-            // Transactions cannot delete collections directly. We must read logs first.
-            // WARNING: Reading many logs in transaction might be costly, but usually < 1h logs are few.
-            // const logsRef = collection(db, 'debts', debtId, 'logs'); // Unused in transaction directly
-            // We can't query inside transaction easily for subcollections in all SDKs,
-            // but in web SDK we can.
-            // However, to keep it simple and robust, we can just overwrite the debt and let logs linger?
-            // NO, the requirement says "Wipe History".
-            // Since we can't delete collection in transaction easily without listing all docs...
-            // We will do a separate delete batch for logs BEFORE or AFTER, or rely on the fact that
-            // "Recalculation" ignores them?
-            // Better: Delete them.
-            // For now, let's assume we can fetch them.
+            // 4. Recalculate Logic
+            const newOriginal = updates.originalAmount ?? currentData.originalAmount;
+            const newRemaining = newOriginal - newInitialPayment;
+            let newStatus: DebtStatus = newRemaining <= 0 ? 'PAID' : (newInitialPayment > 0 ? 'PARTIALLY_PAID' : 'ACTIVE');
 
-            // To be safe against limits, we'll skip deleting logs inside the transaction and do it separately?
-            // But we need atomicity.
-            // Compromise: We reset the debt data so completely that old logs become irrelevant semantically.
-            // But technically they are there.
-            // User requirement: "Geçmişi Siler".
-            // Let's try to delete them.
+            if (currentData.status === 'AUTO_HIDDEN' && newStatus !== 'PAID') {
+                newStatus = 'AUTO_HIDDEN';
+            }
 
-            // We can't query reliably inside this transaction wrapper style for subcollections on some clients.
-            // Let's assume we can just overwrite the main doc and ADD a "Reset" log, effectively starting over.
-            // But to truly "Delete" history, we need to delete the docs.
-            // Let's use a non-transactional cleanup for logs just before? No, race conditions.
+            // 5. Prepare Updates (Reset createdAt effectively making it 'New')
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const docUpdates: any = {
+                ...updates,
+                remainingAmount: newRemaining,
+                status: newStatus,
+                createdAt: serverTimestamp(), // RESET TIMER
+                updatedAt: serverTimestamp()
+            };
 
-            // ALTERNATIVE: Hard Reset simply updates the main document and adds a special log "RESET_HISTORY"
-            // that tells the UI to ignore previous logs? No, that's messy.
+            // Remove undefined values
+            Object.keys(docUpdates).forEach(key => docUpdates[key] === undefined && delete docUpdates[key]);
 
-            // BEST APPROACH: Just update the main document with new values.
-            // New logs will follow. Old logs will remain but be weird?
-            // "Geçmişi Siler" -> We must delete them.
-            // Since we are in 1 hour window, there's likely just 1 or 2 logs (Creation + maybe 1 payment).
-            // We can fetch them.
-        });
+            // 6. Update Main Doc
+            transaction.update(debtRef, docUpdates);
 
-        // Fetch logs outside transaction (or in a separate step) to delete them
-        const logsRef = collection(db, 'debts', debtId, 'logs');
-        const logsSnap = await getDocs(logsRef);
-
-        const deleteBatch = writeBatch(db);
-        logsSnap.docs.forEach(log => {
-            deleteBatch.delete(log.ref);
-        });
-        await deleteBatch.commit();
-
-        // Now update the main doc as if it is new
-        const debtRef = doc(db, 'debts', debtId);
-
-        // Recalculate based on new inputs
-        // Note: updates contains the NEW Amount, NEW Note etc.
-        const amount = updates.originalAmount || 0;
-        const remainingAmount = amount - newInitialPayment;
-
-        let status: DebtStatus = 'ACTIVE';
-        if (remainingAmount <= 0) status = 'PAID';
-        else if (newInitialPayment > 0) status = 'PARTIALLY_PAID';
-
-        // Preserve muted status if it was muted
-        const debtSnap = await getDoc(debtRef);
-        const currentData = debtSnap.data() as Debt;
-        if (currentData.status === 'AUTO_HIDDEN') {
-             // If we are resetting, do we keep it hidden? Yes, usually.
-             // Unless we want to unhide? Let's keep existing logic or explicitly set it.
-             if (status !== 'PAID') status = 'AUTO_HIDDEN';
-        }
-
-        const newData = {
-            ...updates,
-            remainingAmount,
-            status,
-            updatedAt: serverTimestamp(),
-            // We keep createdAt to enforce the 1-hour rule from original creation?
-            // "Sanki yeniden oluşturulmuş gibi olsun" -> Does that mean 1 hour restarts?
-            // Usually NO. The 1 hour is from INITIAL creation. Otherwise you can edit forever by editing every 59 mins.
-            // So we DO NOT update createdAt.
-        };
-
-        await updateDoc(debtRef, newData);
-
-        // Add new initial logs
-        const batch = writeBatch(db);
-
-        // Log 1: Re-Creation (Reset)
-        const log1Ref = doc(collection(db, `debts/${debtId}/logs`));
-        batch.set(log1Ref, {
-            type: 'INITIAL_CREATION',
-            previousRemaining: amount,
-            newRemaining: amount,
-            performedBy: currentUserId,
-            timestamp: serverTimestamp(),
-            note: 'Kayıt düzenlendi/sıfırlandı (Hard Reset)',
-        });
-
-        // Log 2: Initial Payment (if any)
-        if (newInitialPayment > 0) {
-            const log2Ref = doc(collection(db, `debts/${debtId}/logs`));
-            batch.set(log2Ref, {
-                type: 'PAYMENT',
-                amountPaid: newInitialPayment,
-                previousRemaining: amount,
-                newRemaining: remainingAmount,
+            // 7. Add "Reset" Log
+            const resetLogRef = doc(collection(db, `debts/${debtId}/logs`));
+            transaction.set(resetLogRef, {
+                type: 'NOTE_ADDED',
+                previousRemaining: 0, // Semantic reset
+                newRemaining: newOriginal,
+                amountPaid: 0,
                 performedBy: currentUserId,
                 timestamp: serverTimestamp(),
-                note: 'Peşinat / İlk Ödeme (Düzenleme Sonrası)'
+                note: 'Kayıt sıfırlandı ve yeniden oluşturuldu'
             });
-        }
 
-        await batch.commit();
+            // 8. Add Down Payment Log (if any)
+            if (newInitialPayment > 0) {
+                const dpLogRef = doc(collection(db, `debts/${debtId}/logs`));
+                transaction.set(dpLogRef, {
+                    type: 'PAYMENT',
+                    amountPaid: newInitialPayment,
+                    previousRemaining: newOriginal,
+                    newRemaining: newRemaining,
+                    performedBy: currentUserId,
+                    timestamp: serverTimestamp(),
+                    note: 'Peşinat (Yeniden Oluşturma)'
+                });
+            }
+        });
 
-        // Activity Feed
-        const target = currentData.lenderId === currentUserId ? currentData.borrowerId : currentData.lenderId;
-        updateContactActivity(currentUserId, target, 'Borç düzenlendi (Sıfırlandı)');
+        // Log deletion removed to avoid permission errors.
+        // The UI should filter logs based on the new createdAt timestamp.
 
     } catch (error) {
-        console.error("Error in hard reset update:", error);
+        console.error("Error hard resetting debt:", error);
         throw error;
     }
 };
 
-export const makePayment = async (debtId: string, amount: number, performedBy: string, note?: string) => {
-        await runTransaction(db, async (transaction) => {
-            const debtRef = doc(db, 'debts', debtId);
-            const debtDoc = await transaction.get(debtRef);
+export const makePayment = async (debtId: string, amount: number, performedBy: string, note?: string, installmentId?: string) => {
+    await runTransaction(db, async (transaction) => {
+        const debtRef = doc(db, 'debts', debtId);
+        const debtDoc = await transaction.get(debtRef);
 
-            if (!debtDoc.exists()) {
-                throw new Error("Debt document does not exist!");
-            }
+        if (!debtDoc.exists()) {
+            throw new Error("Debt document does not exist!");
+        }
 
-            const debtData = debtDoc.data() as Debt;
-            const newRemaining = debtData.remainingAmount - amount;
+        const debtData = debtDoc.data() as Debt;
+        
+        // Auto-Correction for Desync:
+        // If attempting to pay MORE than remaining (e.g. paying an outdated installment amount),
+        // clamp the payment to the remaining amount.
+        let efAmount = amount;
+        if (efAmount > debtData.remainingAmount) {
+            console.warn(`Payment amount (${efAmount}) > Remaining (${debtData.remainingAmount}). Clamping.`);
+            efAmount = debtData.remainingAmount;
+        }
 
-            if (newRemaining < 0) {
-                throw new Error("Payment amount exceeds remaining debt!");
-            }
+        let newRemaining = debtData.remainingAmount - efAmount;
 
-            let newStatus: DebtStatus = debtData.status;
-            if (newRemaining === 0) {
-                newStatus = 'PAID';
+        // Floating point tolerance
+        if (newRemaining > -0.1 && newRemaining < 0) {
+            newRemaining = 0;
+        }
+
+        if (newRemaining < 0) {
+             // Should not be reachable due to clamping, but safe to keep
+            throw new Error(`Payment amount (${efAmount}) exceeds remaining debt (${debtData.remainingAmount})!`);
+        }
+
+        let newStatus: DebtStatus = debtData.status;
+        if (newRemaining === 0) {
+            newStatus = 'PAID';
+        } else {
+            newStatus = 'PARTIALLY_PAID';
+        }
+
+        // --- Installment Logic ---
+        let updatedInstallments = debtData.installments ? [...debtData.installments] : undefined;
+
+        if (updatedInstallments && updatedInstallments.length > 0) {
+            console.log("DEBUG: Processing Installment Payment", { installmentId, efAmount });
+            if (installmentId) {
+                // Scenario 1: Paying a specific installment
+                updatedInstallments = updatedInstallments.map(inst => {
+                    if (String(inst.id).trim() === String(installmentId).trim()) {
+                        console.log("DEBUG: Marking installment as PAID", inst.id);
+                        return { ...inst, isPaid: true, paidAt: Timestamp.now() };
+                    }
+                    return inst;
+                });
             } else {
-                newStatus = 'PARTIALLY_PAID';
+                // Scenario 2: Interim Payment (Ara Ödeme)
+                // Recalculate remaining installments based on NEW balance
+                const unpaidOnes = updatedInstallments.filter(i => !i.isPaid);
+                if (unpaidOnes.length > 0) {
+                    const newAmountPerInstallment = Math.round((newRemaining / unpaidOnes.length) * 100) / 100;
+                    console.log("DEBUG: Recalculating installments", { newRemaining, newAmountPerInstallment });
+                    updatedInstallments = updatedInstallments.map(inst =>
+                        inst.isPaid ? inst : { ...inst, amount: newAmountPerInstallment }
+                    );
+                }
             }
+        }
 
-            // Update debt document
-            transaction.update(debtRef, {
-                remainingAmount: newRemaining,
-                status: newStatus
-            });
-
-            // Add payment log
-            const logRef = doc(collection(db, `debts/${debtId}/logs`));
-            transaction.set(logRef, {
-                type: 'PAYMENT',
-                amountPaid: amount,
-                previousRemaining: debtData.remainingAmount,
-                newRemaining: newRemaining,
-                performedBy,
-                timestamp: serverTimestamp(),
-                note: note || 'Ödeme yapıldı'
-            });
-
-            // Activity Feed
-            // Note: We can't await this inside transaction easily if it's not transactional update.
-            // But Firestore transactions require all reads before writes.
-            // `updateContactActivity` does reads and writes. It should NOT be awaited inside this transaction
-            // because it uses separate operations.
-            // We should call it AFTER transaction. 
-            // BUT we can't pass data out easily unless we return it.
+        // Update debt document
+        transaction.update(debtRef, {
+            remainingAmount: newRemaining,
+            status: newStatus,
+            ...(updatedInstallments && { installments: updatedInstallments })
         });
+
+        // Add payment log
+        const logRef = doc(collection(db, `debts/${debtId}/logs`));
+        transaction.set(logRef, {
+            type: 'PAYMENT',
+            amountPaid: efAmount,
+            previousRemaining: debtData.remainingAmount,
+            newRemaining: newRemaining,
+            performedBy,
+            timestamp: serverTimestamp(),
+            note: note || 'Ödeme yapıldı',
+            ...(installmentId && { installmentId })
+        });
+    });
 
         // Activity Feed (After Transaction)
         // We need debt details. Rerunning get or guessing?
@@ -962,7 +941,7 @@ export const addPayment = async (debtId: string, amount: number, note: string, u
     // If installmentId exists, we need custom logic similar to confirmPayment but immediate.
     // See makePayment for base.
     // For now, let's just use makePayment logic but ensuring it's "APPROVED"
-    return makePayment(debtId, amount, userId, note);
+    return makePayment(debtId, amount, userId, note, installmentId);
 };
 
 // ... confirmPayment deprecated ...
@@ -1119,8 +1098,6 @@ export const deleteDebt = async (debtId: string, currentUserId: string) => {
 /**
  * Legacy Support / Aliases
  */
-export const softDeleteDebt = deleteDebt; // Redirect to hard delete (or throw?) Redirecting matches "No Trash".
-export const deletePendingDebt = deleteDebt;
 export const permanentlyDeleteDebt = deleteDebt;
 
 
@@ -1307,6 +1284,7 @@ export const updateDebt = async (debtId: string, data: Partial<Debt>, actorId?: 
         throw error;
     }
 };
+
 
 export const fetchLastUsedName = async (userId: string, phoneNumber: string) => {
     try {

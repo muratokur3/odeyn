@@ -371,7 +371,7 @@ export const Contacts = () => {
                                             }
                                         ];
 
-                                        return (
+                                         return (
                                             <AdaptiveActionRow
                                                 key={contact.id}
                                                 leftActions={leftActions}
@@ -379,78 +379,42 @@ export const Contacts = () => {
                                                 isOpen={openRowId === `${contact.id}_left` ? 'left' : (openRowId === `${contact.id}_right` ? 'right' : null)}
                                                 onOpen={(dir) => setOpenRowId(`${contact.id}_${dir}`)}
                                                 onClose={() => setOpenRowId(null)}
-                                                className="mb-0"
+                                                className="mb-0 overflow-hidden"
                                             >
-                                                <div className="p-4 pl-5 flex items-center justify-between hover:bg-background/50 transition-colors min-h-[72px]">
-                                                    <div
-                                                        onClick={() => {
-                                                            const targetId = contact.linkedUserId || contact.phoneNumber;
-                                                            navigate(`/person/${targetId}`, { state: { name: contact.name, phone: contact.phoneNumber } });
-                                                        }}
-                                                        className="flex items-center gap-4 cursor-pointer flex-1"
-                                                    >
-                                                        <div className="w-12 h-12 flex items-center justify-center relative shrink-0">
-                                                            <Avatar
-                                                                name={contact.name}
-                                                                size="md"
-                                                                status={contact.linkedUserId ? 'system' : 'contact'}
-                                                                className={blocked ? "grayscale opacity-70" : "shadow-sm"}
-                                                                uid={contact.linkedUserId}
-                                                            />
-                                                            {blocked && (
-                                                                <div className="absolute -bottom-1 -right-1 bg-surface rounded-full p-0.5 border border-border">
-                                                                    <Ban size={14} className="text-red-500" />
-                                                                </div>
-                                                            )}
-                                                            {!blocked && contact.hasUnreadActivity && (
-                                                                <div className="absolute top-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-surface animate-pulse" />
-                                                            )}
-                                                        </div>
-                                                        <div className="min-w-0 flex-1">
-                                                            <div className="flex items-center gap-2 mb-0.5">
-                                                                <h3 className={`font-bold text-base truncate ${blocked ? 'text-gray-500 line-through decoration-red-500/50' : contact.hasUnreadActivity ? 'text-text-primary font-extrabold' : 'text-text-primary'}`}>
-                                                                    {contact.name}
-                                                                </h3>
-                                                                {blocked && <span className="text-[10px] font-bold text-red-500 bg-red-100 dark:bg-red-900/30 px-1.5 py-0.5 rounded">Engelli</span>}
-                                                            </div>
-                                                            <p className={`text-sm truncate ${contact.hasUnreadActivity ? 'text-green-600 font-medium' : 'text-text-secondary'}`}>
-                                                                {contact.hasUnreadActivity ? 'Yeni Hareket' : formatPhoneNumber(contact.phoneNumber)}
-                                                            </p>
-                                                        </div>
-                                                    </div>
-
-                                                    {/* Actions */}
-                                                    <div className="flex items-center gap-2 pl-3">
-                                                        {blocked ? (
-                                                            <button disabled className="p-2 text-gray-300 dark:text-gray-600 cursor-not-allowed">
-                                                                <Ban size={20} />
-                                                            </button>
-                                                        ) : (
-                                                            <div className="flex items-center gap-1">
-                                                                {/* Edit Button */}
-                                                                <button
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        openEditModal(contact);
-                                                                    }}
-                                                                    className="p-2.5 rounded-full text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 hover:bg-gray-100 dark:hover:bg-slate-800 transition-colors"
-                                                                >
-                                                                    <Edit2 size={18} />
-                                                                </button>
-
-                                                                {/* Wallet Button (Always Visible) */}
-                                                                <button
-                                                                    onClick={(e) => {
-                                                                        e.stopPropagation();
-                                                                        setSelectedContactForDebt(contact);
-                                                                        setShowDebtModal(true);
-                                                                    }}
-                                                                    className="p-2.5 rounded-full bg-blue-50 dark:bg-blue-900/10 text-blue-600 dark:text-blue-400 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
-                                                                >
-                                                                    <Wallet size={20} />
-                                                                </button>
+                                                <div
+                                                    onClick={() => {
+                                                        const targetId = contact.linkedUserId || contact.phoneNumber;
+                                                        navigate(`/person/${targetId}`, { state: { name: contact.name, phone: contact.phoneNumber } });
+                                                    }}
+                                                    className="p-4 pl-5 flex items-center gap-4 cursor-pointer hover:bg-background/50 transition-colors min-h-[72px]"
+                                                >
+                                                    <div className="w-12 h-12 flex items-center justify-center relative shrink-0">
+                                                        <Avatar
+                                                            name={contact.name}
+                                                            size="md"
+                                                            status={contact.linkedUserId ? 'system' : 'contact'}
+                                                            className={blocked ? "grayscale opacity-70" : "shadow-sm"}
+                                                            uid={contact.linkedUserId}
+                                                        />
+                                                        {blocked && (
+                                                            <div className="absolute -bottom-1 -right-1 bg-surface rounded-full p-0.5 border border-border">
+                                                                <Ban size={14} className="text-red-500" />
                                                             </div>
                                                         )}
+                                                        {!blocked && contact.hasUnreadActivity && (
+                                                            <div className="absolute top-0 right-0 w-3 h-3 bg-green-500 rounded-full border-2 border-surface animate-pulse" />
+                                                        )}
+                                                    </div>
+                                                    <div className="min-w-0 flex-1">
+                                                        <div className="flex items-center gap-2 mb-0.5">
+                                                            <h3 className={`font-bold text-base truncate ${blocked ? 'text-gray-500 line-through decoration-red-500/50' : contact.hasUnreadActivity ? 'text-text-primary font-extrabold' : 'text-text-primary'}`}>
+                                                                {contact.name}
+                                                            </h3>
+                                                            {blocked && <span className="text-[10px] font-bold text-red-500 bg-red-100 dark:bg-red-900/30 px-1.5 py-0.5 rounded">Engelli</span>}
+                                                        </div>
+                                                        <p className={`text-sm truncate ${contact.hasUnreadActivity ? 'text-green-600 font-medium' : 'text-text-secondary'}`}>
+                                                            {contact.hasUnreadActivity ? 'Yeni Hareket' : formatPhoneNumber(contact.phoneNumber)}
+                                                        </p>
                                                     </div>
                                                 </div>
                                             </AdaptiveActionRow>

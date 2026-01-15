@@ -81,7 +81,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
     }
 
     return (
-        <div className="space-y-3 pb-20">
+        <div className="space-y-3 pb-32">
             {transactions.map((tx) => {
                 const isMine = tx.createdBy === user?.uid;
                 const isOutgoing = tx.direction === 'OUTGOING';

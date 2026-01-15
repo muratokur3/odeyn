@@ -13,6 +13,7 @@ interface AdaptiveActionRowProps {
     onClose: () => void;
     className?: string;
     contentClassName?: string;
+    disableDesktopMenu?: boolean;
 }
 
 export const AdaptiveActionRow: React.FC<AdaptiveActionRowProps> = ({
@@ -23,7 +24,8 @@ export const AdaptiveActionRow: React.FC<AdaptiveActionRowProps> = ({
     onOpen,
     onClose,
     className,
-    contentClassName
+    contentClassName,
+    disableDesktopMenu = false
 }) => {
     // Media Query: Desktop is defined as >= 1024px (matches SwipeableItem internal check)
     // Actually, user prompt says "Desktop (Mouse Device)" and mentions "Mobile/Tablet (Touch)".
@@ -34,6 +36,7 @@ export const AdaptiveActionRow: React.FC<AdaptiveActionRowProps> = ({
     const isDesktop = useMediaQuery('(min-width: 1024px)');
 
     const [menuOpen, setMenuOpen] = useState(false);
+    const [openUpwards, setOpenUpwards] = useState(false);
 
     // Combine all actions for the menu
     const allActions = [...leftActions, ...rightActions];
@@ -48,8 +51,8 @@ export const AdaptiveActionRow: React.FC<AdaptiveActionRowProps> = ({
 
     if (isDesktop) {
         // Desktop View: Render content + Three-Dot Menu
-        // If no actions, just render children
-        if (allActions.length === 0) {
+        // If no actions or menu disabled, just render children
+        if (allActions.length === 0 || disableDesktopMenu) {
             return <div className={className}>{children}</div>;
         }
 
@@ -64,6 +67,10 @@ export const AdaptiveActionRow: React.FC<AdaptiveActionRowProps> = ({
                     <button
                         onClick={(e) => {
                             e.stopPropagation();
+                            const rect = e.currentTarget.getBoundingClientRect();
+                            const spaceBelow = window.innerHeight - rect.bottom;
+                            // If less than 200px below, open upwards
+                            setOpenUpwards(spaceBelow < 200);
                             setMenuOpen(!menuOpen);
                         }}
                         className="p-2 rounded-full hover:bg-gray-100 dark:hover:bg-slate-800 text-gray-500 transition-colors"
@@ -73,7 +80,10 @@ export const AdaptiveActionRow: React.FC<AdaptiveActionRowProps> = ({
 
                     {/* Dropdown Menu */}
                     {menuOpen && (
-                        <div className="absolute right-0 top-full mt-1 w-48 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-gray-200 dark:border-slate-700 z-50 overflow-hidden animate-in fade-in zoom-in-95 duration-100">
+                        <div className={clsx(
+                            "absolute right-0 w-48 bg-white dark:bg-slate-800 rounded-lg shadow-xl border border-gray-200 dark:border-slate-700 z-[100] overflow-hidden animate-in fade-in zoom-in-95 duration-100",
+                            openUpwards ? "bottom-full mb-1" : "top-full mt-1"
+                        )}>
                             {allActions.map((action) => (
                                 <button
                                     key={action.key}
