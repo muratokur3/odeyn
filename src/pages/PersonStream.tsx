@@ -8,7 +8,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useDebts } from '../hooks/useDebts';
 import { useContactName } from '../hooks/useContactName';
-import { ArrowLeft, FolderOpen, MoreVertical, Edit2, UserPlus, Volume2, VolumeX, Ban, Trash2, CheckCircle, EyeOff } from 'lucide-react';
+import { ArrowLeft, FolderOpen, MoreVertical, Edit2, UserPlus, Volume2, VolumeX, Ban, Trash2, CheckCircle, EyeOff, Activity, Layers } from 'lucide-react';
 import { searchUserByPhone, getContacts, markContactAsRead, createDebt, addContact, updateContact, deleteContact, muteUser, unmuteUser, permanentlyDeleteDebt, isTransactionEditable } from '../services/db';
 import { isUserBlocked, blockUser, unblockUser } from '../services/blockService';
 import { Avatar } from '../components/Avatar';
@@ -429,48 +429,7 @@ export const PersonStream = () => {
                 {/* A. Akış Özeti (Stream Summary) */}
                 <section className="relative group/stream">
                     <div className="flex justify-between items-center mb-3 px-1">
-                        <div className="flex items-center gap-3">
-                            <h2 className="text-sm font-semibold text-text-secondary uppercase tracking-wider">Akış Özeti</h2>
-                            
-                            {/* Tri-State Toggle */}
-                            <div className="bg-surface border border-border p-1 rounded-lg flex shadow-sm">
-                                <button
-                                    onClick={() => setViewMode('FLOW')}
-                                    className={clsx(
-                                        "px-3 py-1 text-[11px] font-bold rounded-md transition-all",
-                                        viewMode === 'FLOW' 
-                                            ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 shadow-sm" 
-                                            : "text-text-secondary hover:text-text-primary"
-                                    )}
-                                >
-                                    Akış
-                                </button>
-                                <div className="w-px bg-border my-1 mx-0.5"></div>
-                                <button
-                                    onClick={() => setViewMode('SPECIAL')}
-                                    className={clsx(
-                                        "px-3 py-1 text-[11px] font-bold rounded-md transition-all",
-                                        viewMode === 'SPECIAL' 
-                                            ? "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 shadow-sm" 
-                                            : "text-text-secondary hover:text-text-primary"
-                                    )}
-                                >
-                                    Özel
-                                </button>
-                                <div className="w-px bg-border my-1 mx-0.5"></div>
-                                <button
-                                    onClick={() => setViewMode('TOTAL')}
-                                    className={clsx(
-                                        "px-3 py-1 text-[11px] font-bold rounded-md transition-all",
-                                        viewMode === 'TOTAL' 
-                                            ? "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200 shadow-sm" 
-                                            : "text-text-secondary hover:text-text-primary"
-                                    )}
-                                >
-                                    Tümü
-                                </button>
-                            </div>
-                        </div>
+                        <h2 className="text-sm font-semibold text-text-secondary uppercase tracking-wider">Akış Özeti</h2>
 
                         <button 
                             onClick={() => navigate(`/person/${id}/history`)}
@@ -481,14 +440,56 @@ export const PersonStream = () => {
                         </button>
                     </div>
 
-                    <div className={clsx(
-                        "transition-all duration-300 rounded-2xl p-0.5",
-                        viewMode !== 'FLOW' && "bg-gradient-to-br from-transparent to-transparent", // Placeholder for potential bg highlight
-                        viewMode === 'SPECIAL' && "bg-purple-50/50 dark:bg-purple-900/5",
-                        viewMode === 'TOTAL' && "bg-gray-50/50 dark:bg-gray-800/20"
-                    )}>
-                        {(displayBalance && displayBalance.size > 0) ? (
-                            <div className="flex gap-3 overflow-x-auto pb-4 min-h-[140px] snap-x snap-mandatory scrollbar-hide pt-1 px-1">
+                    <div className="flex items-start gap-2">
+                        {/* Vertical Filter Stack (3 Dots Style) */}
+                        <div className="flex flex-col gap-2 pt-1">
+                            <button
+                                onClick={() => setViewMode('FLOW')}
+                                title="Akış"
+                                className={clsx(
+                                    "w-8 h-8 rounded-full flex items-center justify-center transition-all shadow-sm border",
+                                    viewMode === 'FLOW'
+                                        ? "bg-blue-100 border-blue-200 text-blue-600 dark:bg-blue-900/40 dark:border-blue-800 dark:text-blue-300 scale-110"
+                                        : "bg-surface border-border text-text-tertiary hover:text-text-secondary hover:bg-slate-50 dark:hover:bg-slate-800"
+                                )}
+                            >
+                                <Activity size={16} />
+                            </button>
+                            <button
+                                onClick={() => setViewMode('SPECIAL')}
+                                title="Özel"
+                                className={clsx(
+                                    "w-8 h-8 rounded-full flex items-center justify-center transition-all shadow-sm border",
+                                    viewMode === 'SPECIAL'
+                                        ? "bg-purple-100 border-purple-200 text-purple-600 dark:bg-purple-900/40 dark:border-purple-800 dark:text-purple-300 scale-110"
+                                        : "bg-surface border-border text-text-tertiary hover:text-text-secondary hover:bg-slate-50 dark:hover:bg-slate-800"
+                                )}
+                            >
+                                <FolderOpen size={16} />
+                            </button>
+                            <button
+                                onClick={() => setViewMode('TOTAL')}
+                                title="Tümü"
+                                className={clsx(
+                                    "w-8 h-8 rounded-full flex items-center justify-center transition-all shadow-sm border",
+                                    viewMode === 'TOTAL'
+                                        ? "bg-gray-100 border-gray-200 text-gray-700 dark:bg-gray-800 dark:border-gray-700 dark:text-gray-300 scale-110"
+                                        : "bg-surface border-border text-text-tertiary hover:text-text-secondary hover:bg-slate-50 dark:hover:bg-slate-800"
+                                )}
+                            >
+                                <Layers size={16} />
+                            </button>
+                        </div>
+
+                        {/* Card Content */}
+                        <div className={clsx(
+                            "flex-1 min-w-0 transition-all duration-300 rounded-2xl p-0.5",
+                            viewMode !== 'FLOW' && "bg-gradient-to-br from-transparent to-transparent",
+                            viewMode === 'SPECIAL' && "bg-purple-50/50 dark:bg-purple-900/5",
+                            viewMode === 'TOTAL' && "bg-gray-50/50 dark:bg-gray-800/20"
+                        )}>
+                            {(displayBalance && displayBalance.size > 0) ? (
+                                <div className="flex gap-3 overflow-x-auto pb-4 min-h-[140px] snap-x snap-mandatory scrollbar-hide pt-1 px-1">
                                 {/* Grand Total in TRY for this Person */}
                                 {(() => {
                                     if (viewMode === 'FLOW' || viewMode === 'TOTAL') {
@@ -546,6 +547,7 @@ export const PersonStream = () => {
                                 <p className="text-xs text-text-tertiary mt-1">Seçili filtreye uygun kayıt bulunamadı</p>
                             </div>
                         )}
+                    </div>
                     </div>
                 </section>
 
