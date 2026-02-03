@@ -41,7 +41,14 @@ export interface Contact {
     lastActorId?: string;
 }
 
-export type DebtStatus = 'PENDING' | 'ACTIVE' | 'PARTIALLY_PAID' | 'PAID' | 'REJECTED' | 'HIDDEN' | 'REJECTED_BY_RECEIVER' | 'AUTO_HIDDEN' | 'APPROVED' | 'ARCHIVED';
+// Simplified DebtStatus - 4 core states
+// PENDING: Waiting for initial action (rarely used now)
+// ACTIVE: Debt is ongoing
+// PAID: Fully settled
+// HIDDEN/AUTO_HIDDEN: User archived/hidden (soft states)
+// ARCHIVED: User manually archived
+// Note: REJECTED states kept for backwards compatibility with existing data
+export type DebtStatus = 'PENDING' | 'ACTIVE' | 'PAID' | 'REJECTED' | 'HIDDEN' | 'REJECTED_BY_RECEIVER' | 'AUTO_HIDDEN' | 'ARCHIVED';
 
 // Debt Type for Dual-Layer Architecture
 export type DebtType = 'ONE_TIME' | 'INSTALLMENT' | 'LEDGER';
@@ -70,10 +77,10 @@ export interface Debt {
     createdAt: Timestamp;
     createdBy: string;
     installments?: Installment[];
-    isDeleted?: boolean;
-    deletedAt?: Timestamp;
+    // No soft delete - use hard delete within grace period
+    // [REMOVED] isDeleted, deletedAt
     canBorrowerAddPayment?: boolean;
-    allow_counterparty_edit?: boolean;
+    // [REMOVED] allow_counterparty_edit - security hole, never used
     lockedPhoneNumber?: string; // Immutable E.164 phone number for recovery/display
 
     // New fields for Unilateral Logic
@@ -84,7 +91,7 @@ export interface Debt {
     type?: DebtType; // Default: 'ONE_TIME', 'LEDGER' for shared stream
 }
 
-export type PaymentLogType = 'INITIAL_CREATION' | 'PAYMENT' | 'NOTE_ADDED' | 'PAYMENT_DECLARATION';
+export type PaymentLogType = 'INITIAL_CREATION' | 'PAYMENT' | 'NOTE_ADDED' | 'PAYMENT_DECLARATION' | 'HARD_RESET';
 
 export interface PaymentLog {
     id: string;

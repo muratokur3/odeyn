@@ -13,10 +13,13 @@ interface SummaryCardProps {
     onToggle?: () => void;
     showToggle?: boolean;
     variant?: 'indigo' | 'emerald' | 'rose' | 'auto';
-    className?: string; // Additional classes for the container
+    className?: string;
+    isActive?: boolean; // New: For carousel focus
+    largeText?: boolean; // New: For profile view
+    onClick?: () => void;
 }
 
-export const SummaryCard: React.FC<SummaryCardProps> = ({
+export const SummaryCard: React.FC<SummaryCardProps & React.HTMLAttributes<HTMLDivElement>> = ({
     title,
     currency,
     net,
@@ -26,7 +29,11 @@ export const SummaryCard: React.FC<SummaryCardProps> = ({
     onToggle,
     showToggle,
     variant = 'auto',
-    className
+    className,
+    isActive = true,
+    largeText = false,
+    onClick,
+    ...rest
 }) => {
     const isNetPositive = net >= 0;
     
@@ -45,9 +52,17 @@ export const SummaryCard: React.FC<SummaryCardProps> = ({
                 : "bg-gradient-to-br from-rose-600 to-red-800 shadow-rose-900/20");
 
     return (
-        <div className={clsx("snap-center shrink-0 w-[85%] max-w-[260px]", className)}>
+        <div 
+            className={clsx(
+                "snap-center shrink-0 w-[85%] max-w-[320px] transition-all duration-300", 
+                !isActive && "opacity-40 grayscale-[20%]",
+                className
+            )}
+            onClick={onClick}
+            {...rest}
+        >
              <div className={clsx(
-                "rounded-2xl p-4 shadow-lg text-white transition-all relative overflow-hidden h-full flex flex-col justify-between min-h-[160px]",
+                "rounded-2xl p-5 shadow-xl text-white transition-all relative overflow-hidden h-full flex flex-col justify-between min-h-[180px]",
                 bgClass
             )}>
                 {/* Pattern */}
@@ -58,39 +73,47 @@ export const SummaryCard: React.FC<SummaryCardProps> = ({
                 <div className="relative z-10 flex flex-col h-full justify-between">
                     <div>
                         <div className="flex items-center justify-between mb-2 opacity-90">
-                            <div className="flex items-center gap-1.5">
-                                <Wallet size={14} />
-                                <span className="text-[11px] font-medium truncate max-w-[120px]">{title}</span>
+                            <div className="flex items-center gap-2">
+                                <Wallet size={largeText ? 18 : 14} />
+                                <span className={clsx(
+                                    "font-medium truncate max-w-[150px]",
+                                    largeText ? "text-sm" : "text-[11px]"
+                                )}>
+                                    {title}
+                                </span>
                             </div>
                             {showToggle && (
                                 <button
                                     onClick={(e) => { e.stopPropagation(); onToggle?.(); }}
-                                    className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded font-bold backdrop-blur-sm hover:bg-white/30 transition-colors active:scale-95"
+                                    className="text-[10px] bg-white/20 px-2 py-1 rounded-lg font-bold backdrop-blur-sm hover:bg-white/30 transition-colors active:scale-95"
                                 >
                                     {isToggled ? `Geri` : 'TRY'}
                                 </button>
                             )}
                             {!showToggle && (
-                                 <span className="text-[10px] bg-white/20 px-1.5 py-0.5 rounded font-bold backdrop-blur-sm uppercase">{currency}</span>
+                                 <span className="text-[10px] bg-white/20 px-2 py-1 rounded-lg font-bold backdrop-blur-sm uppercase">{currency}</span>
                             )}
                         </div>
 
-                        <div className="text-2xl font-bold tracking-tight tabular-nums truncate">
+                        <div className={clsx(
+                            "font-bold tracking-tight tabular-nums truncate",
+                            largeText ? "text-3xl mt-1" : "text-2xl"
+                        )}>
                             {formatCurrency(net, isToggled ? 'TRY' : currency)}
                         </div>
                     </div>
 
-                    <div className="flex gap-3 pt-3 mt-4 border-t border-white/10">
+                    <div className="flex gap-4 pt-4 mt-5 border-t border-white/10 sm:flex hidden">
                         <div className="flex-1">
-                            <p className="text-[10px] opacity-70 mb-0.5 font-medium">Verilen</p>
-                            <p className="font-bold text-sm text-emerald-100 tabular-nums truncate">
+                            <p className="text-[10px] opacity-70 mb-0.5 font-medium uppercase tracking-wider">Verilen</p>
+                            <p className={clsx("font-bold tabular-nums truncate", largeText ? "text-lg" : "text-sm")}>
                                 +{formatCurrency(receivables, isToggled ? 'TRY' : currency)}
                             </p>
                         </div>
                         <div className="w-px bg-white/10"></div>
                         <div className="flex-1">
-                            <p className="text-[10px] opacity-70 mb-0.5 font-medium">Alınan</p>
-                            <p className="font-bold text-sm text-rose-100 tabular-nums truncate">
+                            <p className="text-[10px] opacity-70 mb-0.5 font-medium uppercase tracking-wider">Alınan</p>
+                            <p className={clsx("font-bold tabular-nums truncate", largeText ? "text-lg" : "text-sm")}>
                                 -{formatCurrency(payables, isToggled ? 'TRY' : currency)}
                             </p>
                         </div>

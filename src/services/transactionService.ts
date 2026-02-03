@@ -213,21 +213,33 @@ export const deleteLedgerTransaction = async (
     ledgerId: string,
     transactionId: string
 ): Promise<void> => {
-    const txDoc = doc(db, 'debts', ledgerId, 'transactions', transactionId);
+    try {
+        const txDoc = doc(db, 'debts', ledgerId, 'transactions', transactionId);
 
-    // Check 1-Hour Rule
-    const txSnap = await getDoc(txDoc);
-    if (!txSnap.exists()) return;
+        // Check 1-Hour Rule
+        const txSnap = await getDoc(txDoc);
+        if (!txSnap.exists()) {
+            throw new Error("İşlem bulunamadı.");
+        }
 
-    const data = txSnap.data();
-    if (!isTransactionEditable(data.createdAt)) {
-         throw new Error("Bu kayıt silinemez (1 saat kuralı). Lütfen ters işlem yapın.");
+        const data = txSnap.data();
+        if (!isTransactionEditable(data.createdAt)) {
+            throw new Error("Bu kayıt silinemez (1 saat kuralı). Lütfen ters işlem yapın.");
+        }
+
+        await deleteDoc(txDoc);
+        
+        // Recalculate balance (non-blocking)
+        try {
+            await updateLedgerBalance(ledgerId);
+        } catch (balanceError) {
+            console.warn("Balance update failed after transaction deletion:", balanceError);
+            // Transaction is deleted, balance will be recalculated on next operation
+        }
+    } catch (error) {
+        console.error("Error deleting ledger transaction:", error);
+        throw error;
     }
-
-    await deleteDoc(txDoc);
-    
-    // Recalculate balance
-    await updateLedgerBalance(ledgerId);
 };
 
 /**

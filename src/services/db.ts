@@ -213,9 +213,8 @@ export const createDebt = async (
         } else if (amount > remainingAmount && remainingAmount > 0) {
             // Partial payment at start
             // Status remains ACTIVE or AUTO_HIDDEN unless defined otherwise.
-            // But if we want to track PARTIALLY_PAID distinct from ACTIVE?
-            // Usually PARTIALLY_PAID is just a UI state derived from amounts, but if status field is used:
-            initialStatus = 'PARTIALLY_PAID';
+            // Default initialStatus is 'ACTIVE' for all debts
+            initialStatus = 'ACTIVE';
             // WAIT: If it is AUTO_HIDDEN, it should stay AUTO_HIDDEN even if partially paid?
             // The requirement says: "If User A is in muted list -> Create with { status: 'AUTO_HIDDEN', isMuted: true }"
             // Logic: If fully paid, it's history. If debt exists, it's hidden.
@@ -367,7 +366,7 @@ export const updateDebtHardReset = async (
             // 4. Recalculate Logic
             const newOriginal = updates.originalAmount ?? currentData.originalAmount;
             const newRemaining = newOriginal - newInitialPayment;
-            let newStatus: DebtStatus = newRemaining <= 0 ? 'PAID' : (newInitialPayment > 0 ? 'PARTIALLY_PAID' : 'ACTIVE');
+            let newStatus: DebtStatus = newRemaining <= 0 ? 'PAID' : 'ACTIVE';
 
             if (currentData.status === 'AUTO_HIDDEN' && newStatus !== 'PAID') {
                 newStatus = 'AUTO_HIDDEN';
@@ -461,7 +460,7 @@ export const makePayment = async (debtId: string, amount: number, performedBy: s
         if (newRemaining === 0) {
             newStatus = 'PAID';
         } else {
-            newStatus = 'PARTIALLY_PAID';
+            newStatus = 'ACTIVE'; // Partially paid, still active
         }
 
         // --- Installment Logic ---
@@ -1008,7 +1007,7 @@ export const rejectPayment = async (debtId: string, paymentId: string, currentUs
                 // Fix status if it was PAID
                 if (debt.status === 'PAID') {
                     newStatus = 'ACTIVE';
-                } else if (debt.status === 'PARTIALLY_PAID') {
+                } else if (debt.status === 'ACTIVE') { // Active debts
                     // Check if newRemaining >= originalAmount (approximately)
                     if (newRemaining >= (debt.originalAmount || 0)) {
                         newStatus = 'ACTIVE'; // Back to full debt?
@@ -1061,33 +1060,48 @@ export const deleteDebt = async (debtId: string, currentUserId: string) => {
         const data = debtDoc.data() as Debt;
 
         // 1. Check Ownership
-        if (data.createdBy !== currentUserId) {
-            throw new Error("Only the creator can delete this debt.");
+        // For LEDGER type: both participants can delete
+        // For ONE_TIME/INSTALLMENT: only creator can delete
+        const isLedger = data.type === 'LEDGER';
+        const isParticipant = data.participants?.includes(currentUserId);
+        const isCreator = data.createdBy === currentUserId;
+
+        if (isLedger) {
+            if (!isParticipant) {
+                throw new Error("Bu cari hesabı silemezsiniz.");
+            }
+        } else {
+            if (!isCreator) {
+                throw new Error("Sadece oluşturan kişi bu borcu silebilir.");
+            }
         }
 
-        // 2. Check 1-Hour Rule (If not legacy PENDING)
-        // If status is PENDING/REJECTED (legacy), we might allow deletion anyway?
-        // But for new model:
+        // 2. Check 1-Hour Rule
         if (!isTransactionEditable(data.createdAt)) {
             throw new Error("Bu kayıt silinemez (1 saat kuralı). Lütfen ters işlem yapın.");
         }
 
-        // Activity Feed
+        // Activity Feed (fire-and-forget - don't block deletion on this)
         const otherId = data.lenderId === currentUserId ? data.borrowerId : data.lenderId;
-        updateContactActivity(currentUserId, otherId, 'Borç silindi (Geri alındı)');
+        updateContactActivity(currentUserId, otherId, 'Borç silindi (Geri alındı)')
+            .catch(err => console.warn("Activity feed update failed (non-critical):", err));
 
         // Hard Delete
         await deleteDoc(debtRef);
-        // Also delete subcollection logs? Firestore does not auto-delete subcollections.
-        // But for this app, if main doc is gone, logs are inaccessible usually.
-        // Ideally we should delete them, but requires recursive delete.
-        // For 1-hour items, logs are few.
-        // We can do best effort.
-        const logsRef = collection(db, 'debts', debtId, 'logs');
-        const logsSnap = await getDocs(logsRef);
-        const batch = writeBatch(db);
-        logsSnap.docs.forEach(d => batch.delete(d.ref));
-        await batch.commit();
+        
+        // Also delete subcollection logs (non-blocking)
+        try {
+            const logsRef = collection(db, 'debts', debtId, 'logs');
+            const logsSnap = await getDocs(logsRef);
+            if (!logsSnap.empty) {
+                const batch = writeBatch(db);
+                logsSnap.docs.forEach(d => batch.delete(d.ref));
+                await batch.commit();
+            }
+        } catch (logError) {
+            console.warn("Log deletion failed during debt deletion:", logError);
+            // Logs are orphaned but main debt is deleted
+        }
 
     } catch (error) {
         console.error("Error deleting debt:", error);

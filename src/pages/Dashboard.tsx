@@ -106,16 +106,16 @@ export const Dashboard = () => {
             let shouldCountReceivable = false;
             let shouldCountPayable = false;
 
-            // RECEIVABLES (I am Lender): Include ACTIVE, PARTIALLY_PAID, PENDING, REJECTED_BY_RECEIVER, AUTO_HIDDEN
+            // RECEIVABLES (I am Lender): Include ACTIVE, PENDING, REJECTED_BY_RECEIVER, AUTO_HIDDEN
             if (isLender) {
-                if (d.status === 'ACTIVE' || d.status === 'PARTIALLY_PAID' || d.status === 'PENDING' || d.status === 'REJECTED_BY_RECEIVER' || d.status === 'AUTO_HIDDEN' || d.status === 'APPROVED') {
+                if (d.status === 'ACTIVE' || d.status === 'PENDING' || d.status === 'REJECTED_BY_RECEIVER' || d.status === 'AUTO_HIDDEN') {
                     shouldCountReceivable = true;
                 }
             }
-            // PAYABLES (I am Borrower): Include ACTIVE, PARTIALLY_PAID, APPROVED. 
+            // PAYABLES (I am Borrower): Include ACTIVE, PENDING. 
             // EXPLICITLY EXCLUDE: REJECTED_BY_RECEIVER, AUTO_HIDDEN
             else {
-                if (d.status === 'ACTIVE' || d.status === 'PARTIALLY_PAID' || d.status === 'PENDING' || d.status === 'APPROVED') {
+                if (d.status === 'ACTIVE' || d.status === 'PENDING') {
                     shouldCountPayable = true;
                 }
             }

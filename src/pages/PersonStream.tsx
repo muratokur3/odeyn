@@ -1,165 +1,143 @@
 /**
- * PersonStream - Profile Hub (Ana Merkez)
- * Summary of Stream (Chips) + List of Special Debts
+ * PersonStream - Modern Person Profile Page
+ * Clean, tab-based UI with BalanceCard + Debts/Ledger/History tabs
  */
 
-import { useState, useEffect, useMemo } from 'react';
-import { useParams, useNavigate, useLocation } from 'react-router-dom';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
-import { useDebts } from '../hooks/useDebts';
+import { usePersonDebts } from '../hooks/usePersonDebts';
+import { usePersonBalance } from '../hooks/usePersonBalance';
 import { useContactName } from '../hooks/useContactName';
-import { ArrowLeft, FolderOpen, MoreVertical, Edit2, UserPlus, Volume2, VolumeX, Ban, Trash2, CheckCircle, EyeOff } from 'lucide-react';
-import { searchUserByPhone, getContacts, markContactAsRead, createDebt, addContact, updateContact, deleteContact, muteUser, unmuteUser, permanentlyDeleteDebt, isTransactionEditable } from '../services/db';
-import { isUserBlocked, blockUser, unblockUser } from '../services/blockService';
+import { useLedger } from '../hooks/useLedger';
+import { ArrowLeft, MoreVertical, Edit2, UserPlus, Volume2, VolumeX, Ban, Trash2 } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
-import { DebtCard } from '../components/DebtCard';
-import { CreateDebtModal } from '../components/CreateDebtModal';
+import clsx from 'clsx';
+import { BalanceCard } from '../components/BalanceCard';
+import { TabBar, type Tab } from '../components/TabBar';
 import { SummaryCard } from '../components/SummaryCard';
-import { PhoneInput } from '../components/PhoneInput';
-import { fetchRates, convertToTRY, type CurrencyRates } from '../services/currency';
+import { TransactionList } from '../components/TransactionList';
 import { calculateStreamBalance, calculateDebtsBalance, mergeBalances, type DetailedBalances } from '../utils/balanceAggregator';
-import { cleanPhone as cleanPhoneNumber, formatPhoneForDisplay as formatPhoneNumber } from '../utils/phoneUtils';
+import { fetchRates, convertToTRY, type CurrencyRates } from '../services/currency';
+import { DebtsTab } from '../components/DebtsTab';
+import { DateFilterDropdown, type QuickFilterType } from '../components/DateFilterDropdown';
+import { CreateDebtModal } from '../components/CreateDebtModal';
+import { useModal } from '../context/ModalContext';
+import { getContacts, markContactAsRead, addContact, updateContact, deleteContact, muteUser, unmuteUser } from '../services/db';
+import { isUserBlocked, blockUser, unblockUser } from '../services/blockService';
+import { cleanPhone, formatPhoneForDisplay } from '../utils/phoneUtils';
 import { doc, getDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
-import { useModal } from '../context/ModalContext';
 import type { User, Contact, Debt } from '../types';
-import { useLedger } from '../hooks/useLedger';
-import { AdaptiveActionRow } from '../components/AdaptiveActionRow';
-import { type SwipeAction } from '../components/SwipeableItem';
-import clsx from 'clsx';
 
-// View Mode Type
-type ViewMode = 'FLOW' | 'SPECIAL' | 'TOTAL';
+type TabMode = 'TOTAL' | 'LEDGER' | 'INSTALLMENT';
 
 export const PersonStream = () => {
     const { id } = useParams<{ id: string }>();
     const { user } = useAuth();
     const navigate = useNavigate();
-    const location = useLocation();
-    const { allDebts: debts } = useDebts();
     const { resolveName } = useContactName();
     const { showAlert, showConfirm } = useModal();
-    
+
     // State
-    const [viewMode, setViewMode] = useState<ViewMode>(() => {
-        return (localStorage.getItem(`streamViewMode_${id}`) as ViewMode) || 'FLOW';
+    const [tabMode, setTabMode] = useState<TabMode>(() => {
+        return (localStorage.getItem(`tabMode_${id}`) as TabMode) || 'TOTAL';
     });
-
-    useEffect(() => {
-        if (id) {
-            localStorage.setItem(`streamViewMode_${id}`, viewMode);
-        }
-    }, [viewMode, id]);
-
+    const carouselRef = useRef<HTMLDivElement>(null);
+    const isScrollingRef = useRef(false);
     const [targetUserObject, setTargetUserObject] = useState<User | Contact | null>(null);
     const [contactId, setContactId] = useState<string | null>(null);
+    const [resolvedUid, setResolvedUid] = useState<string | null>(null);
     const [isBlocked, setIsBlocked] = useState(false);
     const [isMuted, setIsMuted] = useState(false);
+    const [showMenu, setShowMenu] = useState(false);
     const [showCreateDebtModal, setShowCreateDebtModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
-    const [showMenu, setShowMenu] = useState(false);
     const [editName, setEditName] = useState('');
     const [editPhone, setEditPhone] = useState('');
     const [submittingEdit, setSubmittingEdit] = useState(false);
-    const [resolvedUid, setResolvedUid] = useState<string | null>(null);
-    const [lastReadTimestamp, setLastReadTimestamp] = useState<number | null>(null);
-    const [openRowId, setOpenRowId] = useState<string | null>(null);
-
-    const [editingDebt, setEditingDebt] = useState<Debt | null>(null);
-    const [rates, setRates] = useState<CurrencyRates | null>(null);
-    const [toggledCards, setToggledCards] = useState<Record<string, boolean>>({});
+    const isFirstLoadRef = useRef(true);
+    const lastUpdateSourceRef = useRef<'SCROLL' | 'CLICK' | null>(null);
+    const tabModeRef = useRef(tabMode);
 
     useEffect(() => {
-        fetchRates().then(setRates);
-    }, []);
+        tabModeRef.current = tabMode;
+    }, [tabMode]);
 
-    const toggleCardCurrency = (currency: string) => {
-        setToggledCards(prev => ({ ...prev, [currency]: !prev[currency] }));
-    };
+    // Ledger Filter State
+    const [ledgerDateFilter, setLedgerDateFilter] = useState<QuickFilterType>('all');
+    const [ledgerCustomDateRange, setLedgerCustomDateRange] = useState<{ start?: Date; end?: Date }>({});
 
-    // Auto-Reset: Click anywhere else closes row
     useEffect(() => {
-        const handleClickOutside = () => {
-            if (openRowId) setOpenRowId(null);
-        };
-        window.addEventListener('click', handleClickOutside);
-        return () => window.removeEventListener('click', handleClickOutside);
-    }, [openRowId]);
+        if (id) {
+            localStorage.setItem(`tabMode_${id}`, tabMode);
+        }
+    }, [tabMode, id]);
 
-    // Get target UID
-    // Get target UID
+    // Get target UID helper
     const getTargetUid = useMemo(() => {
         return () => {
-             if (id && id.length > 20) return id;
-             if (targetUserObject) {
-                 if ('uid' in targetUserObject) return targetUserObject.uid;
-                 if ('linkedUserId' in targetUserObject && targetUserObject.linkedUserId) return targetUserObject.linkedUserId;
-             }
-             return null;
-        }
+            if (id && id.length > 20) return id;
+            if (targetUserObject) {
+                if ('uid' in targetUserObject) return targetUserObject.uid;
+                if ('linkedUserId' in targetUserObject && targetUserObject.linkedUserId) {
+                    return targetUserObject.linkedUserId;
+                }
+            }
+            return null;
+        };
     }, [id, targetUserObject]);
 
-    // Fetch user/contact info
+    // Fetch target user/contact
     useEffect(() => {
-        if (!user || !id) return;
-
         const fetchTarget = async () => {
-            const cleanId = cleanPhoneNumber(id);
-            
-            if (id.length > 20) {
-                const userDoc = await getDoc(doc(db, 'users', id));
-                if (userDoc.exists()) {
-                    setTargetUserObject({ uid: userDoc.id, ...userDoc.data() } as User);
-                    setResolvedUid(id);
+            if (!user || !id) return;
+
+            try {
+                // Try to find contact first
+                const contactsSnapshot = await getContacts(user.uid);
+                const contact = contactsSnapshot.find(c => {
+                    const contactPhone = cleanPhone(c.phoneNumber || '');
+                    const idPhone = cleanPhone(id);
+                    return c.linkedUserId === id || contactPhone === idPhone;
+                });
+
+                if (contact) {
+                    setTargetUserObject(contact);
+                    setContactId(contact.id);
+                    if (contact.linkedUserId) {
+                        setResolvedUid(contact.linkedUserId);
+                        const userDoc = await getDoc(doc(db, 'users', contact.linkedUserId));
+                        if (userDoc.exists()) {
+                            const userData = userDoc.data() as User;
+                            const blocked = await isUserBlocked(user.uid, contact.linkedUserId);
+                            setIsBlocked(blocked);
+                            setIsMuted(userData.mutedCreators?.includes(user.uid) || false);
+                        }
+                    }
+                } else if (id.length > 20) {
+                    // Direct UID
+                    const userDoc = await getDoc(doc(db, 'users', id));
+                    if (userDoc.exists()) {
+                        setTargetUserObject({ uid: id, ...userDoc.data() } as User);
+                        setResolvedUid(id);
+                        const blocked = await isUserBlocked(user.uid, id);
+                        setIsBlocked(blocked);
+                        const uData = userDoc.data() as User;
+                        setIsMuted(uData.mutedCreators?.includes(user.uid) || false);
+                    }
                 }
-            } else {
-                const foundUser = await searchUserByPhone(cleanId);
-                if (foundUser) {
-                    setTargetUserObject(foundUser);
-                    setResolvedUid(foundUser.uid);
-                }
+            } catch (error) {
+                console.error('Error fetching target:', error);
             }
 
-            const contacts = await getContacts(user.uid);
-            const contact = contacts.find(c => 
-                cleanPhoneNumber(c.phoneNumber) === cleanId || c.id === id
-            );
-            if (contact) {
-                setContactId(contact.id);
-                setEditName(contact.name);
-                setEditPhone(contact.phoneNumber);
-                setLastReadTimestamp(contact.lastReadAt?.toMillis() || null);
-                if (!targetUserObject) setTargetUserObject(contact);
-            } else {
-                // If not in contacts, pre-fill with defaults
-                if (!contactId) {
-                    const { displayName } = resolveName(id, '');
-                    setEditName(displayName);
-                    setEditPhone(id.length <= 15 ? cleanId : '');
-                }
-            }
-
-            const targetUid = getTargetUid() || id;
-            if (targetUid) {
-                const blocked = await isUserBlocked(user.uid, targetUid);
-                setIsBlocked(blocked);
-
-                if (targetUid.length > 20) {
-                     const userRef = doc(db, 'users', user.uid);
-                     const userSnap = await getDoc(userRef);
-                     if (userSnap.exists()) {
-                         const uData = userSnap.data() as User;
-                         setIsMuted(uData.mutedCreators?.includes(targetUid) || false);
-                     }
-                }
-            }
+            markContactAsRead(user.uid, id);
         };
 
         fetchTarget();
-        markContactAsRead(user.uid, id);
-    }, [user, id, contactId, resolveName, getTargetUid, targetUserObject]);
+    }, [user, id]);
 
-    // Listen for Global FAB Trigger
+    // Listen for FAB trigger
     useEffect(() => {
         const handleFabTrigger = () => {
             if (isBlocked) return;
@@ -171,9 +149,8 @@ export const PersonStream = () => {
 
     // Person info
     const personInfo = useMemo(() => {
-        const locationState = location.state as { name?: string } | undefined;
-        let name = locationState?.name || '';
-        let phone = id && id.length > 20 ? '' : cleanPhoneNumber(id || '');
+        let name = '';
+        let phone = id && id.length > 20 ? '' : cleanPhone(id || '');
 
         if (targetUserObject) {
             if ('displayName' in targetUserObject) name = targetUserObject.displayName || name;
@@ -184,79 +161,196 @@ export const PersonStream = () => {
 
         const { displayName } = resolveName(id || '', name);
         return { name: displayName, phone };
-    }, [id, targetUserObject, resolveName, location.state]);
+    }, [id, targetUserObject, resolveName]);
 
-    // Ledger hook (for Stream Summary)
-    const otherPartyId = getTargetUid() || id;
-    const { transactions } = useLedger(
+    // Custom hooks for data
+    const { allDebts, activeDebts, historyDebts, activeCount } = usePersonDebts(id || '', resolvedUid);
+    const balance = usePersonBalance(id || '', personInfo.name, allDebts);
+
+    // useLedger for LEDGER tab
+    const { transactions, ledgerId } = useLedger(
         user?.uid,
         user?.displayName,
-        otherPartyId || undefined,
+        id || undefined,
         personInfo.name
     );
 
-    // Calculate Stream Balance (Flow)
+    const [rates, setRates] = useState<CurrencyRates | null>(null);
+    const [toggledCards, setToggledCards] = useState<Record<string, boolean>>({});
+
+    useEffect(() => {
+        fetchRates().then(setRates);
+    }, []);
+
+    // Helper: Infer debt type for old debts without type field
+    const getDebtType = (debt: Debt): string => {
+        // If type exists, use it
+        if (debt.type) return debt.type;
+        
+        // Fallback: infer from other fields
+        if (debt.dueDate || (debt.installments && debt.installments.length > 0)) {
+            return 'INSTALLMENT';
+        }
+        return 'ONE_TIME';
+    };
+
+    // Separate by debt type
+    const normalDebts = useMemo(() => {
+        return allDebts.filter(d => getDebtType(d) === 'ONE_TIME');
+    }, [allDebts]);
+    
+    const installmentDebts = useMemo(() => allDebts.filter(d => getDebtType(d) === 'INSTALLMENT'), [allDebts]);
+
+    // Calculate balances
     const streamBalance = useMemo(() => {
         if (!user) return new Map() as DetailedBalances;
         return calculateStreamBalance(transactions, user.uid);
     }, [transactions, user]);
 
-    // Filter special debts (non-LEDGER)
-    const personDebts = useMemo(() => {
-        if (!debts || !id || !user) return [];
-        const cleanId = cleanPhoneNumber(id);
-
-        return debts.filter(d => {
-            if (d.type === 'LEDGER') return false;
-
-            const isLender = d.lenderId === user.uid;
-            const otherId = isLender ? d.borrowerId : d.lenderId;
-            const cleanOtherId = cleanPhoneNumber(otherId);
-
-            const isMatch = otherId === id ||
-                cleanOtherId === cleanId ||
-                d.participants.includes(id) ||
-                (resolvedUid && otherId === resolvedUid);
-
-            if (!isMatch) return false;
-
-            const amICreator = d.createdBy === user.uid;
-            if (amICreator) return true;
-            if (d.status === 'REJECTED_BY_RECEIVER' || d.status === 'AUTO_HIDDEN') return false;
-            return true;
-        }).sort((a, b) => {
-            // Sort by creation desc
-            const timeA = a.createdAt?.toMillis?.() || 0;
-            const timeB = b.createdAt?.toMillis?.() || 0;
-            return timeB - timeA;
-        });
-    }, [debts, id, user, resolvedUid]);
-
-    // Calculate Special Debts Balance
-    const debtsBalance = useMemo(() => {
+    const normalDebtsBalance = useMemo(() => {
         if (!user) return new Map() as DetailedBalances;
-        return calculateDebtsBalance(personDebts, user.uid);
-    }, [personDebts, user]);
+        return calculateDebtsBalance(normalDebts, user.uid);
+    }, [normalDebts, user]);
 
-    // Calculate Total Balance
+    const installmentBalance = useMemo(() => {
+        if (!user) return new Map() as DetailedBalances;
+        return calculateDebtsBalance(installmentDebts, user.uid);
+    }, [installmentDebts, user]);
+
     const totalBalance = useMemo(() => {
-        return mergeBalances(streamBalance, debtsBalance);
-    }, [streamBalance, debtsBalance]);
+        const merged1 = mergeBalances(streamBalance, normalDebtsBalance);
+        return mergeBalances(merged1, installmentBalance);
+    }, [streamBalance, normalDebtsBalance, installmentBalance]);
 
-    // Determine Display Balance based on View Mode
-    const displayBalance = useMemo(() => {
-        switch (viewMode) {
-            case 'SPECIAL':
-                return debtsBalance;
-            case 'TOTAL':
-                return totalBalance;
-            case 'FLOW':
-            default:
-                return streamBalance;
+    // Ledger Filtering Logic
+    const filteredTransactions = useMemo(() => {
+        let result = [...transactions];
+
+        // Date Filter
+        if (ledgerDateFilter !== 'all' || ledgerCustomDateRange.start) {
+            const now = new Date();
+            let startDate: Date | null = null;
+
+            if (ledgerCustomDateRange.start && ledgerCustomDateRange.end) {
+                result = result.filter(t => {
+                    const d = t.createdAt?.toDate ? t.createdAt.toDate() : new Date();
+                    return d >= ledgerCustomDateRange.start! && d <= ledgerCustomDateRange.end!;
+                });
+            } else {
+                switch (ledgerDateFilter) {
+                    case 'today':
+                        startDate = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+                        break;
+                    case 'week':
+                        startDate = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
+                        break;
+                    case 'month':
+                        startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+                        break;
+                    case 'quarter':
+                        startDate = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+                        break;
+                }
+                if (startDate) {
+                    result = result.filter(t => {
+                        const d = t.createdAt?.toDate ? t.createdAt.toDate() : new Date();
+                        return d >= startDate!;
+                    });
+                }
+            }
         }
-    }, [viewMode, streamBalance, debtsBalance, totalBalance]);
 
-    // Actions
+        return result;
+    }, [transactions, ledgerDateFilter, ledgerCustomDateRange]);
+
+    const handleLedgerDateChange = (filter: QuickFilterType, customStart?: Date, customEnd?: Date) => {
+        setLedgerDateFilter(filter);
+        if (customStart && customEnd) {
+            setLedgerCustomDateRange({ start: customStart, end: customEnd });
+        } else {
+            setLedgerCustomDateRange({});
+        }
+    };
+
+    // Carousel Scroll Sync using IntersectionObserver
+    useEffect(() => {
+        const el = carouselRef.current;
+        if (!el) return;
+
+        const observer = new IntersectionObserver((entries) => {
+            // When user IS scrolling manually, we want to update the tabMode
+            if (isScrollingRef.current) return;
+
+            // Find the entry that has the largest intersection ratio (most centered)
+            const mostVisible = entries.reduce((prev, curr) => 
+                (curr.intersectionRatio > prev.intersectionRatio) ? curr : prev
+            );
+
+            if (mostVisible.isIntersecting && mostVisible.intersectionRatio > 0.5) {
+                const mode = mostVisible.target.getAttribute('data-mode') as TabMode;
+                if (mode && mode !== tabModeRef.current) {
+                    lastUpdateSourceRef.current = 'SCROLL';
+                    setTabMode(mode);
+                }
+            }
+        }, {
+            root: el,
+            threshold: [0, 0.25, 0.5, 0.75, 1.0],
+            rootMargin: '0px -25% 0px -25%' // Focus on center 50% of the container
+        });
+
+        const cards = el.querySelectorAll('[data-mode]');
+        cards.forEach(card => observer.observe(card));
+
+        return () => observer.disconnect();
+    }, []); // Stable observer
+
+    // Scroll to active tab
+    useEffect(() => {
+        const el = carouselRef.current;
+        if (!el) return;
+
+        // ONLY scrollTo if it's the first load OR if it was a CLICK change
+        // Manual scrolls (SCROLL) already have the element in view.
+        const shouldScroll = isFirstLoadRef.current || lastUpdateSourceRef.current === 'CLICK';
+        lastUpdateSourceRef.current = null; // Reset for next change
+
+        if (!shouldScroll) return;
+
+        const modes: TabMode[] = ['TOTAL', 'LEDGER', 'INSTALLMENT'];
+        const index = modes.indexOf(tabMode);
+        if (index === -1) return;
+
+        const cards = el.querySelectorAll('[data-mode]');
+        const targetCard = cards[index] as HTMLElement;
+
+        if (targetCard) {
+            const targetScroll = targetCard.offsetLeft - (el.offsetWidth - targetCard.offsetWidth) / 2;
+            
+            isScrollingRef.current = true;
+            el.scrollTo({ 
+                left: targetScroll, 
+                behavior: isFirstLoadRef.current ? 'auto' : 'smooth' 
+            });
+            
+            const timer = setTimeout(() => { 
+                isScrollingRef.current = false;
+                isFirstLoadRef.current = false;
+            }, 600);
+            return () => clearTimeout(timer);
+        }
+    }, [tabMode]);
+
+
+
+    // Tab configuration
+    const tabs: Tab[] = [
+        { id: 'TOTAL', label: 'Özet' },
+        { id: 'LEDGER', label: 'Borçlar' },
+        { id: 'INSTALLMENT', label: 'Vadeli' }
+    ];
+
+    // Handlers
     const handleBlockToggle = async () => {
         if (!user) return;
         const targetUid = getTargetUid();
@@ -284,8 +378,8 @@ export const PersonStream = () => {
         if (!user) return;
         const targetUid = getTargetUid();
         if (!targetUid || targetUid.length <= 15) {
-             showAlert("Uyarı", "Bu kişi sisteme kayıtlı değil.", "warning");
-             return;
+            showAlert("Uyarı", "Bu kişi sisteme kayıtlı değil.", "warning");
+            return;
         }
 
         if (isMuted) {
@@ -327,54 +421,31 @@ export const PersonStream = () => {
         }
     };
 
-    // DEBT ACTIONS (Swipe)
-    const handleDebtDelete = async (debtId: string) => {
-        if (!user) return;
-        const confirmed = await showConfirm(
-            "Dosyayı Sil",
-            "Bu dosyayı kalıcı olarak silmek istediğinize emin misiniz? Bu işlem geri alınamaz.",
-            "warning"
+    if (!user) {
+        return (
+            <div className="min-h-screen flex items-center justify-center">
+                Yükleniyor...
+            </div>
         );
-        if (confirmed) {
-             try {
-                 await permanentlyDeleteDebt(debtId, user.uid);
-                 showAlert("Silindi", "Dosya silindi.", "success");
-             } catch {
-                 showAlert("Hata", "Silme başarısız.", "error");
-             }
-        }
-    };
-
-    const handleDebtEdit = (debt: Debt) => {
-        setEditingDebt(debt);
-    };
-
-    const handleDebtComplete = async () => {
-        // "Tamamla" -> Mark as Paid / Forgive?
-        showAlert("Bilgi", "Borcu tamamlama (silme/hibe) henüz swipe ile aktif değil. Detaydan yapınız.", "info");
-    };
-
-    const handleDebtHide = async () => {
-        // Hide/Archive is disabled per "1 Hour Rule" / "Exist or Don't Exist" policy.
-        showAlert("Bilgi", "Arşivleme özelliği '1 Saat Kuralı' gereği kaldırılmıştır.", "info");
-    };
-
-
-    if (!user) return <div className="min-h-screen flex items-center justify-center">Yükleniyor...</div>;
+    }
 
     return (
         <div className="bg-background min-h-[calc(100vh-64px)] pb-24">
             {/* Header */}
-            <header className="sticky top-0 z-30 bg-surface/95 backdrop-blur-md border-b border-border px-4 py-3 flex items-center gap-3 shrink-0">
+            <header className="sticky top-0 z-30 bg-surface/95 backdrop-blur-md border-b border-border px-4 py-3 flex items-center gap-3">
                 <button onClick={() => navigate(-1)} className="p-2 -ml-2 text-text-secondary hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full">
                     <ArrowLeft size={22} />
                 </button>
 
-                <Avatar name={personInfo.name} size="md" photoURL={targetUserObject && 'photoURL' in targetUserObject ? targetUserObject.photoURL : undefined} />
+                <Avatar 
+                    name={personInfo.name} 
+                    size="md" 
+                    photoURL={targetUserObject && 'photoURL' in targetUserObject ? targetUserObject.photoURL : undefined} 
+                />
 
-                <div className="flex-1 min-w-0">
+                <div className="flex-1 min-w-0 text-center">
                     <h1 className="font-semibold text-text-primary truncate">{personInfo.name}</h1>
-                    <p className="text-xs text-text-secondary">{formatPhoneNumber(personInfo.phone)}</p>
+                    <p className="text-xs text-text-secondary">{formatPhoneForDisplay(personInfo.phone)}</p>
                 </div>
 
                 <div className="relative">
@@ -382,16 +453,16 @@ export const PersonStream = () => {
                         <MoreVertical size={20} />
                     </button>
                     {showMenu && (
-                         <>
+                        <>
                             <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)}></div>
-                            <div className="absolute right-0 top-full mt-2 w-48 bg-surface rounded-xl shadow-xl border border-border z-20 overflow-hidden animate-in fade-in zoom-in-95 duration-200">
+                            <div className="absolute right-0 top-full mt-2 w-48 bg-surface rounded-xl shadow-xl border border-border z-20 overflow-hidden">
                                 <button
                                     onClick={() => { setShowEditModal(true); setShowMenu(false); }}
                                     className="w-full text-left px-4 py-3 text-sm font-medium text-text-primary hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2"
                                 >
                                     {contactId ? <><Edit2 size={16} /> Düzenle</> : <><UserPlus size={16} /> Rehbere Ekle</>}
                                 </button>
-                                <div className="h-px bg-border my-0"></div>
+                                <div className="h-px bg-border"></div>
                                 <button
                                     onClick={() => { handleMuteToggle(); setShowMenu(false); }}
                                     className="w-full text-left px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 flex items-center gap-2"
@@ -414,7 +485,7 @@ export const PersonStream = () => {
                                     </button>
                                 )}
                             </div>
-                         </>
+                        </>
                     )}
                 </div>
             </header>
@@ -425,258 +496,188 @@ export const PersonStream = () => {
                 </div>
             )}
 
-            <main className="p-4 space-y-6">
-                {/* A. Akış Özeti (Stream Summary) */}
-                <section className="relative group/stream">
-                    <div className="flex justify-between items-center mb-3 px-1">
-                        <div className="flex items-center gap-3">
-                            <h2 className="text-sm font-semibold text-text-secondary uppercase tracking-wider">Akış Özeti</h2>
-                            
-                            {/* Tri-State Toggle */}
-                            <div className="bg-surface border border-border p-1 rounded-lg flex shadow-sm">
-                                <button
-                                    onClick={() => setViewMode('FLOW')}
-                                    className={clsx(
-                                        "px-3 py-1 text-[11px] font-bold rounded-md transition-all",
-                                        viewMode === 'FLOW' 
-                                            ? "bg-blue-100 text-blue-700 dark:bg-blue-900/40 dark:text-blue-300 shadow-sm" 
-                                            : "text-text-secondary hover:text-text-primary"
-                                    )}
-                                >
-                                    Akış
-                                </button>
-                                <div className="w-px bg-border my-1 mx-0.5"></div>
-                                <button
-                                    onClick={() => setViewMode('SPECIAL')}
-                                    className={clsx(
-                                        "px-3 py-1 text-[11px] font-bold rounded-md transition-all",
-                                        viewMode === 'SPECIAL' 
-                                            ? "bg-purple-100 text-purple-700 dark:bg-purple-900/40 dark:text-purple-300 shadow-sm" 
-                                            : "text-text-secondary hover:text-text-primary"
-                                    )}
-                                >
-                                    Özel
-                                </button>
-                                <div className="w-px bg-border my-1 mx-0.5"></div>
-                                <button
-                                    onClick={() => setViewMode('TOTAL')}
-                                    className={clsx(
-                                        "px-3 py-1 text-[11px] font-bold rounded-md transition-all",
-                                        viewMode === 'TOTAL' 
-                                            ? "bg-gray-100 text-gray-800 dark:bg-gray-800 dark:text-gray-200 shadow-sm" 
-                                            : "text-text-secondary hover:text-text-primary"
-                                    )}
-                                >
-                                    Tümü
-                                </button>
-                            </div>
-                        </div>
+            <main className="p-0 space-y-0">
+                {/* 1. Carousel Section */}
+                <div 
+                    ref={carouselRef}
+                    className="flex gap-4 overflow-x-auto pb-8 pt-4 px-4 snap-x snap-mandatory scrollbar-hide bg-surface/50 border-b border-border"
+                >
+                    {/* Card 1: TOPLAM */}
+                    {(() => {
+                        const entries = Array.from(totalBalance.entries());
+                        const totalNet = entries.reduce((sum, [curr, b]) => sum + (rates ? convertToTRY(b.net, curr, rates) : 0), 0);
+                        const totalRec = entries.reduce((sum, [curr, b]) => sum + (rates ? convertToTRY(b.receivables, curr, rates) : 0), 0);
+                        const totalPay = entries.reduce((sum, [curr, b]) => sum + (rates ? convertToTRY(b.payables, curr, rates) : 0), 0);
 
-                        <button 
-                            onClick={() => navigate(`/person/${id}/history`)}
-                            className="bg-blue-600 text-white px-4 py-2 rounded-xl shadow-lg shadow-blue-500/20 text-sm font-semibold flex items-center gap-2 hover:bg-blue-700 active:scale-95 transition-all"
-                        >
-                            Tüm Geçmiş
-                            <ArrowLeft className="rotate-180" size={16} />
-                        </button>
-                    </div>
+                        return (
+                            <SummaryCard
+                                data-mode="TOTAL"
+                                title="Toplam Net Varlık"
+                                currency="TRY"
+                                net={totalNet}
+                                receivables={totalRec}
+                                payables={totalPay}
+                                variant="auto"
+                                className="!w-[300px] sm:!w-[340px] cursor-pointer"
+                                isActive={tabMode === 'TOTAL'}
+                                largeText={true}
+                                onClick={() => {
+                                    lastUpdateSourceRef.current = 'CLICK';
+                                    setTabMode('TOTAL');
+                                }}
+                            />
+                        );
+                    })()}
 
-                    <div className={clsx(
-                        "transition-all duration-300 rounded-2xl p-0.5",
-                        viewMode !== 'FLOW' && "bg-gradient-to-br from-transparent to-transparent", // Placeholder for potential bg highlight
-                        viewMode === 'SPECIAL' && "bg-purple-50/50 dark:bg-purple-900/5",
-                        viewMode === 'TOTAL' && "bg-gray-50/50 dark:bg-gray-800/20"
-                    )}>
-                        {(displayBalance && displayBalance.size > 0) ? (
-                            <div className="flex gap-3 overflow-x-auto pb-4 min-h-[140px] snap-x snap-mandatory scrollbar-hide pt-1 px-1">
-                                {/* Grand Total in TRY for this Person */}
-                                {(() => {
-                                    if (viewMode === 'FLOW' || viewMode === 'TOTAL') {
-                                        const entries = Array.from(displayBalance.entries());
-                                        const totalNet = entries.reduce((sum, [curr, b]) => sum + (rates ? convertToTRY(b.net, curr, rates) : 0), 0);
-                                        const totalRec = entries.reduce((sum, [curr, b]) => sum + (rates ? convertToTRY(b.receivables, curr, rates) : 0), 0);
-                                        const totalPay = entries.reduce((sum, [curr, b]) => sum + (rates ? convertToTRY(b.payables, curr, rates) : 0), 0);
-                                        
-                                        return (
-                                            <SummaryCard
-                                                title={viewMode === 'TOTAL' ? "Net Varlık Durumu" : "Toplam Akış Varlığı"}
-                                                currency="TRY"
-                                                net={totalNet}
-                                                receivables={totalRec}
-                                                payables={totalPay}
-                                                variant="auto"
-                                                className="!w-[220px]"
-                                            />
-                                        );
-                                    }
-                                    return null;
-                                })()}
+                    {/* Card 2: BORÇLAR (LEDGER) */}
+                    {(() => {
+                        const entries = Array.from(streamBalance.entries());
+                        const totalNet = entries.reduce((sum, [curr, b]) => sum + (rates ? convertToTRY(b.net, curr, rates) : 0), 0);
+                        const totalRec = entries.reduce((sum, [curr, b]) => sum + (rates ? convertToTRY(b.receivables, curr, rates) : 0), 0);
+                        const totalPay = entries.reduce((sum, [curr, b]) => sum + (rates ? convertToTRY(b.payables, curr, rates) : 0), 0);
 
-                                {/* Individual Currencies */}
-                                {Array.from(displayBalance.entries())
-                                    .sort((a, b) => (a[0] === 'TRY' ? -1 : b[0] === 'TRY' ? 1 : 0))
-                                    .map(([currency, balance]) => {
-                                        const isToggled = toggledCards[currency];
+                        return (
+                            <SummaryCard
+                                data-mode="LEDGER"
+                                title="Borçlar (Cari)"
+                                currency="TRY"
+                                net={totalNet}
+                                receivables={totalRec}
+                                payables={totalPay}
+                                variant="indigo"
+                                className="!w-[300px] sm:!w-[340px] cursor-pointer"
+                                isActive={tabMode === 'LEDGER'}
+                                largeText={true}
+                                onClick={() => {
+                                    lastUpdateSourceRef.current = 'CLICK';
+                                    setTabMode('LEDGER');
+                                }}
+                            />
+                        );
+                    })()}
 
-                                        const net = (isToggled && rates) ? convertToTRY(balance.net, currency, rates) : balance.net;
-                                        const receivables = (isToggled && rates) ? convertToTRY(balance.receivables, currency, rates) : balance.receivables;
-                                        const payables = (isToggled && rates) ? convertToTRY(balance.payables, currency, rates) : balance.payables;
+                    {/* Card 3: VADELİ (INSTALLMENT) */}
+                    {(() => {
+                        const entries = Array.from(installmentBalance.entries());
+                        const totalNet = entries.reduce((sum, [curr, b]) => sum + (rates ? convertToTRY(b.net, curr, rates) : 0), 0);
+                        const totalRec = entries.reduce((sum, [curr, b]) => sum + (rates ? convertToTRY(b.receivables, curr, rates) : 0), 0);
+                        const totalPay = entries.reduce((sum, [curr, b]) => sum + (rates ? convertToTRY(b.payables, curr, rates) : 0), 0);
 
-                                        return (
-                                            <SummaryCard
-                                                key={currency}
-                                                title={viewMode === 'TOTAL' ? `Toplam (${currency})` : (viewMode === 'SPECIAL' ? `Özel Borç (${currency})` : `Varlık (${currency})`)}
-                                                currency={currency}
-                                                net={net}
-                                                receivables={receivables}
-                                                payables={payables}
-                                                isToggled={isToggled}
-                                                onToggle={() => toggleCardCurrency(currency)}
-                                                showToggle={currency !== 'TRY'}
-                                                variant={balance.net >= 0 ? 'emerald' : 'rose'}
-                                                className="!w-[220px]"
-                                            />
-                                        );
-                                    })}
-                            </div>
-                        ) : (
-                            <div className="bg-surface rounded-2xl p-8 text-center border border-dashed border-border shadow-sm">
-                                <span className="text-3xl mb-2 block">💬</span>
-                                <p className="text-text-secondary font-medium">Bu görünümde veri yok</p>
-                                <p className="text-xs text-text-tertiary mt-1">Seçili filtreye uygun kayıt bulunamadı</p>
-                            </div>
-                        )}
-                    </div>
-                </section>
+                        return (
+                            <SummaryCard
+                                data-mode="INSTALLMENT"
+                                title="Vadeli Borçlar"
+                                currency="TRY"
+                                net={totalNet}
+                                receivables={totalRec}
+                                payables={totalPay}
+                                variant="rose"
+                                className="!w-[300px] sm:!w-[340px] cursor-pointer"
+                                isActive={tabMode === 'INSTALLMENT'}
+                                largeText={true}
+                                onClick={() => {
+                                    lastUpdateSourceRef.current = 'CLICK';
+                                    setTabMode('INSTALLMENT');
+                                }}
+                            />
+                        );
+                    })()}
+                </div>
 
-                {/* B. Özel Borçlar Listesi (Special Debts List) */}
-                <section>
-                    <h2 className="text-sm font-semibold text-text-secondary uppercase tracking-wider mb-3 px-1 flex items-center gap-2">
-                        <FolderOpen size={14} />
-                        Özel Borçlar
-                    </h2>
+                {/* 2. Tab Navigation removed as per user request */}
 
-                    {personDebts.length > 0 ? (
-                        <div className="space-y-3">
-                            {personDebts.map(debt => {
-                                const isMyEntry = debt.createdBy === user?.uid;
-                                const isNew = !isMyEntry && lastReadTimestamp && debt.createdAt && debt.createdAt.toMillis() > lastReadTimestamp;
-                                const createdAt = debt.createdAt?.toDate ? debt.createdAt.toDate() : new Date();
-                                const isEditable = isMyEntry && isTransactionEditable(createdAt);
-
-                                // Configure Actions
-                                const rightActions: SwipeAction[] = [];
-                                if (isEditable) {
-                                    rightActions.push({
-                                        key: 'edit',
-                                        icon: <Edit2 size={20} />,
-                                        label: 'Düzenle',
-                                        color: 'bg-blue-500',
-                                        onClick: () => handleDebtEdit(debt)
-                                    });
-                                    rightActions.push({
-                                        key: 'delete',
-                                        icon: <Trash2 size={20} />,
-                                        label: 'Sil',
-                                        color: 'bg-red-500',
-                                        onClick: () => handleDebtDelete(debt.id)
-                                    });
-                                }
-
-                                // Restore Left Actions (Complete / Hide)
-                                const leftActions: SwipeAction[] = [];
-                                leftActions.push({
-                                    key: 'complete',
-                                    icon: <CheckCircle size={20} />,
-                                    label: 'Tamamla',
-                                    color: 'bg-green-500',
-                                    onClick: () => handleDebtComplete()
-                                });
-                                leftActions.push({
-                                    key: 'hide',
-                                    icon: <EyeOff size={20} />,
-                                    label: 'Gizle',
-                                    color: 'bg-zinc-500',
-                                    onClick: () => handleDebtHide()
-                                });
-
-                                return (
-                                    <AdaptiveActionRow
-                                        key={debt.id}
-                                        leftActions={leftActions}
-                                        rightActions={rightActions}
-                                        isOpen={openRowId === `${debt.id}_right` ? 'right' : (openRowId === `${debt.id}_left` ? 'left' : null)}
-                                        onOpen={(dir) => setOpenRowId(`${debt.id}_${dir}`)}
-                                        onClose={() => setOpenRowId(null)}
-                                        contentClassName="rounded-2xl"
-                                        className="rounded-2xl mb-3 shadow-sm"
-                                        disableDesktopMenu={true}
-                                    >
-                                        <DebtCard
-                                            debt={debt}
-                                            isNew={!!isNew}
-                                            currentUserId={user.uid}
-                                            onClick={() => navigate(`/debt/${debt.id}`)}
-                                            disabled={isBlocked}
-                                            variant="default"
-                                            className="!mb-0 !shadow-none"
-                                        />
-                                    </AdaptiveActionRow>
-                                );
-                            })}
-                        </div>
-                    ) : (
-                        <div className="bg-surface/50 rounded-xl p-8 text-center border border-dashed border-border">
-                            <FolderOpen size={32} className="mx-auto mb-3 opacity-30 text-text-secondary" />
-                            <p className="text-text-secondary font-medium">Özel borç yok</p>
-                            <p className="text-xs text-text-tertiary mt-1">Vadeli veya taksitli borçlar burada görünür</p>
+                {/* 3. Tab Content */}
+                <div className="p-4">
+                    {tabMode === 'TOTAL' && (
+                        <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
+                             <div className="grid gap-3">
+                                {Array.from(totalBalance.entries()).sort((a,b) => a[0] === 'TRY' ? -1 : 1).map(([curr, bal]) => (
+                                    <div key={curr} className="flex justify-between items-center p-4 bg-surface rounded-xl border border-border shadow-sm">
+                                        <div className="flex items-center gap-3">
+                                            <div className="w-10 h-10 rounded-full bg-primary/10 flex items-center justify-center font-bold text-primary">
+                                                {curr}
+                                            </div>
+                                            <div>
+                                                <p className="font-semibold text-text-primary">{curr}</p>
+                                                <p className="text-xs text-text-secondary">{bal.net >= 0 ? 'Alacaklı' : 'Borçlu'}</p>
+                                            </div>
+                                        </div>
+                                        <div className="text-right">
+                                            <p className={clsx("font-bold text-lg", bal.net >= 0 ? "text-emerald-600" : "text-rose-600")}>
+                                                {bal.net >= 0 ? '+' : ''}{bal.net.toLocaleString('tr-TR')} {curr}
+                                            </p>
+                                            {curr !== 'TRY' && rates && (
+                                                <p className="text-xs text-text-secondary">
+                                                    ≈ {convertToTRY(bal.net, curr, rates).toLocaleString('tr-TR')} TRY
+                                                </p>
+                                            )}
+                                        </div>
+                                    </div>
+                                ))}
+                             </div>
                         </div>
                     )}
-                </section>
+                    {tabMode === 'LEDGER' && (
+                        <div className="animate-in fade-in slide-in-from-bottom-2 space-y-4">
+                            {/* Filtreler */}
+                            <div className="flex items-center justify-end gap-1.5 sm:gap-3">
+                                <DateFilterDropdown onFilterChange={handleLedgerDateChange} />
+                            </div>
+
+                            <TransactionList ledgerId={ledgerId || ''} transactions={filteredTransactions} />
+                        </div>
+                    )}
+                    {tabMode === 'INSTALLMENT' && (
+                        <div className="animate-in fade-in slide-in-from-bottom-2">
+                            <DebtsTab debts={installmentDebts} />
+                        </div>
+                    )}
+                </div>
             </main>
 
-            {/* Create Debt Modal (Used for Creation) */}
+            {/* Create Debt Modal */}
             <CreateDebtModal
                 isOpen={showCreateDebtModal}
                 onClose={() => setShowCreateDebtModal(false)}
-                onSubmit={async (borrowerId, borrowerName, amount, type, currency, note, dueDate, installments, canBorrowerAddPayment, initialPayment) => {
-                    if (!user) return;
-                    await createDebt(user.uid, user.displayName || 'Bilinmeyen', borrowerId, borrowerName, amount, type, currency, note, dueDate, installments, canBorrowerAddPayment, initialPayment || 0);
-                    setShowCreateDebtModal(false);
-                }}
-                targetUser={targetUserObject}
-                initialPhoneNumber={personInfo.phone}
-                initialName={personInfo.name}
             />
-
-            {/* Editing Debt Modal */}
-            {editingDebt && (
-                 <CreateDebtModal
-                    isOpen={!!editingDebt}
-                    onClose={() => setEditingDebt(null)}
-                    editMode={true}
-                    initialData={editingDebt}
-                    targetUser={targetUserObject}
-                />
-            )}
 
             {/* Edit Contact Modal */}
             {showEditModal && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                    <div className="bg-surface rounded-2xl w-full max-w-sm p-6 shadow-xl border border-slate-700">
-                        <h2 className="text-xl font-bold text-text-primary mb-4">{contactId ? "Kişiyi Düzenle" : "Rehbere Ekle"}</h2>
+                <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50">
+                    <div className="bg-surface rounded-2xl p-6 max-w-md w-full mx-4">
+                        <h2 className="text-xl font-bold mb-4">{contactId ? 'Kişiyi Düzenle' : 'Rehbere Ekle'}</h2>
                         <form onSubmit={handleEditSubmit} className="space-y-4">
-                            <div>
-                                <label className="block text-sm font-medium text-text-secondary mb-1">İsim</label>
-                                <input type="text" value={editName} onChange={(e) => setEditName(e.target.value)} className="w-full px-4 py-2 rounded-lg border border-slate-700 bg-background text-text-primary" required />
-                            </div>
-                            <div>
-                                <label className="block text-sm font-medium text-text-secondary mb-1">Telefon</label>
-                                <PhoneInput value={editPhone} onChange={setEditPhone} required />
-                            </div>
-                            <div className="flex gap-3 pt-2">
-                                <button type="button" onClick={() => setShowEditModal(false)} className="flex-1 py-2 text-text-secondary hover:bg-background rounded-lg">İptal</button>
-                                <button type="submit" disabled={submittingEdit} className="flex-1 py-2 bg-primary text-white rounded-lg">{submittingEdit ? '...' : 'Kaydet'}</button>
+                            <input
+                                type="text"
+                                placeholder="Ad Soyad"
+                                value={editName}
+                                onChange={(e) => setEditName(e.target.value)}
+                                className="w-full px-4 py-2 border border-border rounded-lg"
+                                required
+                            />
+                            <input
+                                type="tel"
+                                placeholder="Telefon"
+                                value={editPhone}
+                                onChange={(e) => setEditPhone(e.target.value)}
+                                className="w-full px-4 py-2 border border-border rounded-lg"
+                                required
+                            />
+                            <div className="flex gap-3">
+                                <button
+                                    type="button"
+                                    onClick={() => setShowEditModal(false)}
+                                    className="flex-1 px-4 py-2 border border-border rounded-lg"
+                                >
+                                    İptal
+                                </button>
+                                <button
+                                    type="submit"
+                                    disabled={submittingEdit}
+                                    className="flex-1 px-4 py-2 bg-primary text-white rounded-lg"
+                                >
+                                    {submittingEdit ? 'Kaydediliyor...' : 'Kaydet'}
+                                </button>
                             </div>
                         </form>
                     </div>

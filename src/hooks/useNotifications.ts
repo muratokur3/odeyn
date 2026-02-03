@@ -5,11 +5,13 @@ import { differenceInDays } from 'date-fns';
 
 export interface Notification {
     id: string;
-    type: 'DUE_SOON' | 'INSTALLMENT_DUE';
+    type: 'DUE_SOON' | 'INSTALLMENT_DUE' | 'DEBT_CREATED' | 'PAYMENT_MADE' | 'DEBT_REJECTED' | 'DEBT_EDITED';
     message: string;
     date: Date;
     debtId: string;
     read: boolean;
+    actorId?: string;  // Who triggered this notification
+    amount?: number;   // For payment notifications
 }
 
 export const useNotifications = () => {

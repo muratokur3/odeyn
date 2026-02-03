@@ -75,10 +75,16 @@ service cloud.firestore {
 
       allow update: if request.auth != null && request.auth.uid in resource.data.participants;
 
-      // Allow delete only if user is the creator AND status is PENDING or REJECTED
-      allow delete: if request.auth != null &&
-                      resource.data.createdBy == request.auth.uid &&
-                      (resource.data.status == 'PENDING' || resource.data.status == 'REJECTED');
+      // Delete Rules:
+      // 1. LEDGER type: Both participants can delete
+      // 2. Regular debts: Only creator can delete, within reasonable time
+      // Note: 1-hour rule is enforced in client code via isTransactionEditable
+      allow delete: if request.auth != null && (
+        // LEDGER: Both participants can delete
+        (resource.data.type == 'LEDGER' && request.auth.uid in resource.data.participants) ||
+        // Regular: Only creator can delete
+        (resource.data.createdBy == request.auth.uid)
+      );
 
       match /logs/{logId} {
         allow read: if request.auth != null && request.auth.uid in get(/databases/$(database)/documents/debts/$(debtId)).data.participants;
