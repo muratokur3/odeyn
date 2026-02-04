@@ -23,7 +23,7 @@ import { DebtsTab } from '../components/DebtsTab';
 import { DateFilterDropdown, type QuickFilterType } from '../components/DateFilterDropdown';
 import { CreateDebtModal } from '../components/CreateDebtModal';
 import { useModal } from '../context/ModalContext';
-import { getContacts, markContactAsRead, addContact, updateContact, deleteContact, muteUser, unmuteUser } from '../services/db';
+import { getContacts, markContactAsRead, addContact, updateContact, deleteContact, muteUser, unmuteUser, deletePersonHistory } from '../services/db';
 import { isUserBlocked, blockUser, unblockUser } from '../services/blockService';
 import { cleanPhone, formatPhoneForDisplay } from '../utils/phoneUtils';
 import { doc, getDoc } from 'firebase/firestore';
@@ -401,6 +401,21 @@ export const PersonStream = () => {
         }
     };
 
+    const handleDeleteHistory = async () => {
+        if (!user) return;
+        if (await showConfirm("Tüm Geçmişi Sil", "Bu kişiyle olan tüm geçmişiniz (borçlar, kayıtlar) silinecektir. Eğer kişiyi siz eklediyseniz rehberden de silinir. Bu işlem geri alınamaz.", "error")) {
+            const cleanP = id ? cleanPhone(id) : null;
+            await deletePersonHistory(user.uid, resolvedUid, cleanP, contactId || undefined);
+            navigate('/');
+        }
+    };
+
+    const handleOpenEdit = () => {
+        setEditName(personInfo.name || '');
+        setEditPhone(personInfo.phone || '');
+        setShowEditModal(true);
+    };
+
     const handleEditSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!user) return;
@@ -457,7 +472,7 @@ export const PersonStream = () => {
                             <div className="fixed inset-0 z-10" onClick={() => setShowMenu(false)}></div>
                             <div className="absolute right-0 top-full mt-2 w-48 bg-surface rounded-xl shadow-xl border border-border z-20 overflow-hidden">
                                 <button
-                                    onClick={() => { setShowEditModal(true); setShowMenu(false); }}
+                                    onClick={() => { handleOpenEdit(); setShowMenu(false); }}
                                     className="w-full text-left px-4 py-3 text-sm font-medium text-text-primary hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-2"
                                 >
                                     {contactId ? <><Edit2 size={16} /> Düzenle</> : <><UserPlus size={16} /> Rehbere Ekle</>}
@@ -481,9 +496,15 @@ export const PersonStream = () => {
                                         onClick={() => { handleDeleteContact(); setShowMenu(false); }}
                                         className="w-full text-left px-4 py-3 text-sm font-medium text-red-600 hover:bg-red-50 flex items-center gap-2"
                                     >
-                                        <Trash2 size={16} /> Sil
+                                        <Trash2 size={16} /> Rehberden Sil
                                     </button>
                                 )}
+                                <button
+                                    onClick={() => { handleDeleteHistory(); setShowMenu(false); }}
+                                    className="w-full text-left px-4 py-3 text-sm font-medium text-red-600 hover:bg-red-50 flex items-center gap-2"
+                                >
+                                    <Trash2 size={16} /> Tüm Geçmişi Sil
+                                </button>
                             </div>
                         </>
                     )}

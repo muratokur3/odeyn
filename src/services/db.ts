@@ -1370,3 +1370,80 @@ export const batchAddContacts = async (currentUserId: string, contacts: { name: 
         throw error;
     }
 };
+
+export const deletePersonHistory = async (
+    currentUserId: string,
+    targetUserId: string | null,
+    targetPhone: string | null,
+    contactId?: string
+) => {
+    try {
+        // 1. Delete Contact if exists
+        if (contactId) {
+            // We use the existing deleteContact function
+            await deleteContact(currentUserId, contactId);
+        }
+
+        // 2. Find Debts where I am a participant
+        const debtsRef = collection(db, 'debts');
+        const q = query(debtsRef, where('participants', 'array-contains', currentUserId));
+        const snapshot = await getDocs(q);
+
+        const tasks = snapshot.docs.map(async (docSnap) => {
+            const data = docSnap.data() as Debt;
+
+            // Check if this debt involves the target
+            // Target could be identified by UID or Phone (if lockedPhoneNumber matches or raw participant)
+            let isTargetInvolved = false;
+
+            if (targetUserId && data.participants.includes(targetUserId)) {
+                isTargetInvolved = true;
+            } else if (targetPhone) {
+                // Check lockedPhoneNumber
+                if (data.lockedPhoneNumber === targetPhone) isTargetInvolved = true;
+                // Check raw phone in participants (legacy)
+                if (data.participants.includes(targetPhone)) isTargetInvolved = true;
+            }
+
+            if (!isTargetInvolved) return;
+
+            // ACTION: Delete or Leave
+            if (data.createdBy === currentUserId) {
+                 // I created it -> Hard Delete
+
+                 // If it is a Ledger, delete transactions first
+                 if (data.type === 'LEDGER') {
+                     const txRef = collection(db, 'debts', docSnap.id, 'transactions');
+                     const txSnap = await getDocs(txRef);
+                     const txDeletePromises = txSnap.docs.map(tx => deleteDoc(tx.ref));
+                     await Promise.all(txDeletePromises);
+                 }
+
+                 // Also delete logs subcollection for any debt type to be clean
+                 const logsRef = collection(db, 'debts', docSnap.id, 'logs');
+                 const logsSnap = await getDocs(logsRef);
+                 const logsDeletePromises = logsSnap.docs.map(log => deleteDoc(log.ref));
+                 await Promise.all(logsDeletePromises);
+
+                 await deleteDoc(docSnap.ref);
+            } else {
+                 // I did not create it -> Leave (Remove myself from participants)
+                 const newParticipants = data.participants.filter(p => p !== currentUserId);
+
+                 // If no participants left, maybe delete?
+                 // If the other person is still there, they keep it.
+                 // If I was the only one (unlikely), it becomes orphaned.
+                 if (newParticipants.length === 0) {
+                     await deleteDoc(docSnap.ref);
+                 } else {
+                     await updateDoc(docSnap.ref, { participants: newParticipants });
+                 }
+            }
+        });
+
+        await Promise.all(tasks);
+    } catch (error) {
+        console.error("Error deleting person history:", error);
+        throw error;
+    }
+};
