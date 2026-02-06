@@ -39,6 +39,17 @@ export const PersonStream = () => {
     const { resolveName } = useContactName();
     const { showAlert, showConfirm } = useModal();
 
+    // Block Self View
+    useEffect(() => {
+        if (user && id) {
+            const target = cleanPhone(id);
+            const me = cleanPhone(user.phoneNumber || '');
+            if ((target && me && target === me) || id === user.uid) {
+                navigate('/', { replace: true });
+            }
+        }
+    }, [user, id, navigate]);
+
     // State
     const [tabMode, setTabMode] = useState<TabMode>(() => {
         return (localStorage.getItem(`tabMode_${id}`) as TabMode) || 'TOTAL';
@@ -681,8 +692,9 @@ export const PersonStream = () => {
                                 placeholder="Telefon"
                                 value={editPhone}
                                 onChange={(e) => setEditPhone(e.target.value)}
-                                className="w-full px-4 py-2 border border-border rounded-lg"
+                                className="w-full px-4 py-2 border border-border rounded-lg disabled:opacity-50 disabled:bg-slate-100 dark:disabled:bg-slate-800 disabled:cursor-not-allowed"
                                 required
+                                disabled={!contactId}
                             />
                             <div className="flex gap-3">
                                 <button

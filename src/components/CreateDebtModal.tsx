@@ -6,7 +6,7 @@ import { SelectedUserCard } from './SelectedUserCard';
 import { searchUserByPhone, searchContacts, createDebt, updateDebtHardReset } from '../services/db';
 import { getOrCreateLedger, addLedgerTransaction } from '../services/transactionService';
 import { formatCurrency } from '../utils/format';
-import { formatPhoneForDisplay } from '../utils/phoneUtils';
+import { formatPhoneForDisplay, cleanPhone } from '../utils/phoneUtils';
 import type { User, Contact, Installment, Debt } from '../types';
 import { useAuth } from '../hooks/useAuth';
 import { useContactSync } from '../hooks/useContactSync';
@@ -370,6 +370,12 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
         if (!user) return;
+
+        // Prevent Self-Debt
+        if ((foundUser && foundUser.uid === user.uid) || cleanPhone(phoneNumber) === cleanPhone(user.phoneNumber || '')) {
+            showAlert("Hata", "Kendinize borç ekleyemezsiniz.", "error");
+            return;
+        }
 
         if (isTargetBlocked) {
             showAlert("Engellendi", "Engellediğiniz bir kullanıcıya işlem yapamazsınız.", "error");

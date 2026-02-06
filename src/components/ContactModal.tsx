@@ -122,6 +122,11 @@ export const ContactModal: React.FC<ContactModalProps> = ({
         e.preventDefault();
         if (!user) return;
 
+        if (cleanPhone(phone) === cleanPhone(user.phoneNumber || '')) {
+            showAlert("Hata", "Kendinizi rehbere ekleyemezsiniz.", "error");
+            return;
+        }
+
         setSubmitting(true);
         try {
             let resultContact: Contact | null = null;
