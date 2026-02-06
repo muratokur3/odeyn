@@ -1,41 +1,43 @@
 # Pamuk Eller (DebtDert)
 
-Arkadaşlarınızla aranızdaki alacak/verecek durumunu takip etmenizi sağlayan modern, kullanıcı dostu bir borç takip uygulaması.
+Arkadaşlarınızla aranızdaki alacak/verecek durumunu takip etmenizi sağlayan modern, kullanıcı dostu bir borç takip uygulaması. "Söz uçar, yazı kalır" prensibini dijitalleştirir.
 
-## Özellikler
-- **Kişiler arası borç takibi:** Alacak ve verecekleri tek ekrandan yönetin.
-- **Çoklu Para Birimi:** TRY, USD, EUR, Altın gibi farklı birimlerle işlem yapın.
-- **gölge Kullanıcılar:** Uygulamayı kullanmayan arkadaşlarınızı rehberden ekleyip takip edebilirsiniz.
-- **Asimetrik Güven Modeli (V2):** Tüm borç ve ödeme kayıtları anında işlenir. Onay mekanizması yoktur, sadece "Reddet/Sil" hakkı saklıdır.
-- **Chat Arayüzü:** Borç detayları modern bir sohbet akışı şeklinde (Sağ/Sol hizalı) görüntülenir.
+## 🌟 Özellikler
 
-## Son Güncellemeler (v0.1.0)
+*   **İkili Katman (Dual-Layer):**
+    *   **Akış (Cari):** Günlük küçük harcamalar (Yemek, Taksi) için sohbet benzeri arayüz.
+    *   **Dosyalar (Özel):** Vadeli veya taksitli büyük borçlar için resmi kayıt kartları.
+*   **Asimetrik Güven:** İşlemler anında karşı tarafa yansır. Onay beklemez, sadece reddedilebilir.
+*   **1 Saat Kuralı:** Hatalı girişler ilk 1 saat içinde silinebilir, sonrasında kalıcı hale gelir (Güvenlik).
+*   **Çoklu Para Birimi:** TRY, USD, EUR ve Altın (Gram) desteği.
+*   **Rehber Entegrasyonu:** Telefon rehberinizdeki kişilerle kolay eşleşme.
 
-### 🎨 Arayüz ve Tasarım
-- **Kişi Detay Sayfası:** Başlık alanı WhatsApp tarzı modern bir görünüme kavuşturuldu.
-- **Araçlar Sayfası:** Header alanı küçültülerek ve gereksiz boşluklar alınarak minimalist hale getirildi.
-- **Avatar Sistemi:** 
-    - Varsayılan baş harfler yerine modern ikonlar eklendi.
-    - Sistem kullanıcıları ve rehber kişileri için renkli durum halkaları eklendi.
+## 📚 Dokümantasyon
 
-### 🛠️ Düzeltmeler ve İyileştirmeler
-- **Avatar Görünürlüğü (Global Fix):**
-    - Anasayfa, Rehber, Kişi Detay ve Onay Bekleyenler sayfalarında; sistem kullanıcısı olan kişilerin profil fotoğraflarının görünmemesi sorunu çözüldü.
-    - Arka planda UID/Telefon eşleşme mantığı ("Reverse Lookup") geliştirildi.
-- **Kişi Ekleme:** 
-    - Gölge kullanıcı oluştururken isim girme zorunluluğu kaldırıldı (Rehber ismini veya telefonu kullanır).
-    - "Hayalet Bellek" özelliği ile daha önce işlem yapılan numaranın ismi hatırlandı.
-- **Çöp Kutusu:** Silinen kayıtların filtreleme hatası giderildi.
-- **Mobil Uyumluluk:** Modal pencerelerin (Borç Ekle vb.) mobilde klavye açılınca oluşan kayma sorunları giderildi.
+Projenin tüm detayları `docs/` klasörü altındaki belgelerde toplanmıştır:
 
-## Kurulum
+| Belge | İçerik |
+| :--- | :--- |
+| **[PROJECT_MANIFEST.md](docs/PROJECT_MANIFEST.md)** | Projenin kimliği, değişmez kuralları ve manifestosu. |
+| **[USER_GUIDE.md](docs/USER_GUIDE.md)** | Son kullanıcılar için kullanım rehberi. |
+| **[ANALYSIS.md](docs/ANALYSIS.md)** | Teknik mimari, veri modeli ve iş mantığı (İngilizce). |
+| **[SECURITY.md](docs/SECURITY.md)** | Güvenlik kuralları ve spam önleme. |
+| **[IMPROVEMENTS.md](docs/IMPROVEMENTS.md)** | Gelecek planları, bilinen hatalar ve iyileştirmeler. |
+| **[AI_PROMPTS.md](docs/AI_PROMPTS.md)** | AI asistanları için geliştirme talimatları. |
 
-\`\`\`bash
+## 🚀 Kurulum
+
+```bash
+# Bağımlılıkları yükle
 npm install
-npm run dev
-\`\`\`
 
-## Teknoloji Stack
-- React + TypeScript + Vite
-- Firebase (Auth, Firestore)
-- Tailwind CSS
+# Geliştirme sunucusunu başlat
+npm run dev
+```
+
+## 🛠️ Teknoloji Stack
+
+*   **Frontend:** React + TypeScript + Vite
+*   **Backend:** Firebase (Auth, Firestore, Functions, Storage)
+*   **Stil:** Tailwind CSS
+*   **Deploy:** Firebase Hosting

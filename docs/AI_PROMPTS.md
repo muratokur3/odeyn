@@ -1,3 +1,5 @@
+[AI Directive]: Bu dosya, AI asistanları için özel talimatlar ve çalışma prensiplerini içerir.
+
 # PROJECT DEBTDERT - AI & AGENT MANIFESTO
 
 This document outlines the core rules, architectural decisions, and coding standards for the "DebtDert" project. All AI agents (Jules, Copilot, etc.) MUST adhere to these guidelines strictly.
@@ -38,4 +40,4 @@ The app now operates on a "Dual-Layer" architecture:
 *   **Firebase Usage:** Use `serverTimestamp()`. Validate data.
 
 ---
-*Refer to `PROJECT_MANIFEST.md` for detailed business logic.*
+*Refer to `docs/PROJECT_MANIFEST.md` for detailed business logic.*
