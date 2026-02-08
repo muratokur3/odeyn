@@ -15,10 +15,12 @@ import { fetchRates, convertToTRY, type CurrencyRates } from '../services/curren
 import type { Debt } from '../types';
 import { SummaryCard } from '../components/SummaryCard';
 import { EditDebtModal } from '../components/EditDebtModal';
-import { updateDebt } from '../services/db';
+import { updateDebt, addPayment } from '../services/db';
 import { formatDistanceToNow } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { FeedbackWidget } from '../components/FeedbackWidget';
+import { QuickPayWidget } from '../components/QuickPayWidget';
+import { PaymentModal } from '../components/PaymentModal';
 
 // Types
 // Types
@@ -45,6 +47,7 @@ export const Dashboard = () => {
     const { contactsMap } = useContacts(); // Get contacts map
     const { resolveName } = useContactName();
     const [editingDebt, setEditingDebt] = useState<Debt | null>(null);
+    const [quickPayDebt, setQuickPayDebt] = useState<Debt | null>(null);
 
     // State
     const [rates, setRates] = useState<CurrencyRates | null>(null);
@@ -309,56 +312,75 @@ export const Dashboard = () => {
 
             <FeedbackWidget />
 
-            {/* HERO CARDS - HORIZONTAL SCROLL */}
-            <div className="mb-4 overflow-hidden">
-                {/* Scroll Container */}
-                <div className="flex gap-4 overflow-x-auto pb-6 px-4 snap-x snap-mandatory scrollbar-hide pt-4">
+            {quickPayDebt && (
+                <PaymentModal 
+                    isOpen={!!quickPayDebt}
+                    onClose={() => setQuickPayDebt(null)}
+                    onSubmit={async (amount, note) => {
+                        if (quickPayDebt && user) {
+                            await addPayment(quickPayDebt.id, amount, note, user.uid);
+                        }
+                    }}
+                    maxAmount={quickPayDebt.remainingAmount}
+                    currency={quickPayDebt.currency}
+                />
+            )}
 
-                    {/* 1. FIXED GRAND TOTAL CARD (Net Assets in TRY) */}
-                    <SummaryCard
-                        title="Toplam Varlık"
-                        currency="TRY"
-                        net={grandTotalInTRY.net}
-                        receivables={grandTotalInTRY.receivables}
-                        payables={grandTotalInTRY.payables}
-                        variant="auto"
-                    />
+            {/* Main Content */}
+            <main className="px-4 py-6 max-w-5xl mx-auto">
+                {/* 1. Quick Pay Widget (Urgent Debts) */}
+                <QuickPayWidget 
+                    debts={dashboardDebts} 
+                    onPay={(debt) => setQuickPayDebt(debt)} 
+                />
 
-                    {/* 2. DYNAMIC CURRENCY CARDS */}
-                    {Object.values(totalsByCurrency)
-                        .sort((a, b) => (a.currency === 'TRY' ? -1 : b.currency === 'TRY' ? 1 : 0))
-                        .map((total) => {
-                            const isNetPositive = total.net >= 0;
-                            const isToggled = toggledCards[total.currency];
+                {/* 2. Top Totals */}
+                <div className="flex gap-4 mb-8 overflow-x-auto pb-4 scrollbar-hide">
+                    {/* HERO CARDS - HORIZONTAL SCROLL */}
+                    {/* Scroll Container */}
+                    <div className="flex gap-4 overflow-x-auto pb-6 px-4 snap-x snap-mandatory scrollbar-hide pt-4">
 
-                            const net = (isToggled && rates) ? convertToTRY(total.net, total.currency, rates) : total.net;
-                            const receivables = (isToggled && rates) ? convertToTRY(total.receivables, total.currency, rates) : total.receivables;
-                            const payables = (isToggled && rates) ? convertToTRY(total.payables, total.currency, rates) : total.payables;
+                        {/* 1. FIXED GRAND TOTAL CARD (Net Assets in TRY) */}
+                        <SummaryCard
+                            title="Toplam Varlık"
+                            currency="TRY"
+                            net={grandTotalInTRY.net}
+                            receivables={grandTotalInTRY.receivables}
+                            payables={grandTotalInTRY.payables}
+                            variant="auto"
+                        />
 
-                            return (
-                                <SummaryCard
-                                    key={total.currency}
-                                    title={`Net Varlık (${total.currency})`}
-                                    currency={total.currency}
-                                    net={net}
-                                    receivables={receivables}
-                                    payables={payables}
-                                    isToggled={isToggled}
-                                    onToggle={() => toggleCardCurrency(total.currency)}
-                                    showToggle={total.currency !== 'TRY'}
-                                    variant={isNetPositive ? 'emerald' : 'rose'}
-                                />
-                            );
-                        })
-                    }
-                    {/* Padding element for right-side peek if needed, but padding on container handles it usually */}
-                    <div className="w-2 shrink-0"></div>
+                        {/* 2. DYNAMIC CURRENCY CARDS */}
+                        {Object.values(totalsByCurrency)
+                            .sort((a, b) => (a.currency === 'TRY' ? -1 : b.currency === 'TRY' ? 1 : 0))
+                            .map((total) => {
+                                const isNetPositive = total.net >= 0;
+                                const isToggled = toggledCards[total.currency];
+
+                                const net = (isToggled && rates) ? convertToTRY(total.net, total.currency, rates) : total.net;
+                                const receivables = (isToggled && rates) ? convertToTRY(total.receivables, total.currency, rates) : total.receivables;
+                                const payables = (isToggled && rates) ? convertToTRY(total.payables, total.currency, rates) : total.payables;
+
+                                return (
+                                    <SummaryCard
+                                        key={total.currency}
+                                        title={`Net Varlık (${total.currency})`}
+                                        currency={total.currency}
+                                        net={net}
+                                        receivables={receivables}
+                                        payables={payables}
+                                        isToggled={isToggled}
+                                        onToggle={() => toggleCardCurrency(total.currency)}
+                                        showToggle={total.currency !== 'TRY'}
+                                        variant={isNetPositive ? 'emerald' : 'rose'}
+                                    />
+                                );
+                            })
+                        }
+                        {/* Padding element for right-side peek if needed, but padding on container handles it usually */}
+                        <div className="w-2 shrink-0"></div>
+                    </div>
                 </div>
-            </div>
-
-            {/* Main Content Area */}
-            <main className="px-4 space-y-4 mt-4">
-
 
                 {/* CONTACT SUMMARY LIST */}
                 <div className="space-y-3 pb-20">

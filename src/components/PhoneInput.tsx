@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { AsYouType } from 'libphonenumber-js';
 import { cleanPhone, isValidPhone } from '../utils/phoneUtils';
 import { Phone } from 'lucide-react';
@@ -23,19 +23,20 @@ export const PhoneInput: React.FC<PhoneInputProps> = ({
 }) => {
     // Internal display value (formatted)
     const [displayValue, setDisplayValue] = useState('');
+    const prevValueRef = useRef(value);
 
     // Sync internal display value when external value changes
     useEffect(() => {
-        // If external value is E.164 (+90...), format it for display
-        if (value) {
-            const formatter = new AsYouType('TR');
-            const formatted = formatter.input(value);
-            // We only update display if it's significantly different to avoid cursor jumps?
-            // simpler: just set it. formatPhoneForDisplay might be safer if not typing.
-            // But AsYouType is best for input.
-            setDisplayValue(formatted);
-        } else {
-            setDisplayValue('');
+        // Only update if value prop actually changed
+        if (value !== prevValueRef.current) {
+            if (value) {
+                const formatter = new AsYouType('TR');
+                const formatted = formatter.input(value);
+                setDisplayValue(formatted);
+            } else {
+                setDisplayValue('');
+            }
+            prevValueRef.current = value;
         }
     }, [value]);
 

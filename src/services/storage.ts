@@ -4,35 +4,61 @@ import { ref, uploadBytes, getDownloadURL } from 'firebase/storage';
 import { compressImage } from '../utils/imageOptimizer';
 
 /**
- * Uploads a profile image for a specific user to Firebase Storage.
- * Applies client-side compression before uploading.
- * 
- * @param file The file object from the input.
- * @param userId The UID of the user.
- * @returns Promise resolving to the download URL of the uploaded image.
+ * Uploads an attachment (Image/PDF) for a debt or payment.
  */
-export const uploadProfileImage = async (file: File, userId: string): Promise<string> => {
+export const uploadDebtAttachment = async (
+    file: File, 
+    debtId: string, 
+    userId: string
+): Promise<{ url: string, type: 'IMAGE' | 'PDF', fileName: string }> => {
     try {
-        console.log("Starting profile image upload...");
+        console.log("Starting debt attachment upload...");
+        
+        const isPdf = file.type === 'application/pdf';
+        let uploadBlob: Blob | File = file;
 
-        // 1. Compress Image (Max 500px, 0.7 Quality)
-        // Using existing utility
-        const compressedBlob = await compressImage(file, 500, 0.7);
-        console.log("Image compressed successfully.");
+        // Compress if it's an image
+        if (!isPdf && file.type.startsWith('image/')) {
+            uploadBlob = await compressImage(file, 1200, 0.8);
+        }
 
-        // 2. Create Storage Reference
-        // Path: profile_images/{userId}
-        const storageRef = ref(storage, `profile_images/${userId}`);
+        const timestamp = Date.now();
+        const fileName = `${timestamp}_${file.name}`;
+        const storageRef = ref(storage, `debts/${debtId}/${fileName}`);
 
-        // 3. Upload File
+        const snapshot = await uploadBytes(storageRef, uploadBlob);
+        const url = await getDownloadURL(snapshot.ref);
+
+        return {
+            url,
+            type: isPdf ? 'PDF' : 'IMAGE',
+            fileName: file.name
+        };
+    } catch (error) {
+        console.error("Error in uploadDebtAttachment:", error);
+        throw error;
+    }
+};
+
+/**
+ * Uploads a profile image for a user.
+ */
+export const uploadProfileImage = async (
+    file: File,
+    userId: string
+): Promise<string> => {
+    try {
+        // Compress image before upload
+        const compressedBlob = await compressImage(file, 800, 0.8);
+        
+        const timestamp = Date.now();
+        const fileName = `profile_${timestamp}.jpg`;
+        const storageRef = ref(storage, `profiles/${userId}/${fileName}`);
+        
         const snapshot = await uploadBytes(storageRef, compressedBlob);
-        console.log("Upload completed, fetching URL...");
-
-        // 4. Get Download URL
-        const downloadURL = await getDownloadURL(snapshot.ref);
-        console.log("Download URL obtained:", downloadURL);
-
-        return downloadURL;
+        const url = await getDownloadURL(snapshot.ref);
+        
+        return url;
     } catch (error) {
         console.error("Error in uploadProfileImage:", error);
         throw error;

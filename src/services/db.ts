@@ -268,7 +268,13 @@ export const createDebt = async (
             ...(canBorrowerAddPayment && { canBorrowerAddPayment }),
             ...(contactPhone && { lockedPhoneNumber: contactPhone }), // Always lock phone number if available
             // New Fields
-            ...(isMuted && { isMuted: true })
+            ...(isMuted && { isMuted: true }),
+            auditMeta: { // ✅ Added Audit Log
+                actorId: currentUserId,
+                timestamp: serverTimestamp(),
+                platform: 'Web',
+                deviceId: 'browser-' + Math.random().toString(36).substring(7) // Temp placeholder
+            }
         };
 
         // Use batch or transaction? 
@@ -379,7 +385,13 @@ export const updateDebtHardReset = async (
                 remainingAmount: newRemaining,
                 status: newStatus,
                 createdAt: serverTimestamp(), // RESET TIMER
-                updatedAt: serverTimestamp()
+                updatedAt: serverTimestamp(),
+                auditMeta: { // ✅ Added Audit
+                    actorId: currentUserId,
+                    timestamp: serverTimestamp(),
+                    platform: 'Web',
+                    reason: 'Hard Reset / Identity Fix'
+                }
             };
 
             // Remove undefined values
@@ -424,7 +436,14 @@ export const updateDebtHardReset = async (
     }
 };
 
-export const makePayment = async (debtId: string, amount: number, performedBy: string, note?: string, installmentId?: string) => {
+export const makePayment = async (
+    debtId: string, 
+    amount: number, 
+    performedBy: string, 
+    note?: string, 
+    installmentId?: string,
+    method: 'CASH' | 'IBAN' | 'CREDIT_CARD' | 'OTHER' = 'CASH' // ✅ New
+) => {
     await runTransaction(db, async (transaction) => {
         const debtRef = doc(db, 'debts', debtId);
         const debtDoc = await transaction.get(debtRef);
@@ -508,7 +527,13 @@ export const makePayment = async (debtId: string, amount: number, performedBy: s
             performedBy,
             timestamp: serverTimestamp(),
             note: note || 'Ödeme yapıldı',
-            ...(installmentId && { installmentId })
+            ...(installmentId && { installmentId }),
+            method, // ✅ Added Method
+            auditMeta: { // ✅ Added Audit
+                actorId: performedBy,
+                timestamp: serverTimestamp(),
+                platform: 'Web'
+            }
         });
     });
 
@@ -855,6 +880,110 @@ export const claimLegacyDebts = async (userId: string, phoneNumber: string) => {
 // Alias for backward compatibility if needed, though we should update calls.
 export const claimDebts = claimLegacyDebts;
 
+/**
+ * RELINK: Moves a single debt from one identifier (phone or UID) to another.
+ * Primarily used by Lenders to fix "Wrong Number" entries.
+ */
+export const relinkDebtToNewPhone = async (
+    debtId: string, 
+    oldPhone: string, 
+    newPhone: string, 
+    performedBy: string
+) => {
+    const cleanOld = cleanPhoneNumber(oldPhone);
+    const cleanNew = cleanPhoneNumber(newPhone);
+    if (cleanOld === cleanNew) return;
+
+    return runTransaction(db, async (transaction) => {
+        const debtRef = doc(db, 'debts', debtId);
+        const debtDoc = await transaction.get(debtRef);
+        if (!debtDoc.exists()) throw new Error("Debt not found");
+
+        const data = debtDoc.data();
+        if (data.createdBy !== performedBy) {
+            throw new Error("Only the creator can relink this debt.");
+        }
+
+        // Check if the oldPhone matches borrower or lender
+        let updatedBorrower = data.borrowerId;
+        let updatedLender = data.lenderId;
+        const participants = data.participants || [];
+
+        if (data.borrowerId === cleanOld) {
+            updatedBorrower = cleanNew;
+            // Update participants
+            const idx = participants.indexOf(cleanOld);
+            if (idx > -1) participants.splice(idx, 1);
+            if (!participants.includes(cleanNew)) participants.push(cleanNew);
+        } else if (data.lenderId === cleanOld) {
+            updatedLender = cleanNew;
+            // Update participants
+            const idx = participants.indexOf(cleanOld);
+            if (idx > -1) participants.splice(idx, 1);
+            if (!participants.includes(cleanNew)) participants.push(cleanNew);
+        } else {
+            throw new Error("Old phone number does not match lender or borrower of this debt.");
+        }
+
+        transaction.update(debtRef, {
+            borrowerId: updatedBorrower,
+            lenderId: updatedLender,
+            participants,
+            lockedPhoneNumber: cleanNew,
+            // Log the relink
+            auditMeta: {
+                actorId: performedBy,
+                timestamp: serverTimestamp(),
+                platform: 'Web/System',
+                reason: `Relinked from ${oldPhone} to ${newPhone}`
+            }
+        });
+
+        // Add a specialized payment log for the relink
+        const logRef = doc(collection(db, `debts/${debtId}/logs`));
+        transaction.set(logRef, {
+            type: 'NOTE_ADDED', // Or a new type like 'IDENTITY_CORRECTION'
+            note: `Numara düzeltildi: ${oldPhone} -> ${newPhone}`,
+            performedBy,
+            timestamp: serverTimestamp(),
+            previousRemaining: data.remainingAmount,
+            newRemaining: data.remainingAmount
+        });
+    });
+};
+
+/**
+ * BULK RELINK: Moves ALL debts created by 'performedBy' for 'oldIdentifier' to 'newIdentifier'.
+ * Essential for fixing a contact that was entirely recorded on a wrong number.
+ */
+export const bulkRelinkDebts = async (
+    oldPhone: string,
+    newPhone: string,
+    performedBy: string
+) => {
+    const cleanOld = cleanPhoneNumber(oldPhone);
+    const cleanNew = cleanPhoneNumber(newPhone);
+    
+    // Find all debts created by performer where oldPhone is involved
+    const qLender = query(collection(db, 'debts'), 
+        where('createdBy', '==', performedBy), 
+        where('borrowerId', '==', cleanOld)
+    );
+    const qBorrower = query(collection(db, 'debts'), 
+        where('createdBy', '==', performedBy), 
+        where('lenderId', '==', cleanOld)
+    );
+
+    const [snapL, snapB] = await Promise.all([getDocs(qLender), getDocs(qBorrower)]);
+    const allDocs = [...snapL.docs, ...snapB.docs];
+
+    // Process relinks
+    const relinks = allDocs.map(d => relinkDebtToNewPhone(d.id, cleanOld, cleanNew, performedBy));
+    await Promise.all(relinks);
+
+    return allDocs.length;
+};
+
 // Restoration of subscribeToUserDebts
 export const subscribeToUserDebts = (userId: string, callback: (debts: Debt[]) => void) => {
     const debtsRef = collection(db, 'debts');
@@ -896,6 +1025,26 @@ export const subscribeToDebtDetails = (debtId: string, callback: (debt: Debt | n
             callback(null);
         }
     });
+};
+
+/**
+ * Fetches all non-paid debts between two specific participants.
+ * Used for Smart Matching in UI.
+ */
+export const getDebtsBetweenParticipants = async (p1: string, p2: string): Promise<Debt[]> => {
+    const debtsRef = collection(db, 'debts');
+    // Firestore limitation: cannot use array-contains and != in same query safely without complex composite index
+    // So we fetch by participants and filter status in memory (it's a small list per contact)
+    const q = query(
+        debtsRef, 
+        where('participants', 'array-contains', p1), 
+        orderBy('createdAt', 'desc')
+    );
+    const snap = await getDocs(q);
+    
+    return snap.docs
+        .map(d => ({ id: d.id, ...d.data() } as Debt))
+        .filter(d => d.participants.includes(p2) && (d.status === 'ACTIVE' || d.status === 'PENDING'));
 };
 
 export const subscribeToPaymentLogs = (debtId: string, callback: (logs: PaymentLog[]) => void) => {
@@ -1240,59 +1389,74 @@ export const updateDebt = async (debtId: string, data: Partial<Debt>, actorId?: 
     try {
         const debtRef = doc(db, 'debts', debtId);
 
-        const updates = { ...data };
+        return await runTransaction(db, async (transaction) => {
+            const debtSnap = await transaction.get(debtRef);
+            if (!debtSnap.exists()) throw new Error("Debt not found");
 
-        // BUMP MECHANISM: Check for recovery from AUTO_HIDDEN
-        // Wrapped in try-catch to ensure main update never fails due to this side-effect
-        try {
-            const debtSnap = await getDoc(debtRef);
-            if (debtSnap.exists()) {
-                const currentDebt = debtSnap.data() as Debt;
+            const currentDebt = debtSnap.data() as Debt;
+            const isGracePeriodActive = isTransactionEditable(currentDebt.createdAt);
 
-                // Logic: If currently AUTO_HIDDEN (or isMuted=true), and we are updating it.
-                if (currentDebt.status === 'AUTO_HIDDEN' || currentDebt.isMuted) {
-                    const creatorId = currentDebt.createdBy;
-                    const isLender = currentDebt.lenderId === creatorId;
-                    const targetUserId = isLender ? currentDebt.borrowerId : currentDebt.lenderId;
+            // 1. Enforce 1-Hour Rule (Grace Period)
+            const changedKeys = Object.keys(data);
+            const sensitiveKeys = ['originalAmount', 'lenderId', 'borrowerId', 'currency', 'type'];
+            const hasSensitiveChanges = changedKeys.some(key => sensitiveKeys.includes(key));
 
-                    if (targetUserId && targetUserId.length > 20) { // Check if valid UID
-                        // Check permissions safely
-                        try {
-                            const targetRef = doc(db, 'users', targetUserId);
-                            const targetSnap = await getDoc(targetRef);
+            if (!isGracePeriodActive && hasSensitiveChanges) {
+                throw new Error("Zaman aşımı: Bu kaydın kritik alanları artık düzenlenemez (1 saat kuralı).");
+            }
 
-                            if (targetSnap.exists()) {
-                                const targetData = targetSnap.data() as User;
-                                const isStillMuted = targetData.mutedCreators?.includes(creatorId);
+            // 2. Track Edit History for originalAmount
+            const updatedEditHistory = currentDebt.editHistory || [];
+            if (data.originalAmount !== undefined && data.originalAmount !== currentDebt.originalAmount) {
+                if (!actorId) throw new Error("Actor ID required for amount change history.");
+                updatedEditHistory.push({
+                    oldAmount: currentDebt.originalAmount,
+                    newAmount: data.originalAmount,
+                    reason: data.note || 'Tutar düzenlendi',
+                    changedAt: Timestamp.now(),
+                    changedBy: actorId
+                });
+            }
 
-                                if (!isStillMuted) {
-                                    // PRESTO! User is unmuted. Bump the debt.
-                                    updates.status = 'ACTIVE';
-                                    updates.isMuted = false;
-                                }
-                            }
-                        } catch (permError) {
-                            console.warn("Could not check mute status during update (likely permission/privacy):", permError);
-                            // Ignore and proceed with normal update
+            const updates: any = { 
+                ...data,
+                ...(updatedEditHistory.length > 0 && { editHistory: updatedEditHistory }),
+                updatedAt: serverTimestamp(),
+                auditMeta: {
+                    actorId: actorId || 'system',
+                    timestamp: serverTimestamp(),
+                    platform: 'Web'
+                }
+            };
+
+            // BUMP MECHANISM: Check for recovery from AUTO_HIDDEN
+            if (currentDebt.status === 'AUTO_HIDDEN' || currentDebt.isMuted) {
+                const creatorId = currentDebt.createdBy;
+                const isLender = currentDebt.lenderId === creatorId;
+                const targetUserId = isLender ? currentDebt.borrowerId : currentDebt.lenderId;
+
+                if (targetUserId && targetUserId.length > 20) {
+                    const targetRef = doc(db, 'users', targetUserId);
+                    const targetSnap = await transaction.get(targetRef);
+                    if (targetSnap.exists()) {
+                        const targetData = targetSnap.data() as User;
+                        const isStillMuted = targetData.mutedCreators?.includes(creatorId);
+                        if (!isStillMuted) {
+                            updates.status = 'ACTIVE';
+                            updates.isMuted = false;
                         }
                     }
                 }
             }
-        } catch (err) {
-            console.warn("Error in Bump Logic (non-fatal):", err);
-        }
 
-        await updateDoc(debtRef, updates);
+            transaction.update(debtRef, updates);
 
-        // Activity Feed
-        if (actorId) {
-            const debtSnap = await getDoc(debtRef);
-            if (debtSnap.exists()) {
-                const updatedDebt = debtSnap.data() as Debt;
-                const otherId = updatedDebt.lenderId === actorId ? updatedDebt.borrowerId : updatedDebt.lenderId;
+            // 3. Activity Feed (Fire and forget outside transaction if possible, or just log)
+            if (actorId) {
+                const otherId = currentDebt.lenderId === actorId ? currentDebt.borrowerId : currentDebt.lenderId;
                 updateContactActivity(actorId, otherId, 'Borç güncellendi');
             }
-        }
+        });
     } catch (error) {
         console.error("Error updating debt:", error);
         throw error;

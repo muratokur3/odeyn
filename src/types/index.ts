@@ -1,15 +1,48 @@
 import { Timestamp } from 'firebase/firestore';
 
+export type UserType = 'INDIVIDUAL' | 'BUSINESS';
+
+export interface AuditMeta {
+    actorId: string;     // UID of the person performing the action
+    timestamp: Timestamp;
+    deviceId?: string;   // Device ID for security tracking
+    platform?: string;   // Web, iOS, Android
+    ipAddress?: string;  // Optional security log
+}
+
+export interface AmountHistory {
+    oldAmount: number;
+    newAmount: number;
+    reason?: string;
+    changedAt: Timestamp;
+    changedBy: string;   // UID
+}
+
+export interface Attachment {
+    id: string;
+    url: string;
+    type: 'IMAGE' | 'PDF';
+    fileName: string;
+    uploadedAt: Timestamp;
+    uploadedBy: string;
+}
+
 export interface User {
     uid: string;
     phoneNumber?: string; // @deprecated Use phoneNumbers array
     phoneNumbers: string[]; // List of verified E.164 numbers
     primaryPhoneNumber: string; // The main number for display/notifications
     displayName: string;
+    userType: UserType; // ✅ Unified naming
+    businessName?: string; // For business accounts
+    taxNumber?: string;
+    taxOffice?: string;
+    address?: string; // Simplified for UI
     createdAt: Timestamp;
     email?: string;
     recoveryEmail?: string;
     photoURL?: string;
+    customExchangeRates?: Record<string, number>; // ✅ Moved to top level
     mutedCreators?: string[]; // IDs of users whose debts are auto-hidden (Silent Mute)
     preferences?: {
         autoApproveDebt?: boolean;
@@ -17,6 +50,7 @@ export interface User {
         /** @deprecated Use settings.contactSyncEnabled instead */
         syncContacts?: boolean;
         defaultAllowPaymentAddition?: boolean;
+        customExchangeRates?: Record<string, number>; // Keep for legacy if needed
     };
     settings?: {
         contactSyncEnabled: boolean;
@@ -47,8 +81,9 @@ export interface Contact {
 // PAID: Fully settled
 // HIDDEN/AUTO_HIDDEN: User archived/hidden (soft states)
 // ARCHIVED: User manually archived
+// DISPUTED: User rejected the debt as "not mine"
 // Note: REJECTED states kept for backwards compatibility with existing data
-export type DebtStatus = 'PENDING' | 'ACTIVE' | 'PAID' | 'REJECTED' | 'HIDDEN' | 'REJECTED_BY_RECEIVER' | 'AUTO_HIDDEN' | 'ARCHIVED';
+export type DebtStatus = 'PENDING' | 'ACTIVE' | 'PAID' | 'REJECTED' | 'HIDDEN' | 'REJECTED_BY_RECEIVER' | 'AUTO_HIDDEN' | 'ARCHIVED' | 'DISPUTED';
 
 // Debt Type for Dual-Layer Architecture
 export type DebtType = 'ONE_TIME' | 'INSTALLMENT' | 'LEDGER';
@@ -77,10 +112,8 @@ export interface Debt {
     createdAt: Timestamp;
     createdBy: string;
     installments?: Installment[];
-    // No soft delete - use hard delete within grace period
     // [REMOVED] isDeleted, deletedAt
     canBorrowerAddPayment?: boolean;
-    // [REMOVED] allow_counterparty_edit - security hole, never used
     lockedPhoneNumber?: string; // Immutable E.164 phone number for recovery/display
 
     // New fields for Unilateral Logic
@@ -89,6 +122,19 @@ export interface Debt {
 
     // Dual-Layer Architecture
     type?: DebtType; // Default: 'ONE_TIME', 'LEDGER' for shared stream
+
+    // Blueprint v1 Fields
+    attachments?: Attachment[];
+    editHistory?: AmountHistory[];
+    customExchangeRate?: number;
+    archivedAt?: Timestamp;
+    isArchived?: boolean;
+    auditMeta?: AuditMeta;
+    dispute?: {
+        reason: string;
+        at: Timestamp;
+        by: string;
+    };
 }
 
 export type PaymentLogType = 'INITIAL_CREATION' | 'PAYMENT' | 'NOTE_ADDED' | 'PAYMENT_DECLARATION' | 'HARD_RESET';
@@ -104,6 +150,9 @@ export interface PaymentLog {
     note?: string;
     status?: 'PENDING' | 'APPROVED' | 'REJECTED';
     installmentId?: string;
+    attachments?: Attachment[]; // ✅ New
+    auditMeta?: AuditMeta; // ✅ New
+    method?: 'CASH' | 'IBAN' | 'CREDIT_CARD' | 'OTHER'; // ✅ New
 }
 
 export interface DisplayProfile {
@@ -130,5 +179,7 @@ export interface Transaction {
     createdAt: Timestamp;
     createdBy: string; // UID of who created this entry
     type: 'SIMPLE';
+    attachments?: Attachment[]; // ✅ New
+    auditMeta?: AuditMeta; // ✅ New
 }
 

@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { User, ShieldCheck, BookUser } from 'lucide-react';
 import clsx from 'clsx';
 import { doc, getDoc } from 'firebase/firestore';
@@ -15,11 +15,15 @@ interface AvatarProps {
 
 export const Avatar: React.FC<AvatarProps> = ({ name, photoURL, uid, size = 'md', className, status = 'none' }) => {
     const [livePhotoURL, setLivePhotoURL] = useState<string | undefined>(photoURL);
+    const prevPhotoURLRef = useRef(photoURL);
 
     // Live Fetch Logic
     useEffect(() => {
-        // Always prefer local prop initially to prevent flash
-        setLivePhotoURL(photoURL);
+        // Only update if photoURL prop actually changed (not on every render)
+        if (photoURL !== prevPhotoURLRef.current) {
+            setLivePhotoURL(photoURL);
+            prevPhotoURLRef.current = photoURL;
+        }
 
         if (!uid) return;
 
@@ -32,7 +36,7 @@ export const Avatar: React.FC<AvatarProps> = ({ name, photoURL, uid, size = 'md'
                         setLivePhotoURL(data.photoURL);
                     }
                 }
-            } catch (error) {
+            } catch {
                 // cloud fail, ignore
             }
         };

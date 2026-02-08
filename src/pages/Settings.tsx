@@ -58,7 +58,7 @@ export const Settings = () => {
     const userSyncPref = user?.preferences?.syncContacts;
     
     // Pattern to sync state from props (derived state)
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
     const [prevPref, setPrevPref] = useState(userSyncPref);
     
     if (userSyncPref !== prevPref) {

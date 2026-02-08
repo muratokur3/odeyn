@@ -3,9 +3,10 @@
  * Simple modal for adding Cari transactions (Verdim/Aldım)
  */
 
-import { useState } from 'react';
-import { X, ArrowUpRight, ArrowDownLeft } from 'lucide-react';
+import { useState, useEffect } from 'react';
+import { X, ArrowUpRight, ArrowDownLeft, CheckCircle2 } from 'lucide-react';
 import { addLedgerTransaction, getOrCreateLedger } from '../services/transactionService';
+import { getDebtsBetweenParticipants, makePayment } from '../services/db';
 import { useAuth } from '../hooks/useAuth';
 import { useModal } from '../context/ModalContext';
 import clsx from 'clsx';
@@ -40,6 +41,68 @@ export const QuickTransactionModal: React.FC<QuickTransactionModalProps> = ({
     const [description, setDescription] = useState('');
     const [direction, setDirection] = useState<TransactionDirection>('OUTGOING');
     const [submitting, setSubmitting] = useState(false);
+    const [availableDebts, setAvailableDebts] = useState<any[]>([]);
+    const [matchedDebt, setMatchedDebt] = useState<any | null>(null);
+
+    // Fetch debts for Smart Matching
+    useEffect(() => {
+        const fetchDebts = async () => {
+            if (isOpen && user && otherPartyId) {
+                try {
+                    const debts = await getDebtsBetweenParticipants(user.uid, otherPartyId);
+                    setAvailableDebts(debts);
+                } catch (err) {
+                    console.error("Smart matching fetch failed:", err);
+                }
+            }
+        };
+        fetchDebts();
+    }, [isOpen, user, otherPartyId]);
+
+    // Perform Matching Logic
+    useEffect(() => {
+        const numAmount = parseFloat(amount.replace(',', '.'));
+        if (isNaN(numAmount) || numAmount <= 0 || availableDebts.length === 0) {
+            setMatchedDebt(null);
+            return;
+        }
+
+        // Find a debt that matches the amount exactly or nearly
+        // Direction check: 
+        // If Verdim (OUTGOING) -> Match where I am the Borrower (I'm paying my debt)
+        // If Aldım (INCOMING) -> Match where I am the Lender (They are paying me)
+        const match = availableDebts.find(d => {
+            const isMyBorrowing = d.borrowerId === user?.uid;
+            const isMyLending = d.lenderId === user?.uid;
+            const amountMatches = Math.abs(d.remainingAmount - numAmount) < 1;
+
+            if (direction === 'OUTGOING' && isMyBorrowing && amountMatches) return true;
+            if (direction === 'INCOMING' && isMyLending && amountMatches) return true;
+            return false;
+        });
+
+        setMatchedDebt(match || null);
+    }, [amount, direction, availableDebts, user?.uid]);
+
+    const handleSmartPay = async () => {
+        if (!matchedDebt || !user) return;
+        setSubmitting(true);
+        try {
+            const numAmount = parseFloat(amount.replace(',', '.'));
+            await makePayment(
+                matchedDebt.id, 
+                numAmount, 
+                user.uid, 
+                description || 'Hızlı ödeme eşleşmesi'
+            );
+            showAlert("Başarılı", "Ödeme borç kaydıyla eşleştirilerek yapıldı.", "success");
+            onClose();
+        } catch (err) {
+            showAlert("Hata", "Eşleştirme sırasında hata oluştu.", "error");
+        } finally {
+            setSubmitting(false);
+        }
+    };
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -182,6 +245,28 @@ export const QuickTransactionModal: React.FC<QuickTransactionModalProps> = ({
                                 autoFocus
                             />
                         </div>
+
+                        {/* Smart Match Suggestion */}
+                        {matchedDebt && (
+                            <div className="bg-primary/10 border border-primary/20 rounded-xl p-4 animate-in slide-in-from-top-2">
+                                <div className="flex items-start gap-3">
+                                    <CheckCircle2 className="text-primary mt-0.5" size={18} />
+                                    <div className="flex-1">
+                                        <p className="text-sm font-semibold text-text-primary">Eşleşen Borç Bulundu</p>
+                                        <p className="text-xs text-text-secondary mt-1">
+                                            Bu tutar, bekleyen bir borç '{matchedDebt.note || 'Borç'}' ile eşleşiyor.
+                                        </p>
+                                        <button
+                                            type="button"
+                                            onClick={handleSmartPay}
+                                            className="mt-3 text-xs font-bold text-primary hover:underline flex items-center gap-1"
+                                        >
+                                            Borca Ödeme Olarak Kaydet →
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
                         {/* Description */}
                         <div>

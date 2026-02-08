@@ -1,11 +1,13 @@
 import { useState, useEffect, useMemo } from 'react';
-import { Calculator, ArrowRightLeft, Delete } from 'lucide-react';
+import { Calculator, ArrowRightLeft, Delete, Download, FileSpreadsheet } from 'lucide-react';
 import { fetchRates, convertToTRY, type CurrencyRates } from '../services/currency';
 import { formatCurrency } from '../utils/format';
+import { useDebts } from '../hooks/useDebts';
+import { exportDebtsToCSV } from '../utils/export';
 import { clsx } from 'clsx';
 
 export const Tools = () => {
-    const [activeTab, setActiveTab] = useState<'CALCULATOR' | 'CONVERTER'>('CALCULATOR');
+    const [activeTab, setActiveTab] = useState<'CALCULATOR' | 'CONVERTER' | 'EXPORT'>('CALCULATOR');
 
     return (
         <div className="min-h-[calc(100dvh-6rem)] flex flex-col pt-4 pb-0 bg-background transition-colors duration-200">
@@ -34,10 +36,22 @@ export const Tools = () => {
                         <ArrowRightLeft size={18} />
                         Çevirici
                     </button>
+                    <button
+                        onClick={() => setActiveTab('EXPORT')}
+                        className={clsx(
+                            "flex-1 py-2 rounded-lg text-sm font-medium transition-all flex items-center justify-center gap-2",
+                            activeTab === 'EXPORT' ? "bg-background text-primary shadow-sm ring-1 ring-black/5 dark:ring-white/5" : "text-text-secondary hover:text-text-primary"
+                        )}
+                    >
+                        <Download size={18} />
+                        Dışa Aktar
+                    </button>
                 </div>
 
                 <div className="animate-in fade-in zoom-in-95 duration-300">
-                    {activeTab === 'CALCULATOR' ? <CalculatorView /> : <ConverterView />}
+                    {activeTab === 'CALCULATOR' && <CalculatorView />}
+                    {activeTab === 'CONVERTER' && <ConverterView />}
+                    {activeTab === 'EXPORT' && <ExportView />}
                 </div>
             </div>
         </div>
@@ -254,6 +268,37 @@ const ConverterView = () => {
                 <p className="text-xs text-text-secondary mt-2 opacity-60 font-medium">
                     * Döviz kurları anlık değişiklik gösterebilir.
                 </p>
+            </div>
+        </div>
+    );
+};
+
+const ExportView = () => {
+    const { allDebts } = useDebts();
+
+    const handleExport = () => {
+        if (allDebts.length === 0) {
+            alert('Dışa aktarılacak borç bulunamadı.');
+            return;
+        }
+        exportDebtsToCSV(allDebts);
+    };
+
+    return (
+        <div className="w-full space-y-6">
+            <div className="bg-surface p-6 rounded-2xl border border-border shadow-sm text-center">
+                <FileSpreadsheet size={48} className="mx-auto mb-4 text-primary" />
+                <h3 className="text-lg font-bold text-text-primary mb-2">Borçları Dışa Aktar</h3>
+                <p className="text-sm text-text-secondary mb-4">
+                    Tüm borçlarınızı CSV formatında dışa aktarın.
+                </p>
+                <button
+                    onClick={handleExport}
+                    disabled={allDebts.length === 0}
+                    className="w-full px-6 py-3 bg-primary text-white rounded-xl font-medium hover:bg-primary/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all active:scale-95"
+                >
+                    {allDebts.length} Borcu Dışa Aktar
+                </button>
             </div>
         </div>
     );

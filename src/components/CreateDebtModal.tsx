@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
-import { X, FileText, ChevronDown, ChevronUp, Plus, Search, Ban, RefreshCw, MessageCircle, AlertTriangle } from 'lucide-react';
+import { X, FileText, ChevronDown, ChevronUp, Plus, Search, Ban, RefreshCw, MessageCircle, AlertTriangle, Paperclip, Trash2, File as FileIcon } from 'lucide-react';
 import { Avatar } from './Avatar';
 import { SelectedUserCard } from './SelectedUserCard';
 
 import { searchUserByPhone, searchContacts, createDebt, updateDebtHardReset } from '../services/db';
 import { getOrCreateLedger, addLedgerTransaction } from '../services/transactionService';
+import { uploadDebtAttachment } from '../services/storage';
 import { formatCurrency } from '../utils/format';
 import { formatPhoneForDisplay, cleanPhone } from '../utils/phoneUtils';
 import type { User, Contact, Installment, Debt } from '../types';
@@ -96,6 +97,13 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
     const [isInstallment, setIsInstallment] = useState(false);
     const [installmentCount, setInstallmentCount] = useState(1);
     const [downPayment, setDownPayment] = useState('');
+
+    // Custom Rate
+    const [manualRate, setManualRate] = useState('');
+    const [useManualRate, setUseManualRate] = useState(false);
+
+    // Attachments
+    const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
 
     // Blocked check
     const [isTargetBlocked, setIsTargetBlocked] = useState(false);
@@ -408,6 +416,20 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
 
         setLoading(true);
         try {
+            // --- UPLOAD ATTACHMENTS ---
+            const attachmentsToSave: unknown[] = [];
+            if (selectedFiles.length > 0) {
+                // We need a temporary or final debt ID for storage path.
+                // In create mode, we don't have it yet.
+                // Using a random seed for temp path or using 'temp'
+                const tempId = editMode ? initialData?.id || 'new' : `new-${Date.now()}`;
+                
+                for (const file of selectedFiles) {
+                    const result = await uploadDebtAttachment(file, tempId, user.uid);
+                    attachmentsToSave.push(result);
+                }
+            }
+
             let generatedInstallments: Installment[] | undefined;
             if (isInstallment && installmentCount > 1) {
                 generatedInstallments = [];
@@ -760,33 +782,102 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                                     required
                                 />
                             </div>
-                            <div className="w-1/3">
+                            <div className="w-24">
                                 <label className="block text-sm font-medium text-text-secondary mb-1">Para Birimi</label>
                                 <select
                                     value={currency}
                                     onChange={(e) => setCurrency(e.target.value)}
                                     disabled={isTargetBlocked}
-                                    className="w-full px-4 py-3 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary focus:ring-2 focus:ring-blue-900/50 outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed"
+                                    className="w-full px-3 py-3 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary focus:ring-2 focus:ring-blue-900/50 outline-none transition-all font-bold disabled:opacity-50 disabled:cursor-not-allowed"
                                 >
-                                    <option value="TRY">TRY</option>
-                                    <option value="USD">USD</option>
-                                    <option value="EUR">EUR</option>
-                                    <option value="GOLD">Altın (Gr)</option>
+                                    <option value="TRY">₺</option>
+                                    <option value="USD">$</option>
+                                    <option value="EUR">€</option>
                                 </select>
                             </div>
                         </div>
 
-                        {/* Note Field - Moved Here */}
+                        {/* Custom Rate Input */}
+                        {currency !== 'TRY' && (
+                            <div className="p-3 bg-orange-50 dark:bg-orange-900/10 rounded-xl border border-orange-200 dark:border-orange-800 animate-in fade-in transition-all">
+                                <div className="flex items-center justify-between mb-2">
+                                    <label className="text-xs font-bold text-orange-700 dark:text-orange-300">Özel Kur Kullan</label>
+                                    <Toggle 
+                                        checked={useManualRate} 
+                                        onChange={setUseManualRate}
+                                    />
+                                </div>
+                                {useManualRate && (
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-sm text-text-secondary">1 {currency} =</span>
+                                        <input
+                                            type="number"
+                                            value={manualRate}
+                                            onChange={(e) => setManualRate(e.target.value)}
+                                            step="0.01"
+                                            className="flex-1 px-3 py-2 rounded-lg border border-orange-300 dark:border-orange-700 bg-white dark:bg-slate-800 text-sm font-bold text-text-primary outline-none focus:ring-1 focus:ring-orange-500"
+                                            placeholder="Örn: 34.50"
+                                        />
+                                        <span className="text-sm text-text-secondary">TRY</span>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+
+                        {/* Note & Attachments */}
                         <div>
-                            <label className="block text-sm font-medium text-text-secondary mb-1">Not</label>
+                            <div className="flex justify-between items-center mb-1">
+                                <label className="block text-sm font-medium text-text-secondary">Not</label>
+                                <button 
+                                    type="button"
+                                    onClick={() => document.getElementById('debt-file-input')?.click()}
+                                    className="flex items-center gap-1 text-xs text-blue-600 font-bold hover:text-blue-700"
+                                >
+                                    <Paperclip size={14} /> Dosya Ekle
+                                </button>
+                                <input 
+                                    id="debt-file-input"
+                                    type="file"
+                                    multiple
+                                    accept="image/*,application/pdf"
+                                    className="hidden"
+                                    onChange={(e) => {
+                                        if (e.target.files) {
+                                            setSelectedFiles(prev => [...prev, ...Array.from(e.target.files!)]);
+                                        }
+                                    }}
+                                />
+                            </div>
                             <textarea
                                 value={note}
                                 onChange={(e) => setNote(e.target.value)}
                                 rows={2}
                                 disabled={isTargetBlocked}
-                                className="w-full px-4 py-3 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary focus:ring-2 focus:ring-blue-900/50 outline-none transition-all resize-none disabled:opacity-50 disabled:cursor-not-allowed"
+                                className="w-full px-4 py-3 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary focus:ring-2 focus:ring-blue-900/50 outline-none transition-all resize-none disabled:opacity-50 disabled:cursor-not-allowed mb-2"
                                 placeholder="İşlem ile ilgili not..."
                             />
+
+                            {/* Selected Files Preview */}
+                            {selectedFiles.length > 0 && (
+                                <div className="space-y-2 mb-4">
+                                    {selectedFiles.map((file, idx) => (
+                                        <div key={idx} className="flex items-center justify-between p-2 bg-slate-800/50 rounded-lg border border-slate-700">
+                                            <div className="flex items-center gap-2 overflow-hidden">
+                                                <FileIcon size={16} className="text-blue-500 shrink-0" />
+                                                <span className="text-xs text-text-primary truncate">{file.name}</span>
+                                                <span className="text-[10px] text-text-secondary">({(file.size / 1024).toFixed(0)} KB)</span>
+                                            </div>
+                                            <button 
+                                                type="button"
+                                                onClick={() => setSelectedFiles(prev => prev.filter((_, i) => i !== idx))}
+                                                className="p-1 hover:bg-red-500/20 rounded-full text-red-500"
+                                            >
+                                                <Trash2 size={14} />
+                                            </button>
+                                        </div>
+                                    ))}
+                                </div>
+                            )}
                         </div>
 
 
