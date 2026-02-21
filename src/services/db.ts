@@ -83,17 +83,23 @@ async function updateContactActivity(actorId: string, targetId: string, message:
         }
 
         // 2. Update TARGET'S view of ACTOR (Them -> Me) -> Unread: true
-        if (targetIsUid) {
-            const targetContactId = await findContactDocId(targetId, actorId, true);
-            if (targetContactId) {
-                const ref = doc(db, 'users', targetId, 'contacts', targetContactId);
-                await updateDoc(ref, {
-                    lastActivityMessage: message,
-                    lastActivityAt: timestamp,
-                    hasUnreadActivity: true, // They have unread activity from ME
-                    lastActorId: actorId
-                });
-            }
+        let resolvedTargetId = targetId;
+        if (!targetIsUid) {
+            // If targetId is a phone number, try to resolve to UID for contact lookup
+            const { resolvePhoneToUid } = await import('./identity');
+            const uid = await resolvePhoneToUid(targetId);
+            if (uid) resolvedTargetId = uid;
+        }
+
+        const targetContactId = await findContactDocId(resolvedTargetId, actorId, true);
+        if (targetContactId) {
+            const ref = doc(db, 'users', resolvedTargetId, 'contacts', targetContactId);
+            await updateDoc(ref, {
+                lastActivityMessage: message,
+                lastActivityAt: timestamp,
+                hasUnreadActivity: true, // They have unread activity from ME
+                lastActorId: actorId
+            });
         }
     } catch (error) {
         console.error("Error updating activity feed:", error);
@@ -106,9 +112,9 @@ export const addContact = async (currentUserId: string, name: string, phoneNumbe
             throw new Error(`Geçersiz telefon formatı: ${phoneNumber}. Lütfen E.164 formatında (+ÜlkeKoduNumara) giriniz.`);
         }
         const cleanPhone = phoneNumber; // Already valid E.164
-        
+
         const contactsRef = collection(db, 'users', currentUserId, 'contacts');
-        
+
         const contactData: Record<string, unknown> = {
             name,
             phoneNumber: cleanPhone,
@@ -156,40 +162,40 @@ export const normalizeAllUserContacts = async (userId: string): Promise<number> 
     try {
         const contactsRef = collection(db, 'users', userId, 'contacts');
         const snapshot = await getDocs(contactsRef);
-        
+
         let fixedCount = 0;
         const batch = writeBatch(db);
-        
+
         // Import standardizeRawPhone for fallback normalization
         const { standardizeRawPhone } = await import('../utils/phoneUtils');
-        
+
         snapshot.docs.forEach(docSnap => {
             const data = docSnap.data();
             const originalPhone = data.phoneNumber || '';
-            
+
             // Try cleanPhoneNumber first (strict E.164 parser)
             let normalizedPhone = cleanPhoneNumber(originalPhone);
-            
+
             // If that fails, try standardizeRawPhone (more lenient)
             if (!normalizedPhone) {
                 normalizedPhone = standardizeRawPhone(originalPhone);
             }
-            
+
             // If the phone is NOT in E.164 format or differs after cleaning
             if (normalizedPhone && normalizedPhone !== originalPhone) {
-                batch.update(docSnap.ref, { 
+                batch.update(docSnap.ref, {
                     phoneNumber: normalizedPhone,
                     updatedAt: serverTimestamp()
                 });
                 fixedCount++;
             }
         });
-        
+
         if (fixedCount > 0) {
             await batch.commit();
             console.log(`[Cleanup] Normalized ${fixedCount} contacts for ${userId}`);
         }
-        
+
         return fixedCount;
     } catch (error) {
         console.error("Error normalizing contacts:", error);
@@ -239,13 +245,13 @@ export const createDebt = async (
     canBorrowerAddPayment?: boolean,
     // requestApproval removed
     initialPayment: number = 0
-    ) => {
-        const isLending = type === 'LENDING';
+) => {
+    const isLending = type === 'LENDING';
 
     // --- 1. STRICT E.164 ENFORCEMENT ---
     let finalTargetId = targetUserId;
     let cleanTarget: string | null = null;
-    
+
     if (targetUserId.length < 20) {
         if (!isValidPhone(targetUserId)) {
             throw new Error(`Geçersiz telefon formatı: ${targetUserId}. Borç oluşturmak için geçerli bir E.164 numarası gereklidir.`);
@@ -265,176 +271,176 @@ export const createDebt = async (
     }
     // ------------------------------------
 
-        const lenderId = isLending ? currentUserId : finalTargetId;
-        const lenderName = isLending ? currentUserName : targetUserName;
-        const borrowerId = isLending ? finalTargetId : currentUserId;
-        const borrowerName = isLending ? targetUserName : currentUserName;
+    const lenderId = isLending ? currentUserId : finalTargetId;
+    const lenderName = isLending ? currentUserName : targetUserName;
+    const borrowerId = isLending ? finalTargetId : currentUserId;
+    const borrowerName = isLending ? targetUserName : currentUserName;
 
-        // CHECK PREFERENCES & FETCH USER DATA
-        const counterpartyId = isLending ? borrowerId : lenderId;
+    // CHECK PREFERENCES & FETCH USER DATA
+    const counterpartyId = isLending ? borrowerId : lenderId;
 
-        // BLOCK CHECK:
+    // BLOCK CHECK:
+    if (counterpartyId.length > 20) {
+        const isBlocked = await checkBlockStatus(currentUserId, counterpartyId);
+        if (isBlocked) {
+            throw new Error("Cannot create debt. User is blocked or has blocked you.");
+        }
+    }
+
+    // UNILATERAL LOGIC: Default to ACTIVE.
+    // CHECK IF CREATOR IS MUTED BY TARGET
+    let initialStatus: DebtStatus = 'ACTIVE';
+    let isMuted = false;
+
+    if (counterpartyId.length > 20) {
+        // Check if I am muted by the target
+        // We use the helper we just added (need to ensure it's available or inline logic)
+        // Since we are inside db.ts, we can call use the logic directly or call the function if it was hoisted.
+        // But createDebt is above isCreatorMutedByTarget. So we must inline or move function up.
+        // Let's inline the check for safety as moving functions in large file is risky for diffs.
+        const targetUserRef = doc(db, 'users', counterpartyId);
+        const targetSnap = await getDoc(targetUserRef);
+        if (targetSnap.exists()) {
+            const targetData = targetSnap.data() as User;
+            if (targetData.mutedCreators?.includes(currentUserId)) {
+                initialStatus = 'AUTO_HIDDEN';
+                isMuted = true;
+            }
+        }
+    }
+
+    // Calculate amounts
+    const remainingAmount = amount - initialPayment;
+    // If remaining is 0 and status was ACTIVE/AUTO_HIDDEN, it becomes PAID immediately.
+    if (remainingAmount <= 0) {
+        // If fully paid initially, it's just a record.
+        initialStatus = 'PAID';
+    } else if (amount > remainingAmount && remainingAmount > 0) {
+        // Partial payment at start
+        // Status remains ACTIVE or AUTO_HIDDEN unless defined otherwise.
+        // Default initialStatus is 'ACTIVE' for all debts
+        initialStatus = 'ACTIVE';
+        // WAIT: If it is AUTO_HIDDEN, it should stay AUTO_HIDDEN even if partially paid?
+        // The requirement says: "If User A is in muted list -> Create with { status: 'AUTO_HIDDEN', isMuted: true }"
+        // Logic: If fully paid, it's history. If debt exists, it's hidden.
+        if (isMuted) initialStatus = 'AUTO_HIDDEN';
+    }
+
+    // Determine Contact Phone for Locking & Auto-Add
+    let contactPhone = '';
+    if (counterpartyId.length <= 15) {
+        // It's already a phone number
+        contactPhone = counterpartyId;
+    } else {
+        // It's a UID.
+        // 1. Try to get phone from actual user profile (we might need to fetch if not fetched above)
+        // We fetched targetSnap above if ID > 20.
+        let foundUserData: User | null = null;
         if (counterpartyId.length > 20) {
-            const isBlocked = await checkBlockStatus(currentUserId, counterpartyId);
-            if (isBlocked) {
-                throw new Error("Cannot create debt. User is blocked or has blocked you.");
-            }
+            // We fetched it for mute check?
+            // Let's re-use or re-fetch loosely. 
+            // Actually we can just query again or trust the previous block.
+            // Ideally we should have fetched user data once.
+            const uDoc = await getDoc(doc(db, 'users', counterpartyId));
+            if (uDoc.exists()) foundUserData = uDoc.data() as User;
         }
 
-        // UNILATERAL LOGIC: Default to ACTIVE.
-        // CHECK IF CREATOR IS MUTED BY TARGET
-        let initialStatus: DebtStatus = 'ACTIVE';
-        let isMuted = false;
-
-        if (counterpartyId.length > 20) {
-            // Check if I am muted by the target
-            // We use the helper we just added (need to ensure it's available or inline logic)
-            // Since we are inside db.ts, we can call use the logic directly or call the function if it was hoisted.
-            // But createDebt is above isCreatorMutedByTarget. So we must inline or move function up.
-            // Let's inline the check for safety as moving functions in large file is risky for diffs.
-            const targetUserRef = doc(db, 'users', counterpartyId);
-            const targetSnap = await getDoc(targetUserRef);
-            if (targetSnap.exists()) {
-                const targetData = targetSnap.data() as User;
-                if (targetData.mutedCreators?.includes(currentUserId)) {
-                    initialStatus = 'AUTO_HIDDEN';
-                    isMuted = true;
-                }
-            }
+        if (foundUserData && foundUserData.primaryPhoneNumber) {
+            contactPhone = foundUserData.primaryPhoneNumber;
         }
-
-        // Calculate amounts
-        const remainingAmount = amount - initialPayment;
-        // If remaining is 0 and status was ACTIVE/AUTO_HIDDEN, it becomes PAID immediately.
-        if (remainingAmount <= 0) {
-            // If fully paid initially, it's just a record.
-            initialStatus = 'PAID';
-        } else if (amount > remainingAmount && remainingAmount > 0) {
-            // Partial payment at start
-            // Status remains ACTIVE or AUTO_HIDDEN unless defined otherwise.
-            // Default initialStatus is 'ACTIVE' for all debts
-            initialStatus = 'ACTIVE';
-            // WAIT: If it is AUTO_HIDDEN, it should stay AUTO_HIDDEN even if partially paid?
-            // The requirement says: "If User A is in muted list -> Create with { status: 'AUTO_HIDDEN', isMuted: true }"
-            // Logic: If fully paid, it's history. If debt exists, it's hidden.
-            if (isMuted) initialStatus = 'AUTO_HIDDEN';
+        // 2. Fallback
+        else if ((targetUserId.length <= 15 || targetUserId.startsWith('+')) && cleanTarget) {
+            contactPhone = cleanTarget;
         }
-
-        // Determine Contact Phone for Locking & Auto-Add
-        let contactPhone = '';
-        if (counterpartyId.length <= 15) {
-            // It's already a phone number
-            contactPhone = counterpartyId;
-        } else {
-            // It's a UID.
-            // 1. Try to get phone from actual user profile (we might need to fetch if not fetched above)
-            // We fetched targetSnap above if ID > 20.
-            let foundUserData: User | null = null;
-            if (counterpartyId.length > 20) {
-                // We fetched it for mute check?
-                // Let's re-use or re-fetch loosely. 
-                // Actually we can just query again or trust the previous block.
-                // Ideally we should have fetched user data once.
-                const uDoc = await getDoc(doc(db, 'users', counterpartyId));
-                if (uDoc.exists()) foundUserData = uDoc.data() as User;
-            }
-
-            if (foundUserData && foundUserData.primaryPhoneNumber) {
-                contactPhone = foundUserData.primaryPhoneNumber;
-            }
-            // 2. Fallback
-            else if ((targetUserId.length <= 15 || targetUserId.startsWith('+')) && cleanTarget) {
-                contactPhone = cleanTarget;
-            }
-        }
+    }
 
 
-        const debtData = {
-            lenderId,
-            lenderName,
-            borrowerId,
-            borrowerName,
-            originalAmount: amount,
-            remainingAmount: remainingAmount,
-            currency,
-            status: initialStatus,
-            participants: [lenderId, borrowerId],
-            createdAt: serverTimestamp(),
-            createdBy: currentUserId,
-            ...(dueDate && { dueDate: Timestamp.fromDate(dueDate) }),
-            ...(note && { note }),
-            ...(installments && { installments }),
-            ...(canBorrowerAddPayment && { canBorrowerAddPayment }),
-            ...(contactPhone && { lockedPhoneNumber: contactPhone }), // Always lock phone number if available
-            // New Fields
-            ...(isMuted && { isMuted: true }),
-            auditMeta: { // ✅ Added Audit Log
-                actorId: currentUserId,
-                timestamp: serverTimestamp(),
-                platform: 'Web',
-                deviceId: 'browser-' + Math.random().toString(36).substring(7) // Temp placeholder
-            }
-        };
-
-        // Use batch or transaction? 
-        // Simple addDoc is fine, but we need logs.
-        // Let's use runTransaction or just batch to be safe, but since createDebt was simple, 
-        // we can just stick to addDoc + subcollection adds. Atomic is better but for MVP...
-        // Actually, let's keep it simple as implemented before.
-
-        const docRef = await addDoc(collection(db, 'debts'), debtData);
-
-        const batch = writeBatch(db); // Firestore batch for logs
-
-        // Log 1: Creation
-        const log1Ref = doc(collection(db, `debts/${docRef.id}/logs`));
-        batch.set(log1Ref, { // Using setDoc for specific ID if generated, or just addDoc. Batch needs ref.
-            type: 'INITIAL_CREATION',
-            previousRemaining: amount,
-            newRemaining: amount,
-            performedBy: currentUserId,
+    const debtData = {
+        lenderId,
+        lenderName,
+        borrowerId,
+        borrowerName,
+        originalAmount: amount,
+        remainingAmount: remainingAmount,
+        currency,
+        status: initialStatus,
+        participants: [lenderId, borrowerId],
+        createdAt: serverTimestamp(),
+        createdBy: currentUserId,
+        ...(dueDate && { dueDate: Timestamp.fromDate(dueDate) }),
+        ...(note && { note }),
+        ...(installments && { installments }),
+        ...(canBorrowerAddPayment && { canBorrowerAddPayment }),
+        ...(contactPhone && { lockedPhoneNumber: contactPhone }), // Always lock phone number if available
+        // New Fields
+        ...(isMuted && { isMuted: true }),
+        auditMeta: { // ✅ Added Audit Log
+            actorId: currentUserId,
             timestamp: serverTimestamp(),
-            note: 'Borç oluşturuldu',
-        });
-
-        // Log 2: Initial Payment (if any)
-        if (initialPayment > 0) {
-            const log2Ref = doc(collection(db, `debts/${docRef.id}/logs`));
-            batch.set(log2Ref, {
-                type: 'PAYMENT',
-                amountPaid: initialPayment,
-                previousRemaining: amount,
-                newRemaining: remainingAmount,
-                performedBy: currentUserId,
-                timestamp: serverTimestamp(), // Ideally slightly after, but serverTimestamp is resolution
-                note: 'Peşinat / İlk Ödeme'
-            });
+            platform: 'Web',
+            deviceId: 'browser-' + Math.random().toString(36).substring(7) // Temp placeholder
         }
-
-        await batch.commit();
-
-        // Auto-Contact Creation Logic
-        // If I am the Creator (always true here as currentUserId), and the counterparty is NOT me
-        if (currentUserId) {
-            const counterpartyId = isLending ? borrowerId : lenderId;
-            const counterpartyName = isLending ? borrowerName : lenderName;
-
-            // Activity Feed
-            updateContactActivity(currentUserId, counterpartyId, 'Borç eklendi');
-
-            // If counterparty is a phone number or a user that might not be in my contacts
-            // We blindly try to add/update contact. addContact handles duplicates nicely.
-            // We use the cleaned phone for the ID check if possible.
-
-            if (contactPhone) {
-                // Fire and forget contact addition to ensure names show up in Dashboard
-                addContact(currentUserId, counterpartyName, contactPhone, counterpartyId.length > 20 ? counterpartyId : undefined)
-                    .catch(err => console.error("Auto-add contact failed", err));
-            }
-        }
-
-        return docRef.id;
     };
+
+    // Use batch or transaction? 
+    // Simple addDoc is fine, but we need logs.
+    // Let's use runTransaction or just batch to be safe, but since createDebt was simple, 
+    // we can just stick to addDoc + subcollection adds. Atomic is better but for MVP...
+    // Actually, let's keep it simple as implemented before.
+
+    const docRef = await addDoc(collection(db, 'debts'), debtData);
+
+    const batch = writeBatch(db); // Firestore batch for logs
+
+    // Log 1: Creation
+    const log1Ref = doc(collection(db, `debts/${docRef.id}/logs`));
+    batch.set(log1Ref, { // Using setDoc for specific ID if generated, or just addDoc. Batch needs ref.
+        type: 'INITIAL_CREATION',
+        previousRemaining: amount,
+        newRemaining: amount,
+        performedBy: currentUserId,
+        timestamp: serverTimestamp(),
+        note: 'Borç oluşturuldu',
+    });
+
+    // Log 2: Initial Payment (if any)
+    if (initialPayment > 0) {
+        const log2Ref = doc(collection(db, `debts/${docRef.id}/logs`));
+        batch.set(log2Ref, {
+            type: 'PAYMENT',
+            amountPaid: initialPayment,
+            previousRemaining: amount,
+            newRemaining: remainingAmount,
+            performedBy: currentUserId,
+            timestamp: serverTimestamp(), // Ideally slightly after, but serverTimestamp is resolution
+            note: 'Peşinat / İlk Ödeme'
+        });
+    }
+
+    await batch.commit();
+
+    // Auto-Contact Creation Logic
+    // If I am the Creator (always true here as currentUserId), and the counterparty is NOT me
+    if (currentUserId) {
+        const counterpartyId = isLending ? borrowerId : lenderId;
+        const counterpartyName = isLending ? borrowerName : lenderName;
+
+        // Activity Feed
+        updateContactActivity(currentUserId, counterpartyId, 'Borç eklendi');
+
+        // If counterparty is a phone number or a user that might not be in my contacts
+        // We blindly try to add/update contact. addContact handles duplicates nicely.
+        // We use the cleaned phone for the ID check if possible.
+
+        if (contactPhone) {
+            // Fire and forget contact addition to ensure names show up in Dashboard
+            addContact(currentUserId, counterpartyName, contactPhone, counterpartyId.length > 20 ? counterpartyId : undefined)
+                .catch(err => console.error("Auto-add contact failed", err));
+        }
+    }
+
+    return docRef.id;
+};
 
 /**
  * Hard Reset Update Logic.
@@ -535,10 +541,10 @@ export const updateDebtHardReset = async (
 };
 
 export const makePayment = async (
-    debtId: string, 
-    amount: number, 
-    performedBy: string, 
-    note?: string, 
+    debtId: string,
+    amount: number,
+    performedBy: string,
+    note?: string,
     installmentId?: string,
     method: 'CASH' | 'IBAN' | 'CREDIT_CARD' | 'OTHER' = 'CASH' // ✅ New
 ) => {
@@ -551,7 +557,7 @@ export const makePayment = async (
         }
 
         const debtData = debtDoc.data() as Debt;
-        
+
         // Auto-Correction for Desync:
         // If attempting to pay MORE than remaining (e.g. paying an outdated installment amount),
         // clamp the payment to the remaining amount.
@@ -569,7 +575,7 @@ export const makePayment = async (
         }
 
         if (newRemaining < 0) {
-             // Should not be reachable due to clamping, but safe to keep
+            // Should not be reachable due to clamping, but safe to keep
             throw new Error(`Payment amount (${efAmount}) exceeds remaining debt (${debtData.remainingAmount})!`);
         }
 
@@ -613,7 +619,12 @@ export const makePayment = async (
             remainingAmount: newRemaining,
             status: newStatus,
             updatedAt: serverTimestamp(),
-            ...(updatedInstallments && { installments: updatedInstallments })
+            ...(updatedInstallments && { installments: updatedInstallments }),
+            auditMeta: {
+                actorId: performedBy,
+                timestamp: serverTimestamp(),
+                platform: 'Web'
+            }
         });
 
         // Add payment log
@@ -636,68 +647,76 @@ export const makePayment = async (
         });
     });
 
-        // Activity Feed (After Transaction)
-        // We need debt details. Rerunning get or guessing?
-        // We know debtId. We can fetch strictly or just fire-and-forget if we knew participants.
-        // `makePayment` doesn't return participants.
-        // Let's fetch basic info to know who to notify.
-        const dSnap = await getDoc(doc(db, 'debts', debtId));
-        if (dSnap.exists()) {
-            const d = dSnap.data() as Debt;
-            const target = d.lenderId === performedBy ? d.borrowerId : d.lenderId;
-            updateContactActivity(performedBy, target, 'Ödeme yapıldı');
-        }
+    // Activity Feed (After Transaction)
+    // We need debt details. Rerunning get or guessing?
+    // We know debtId. We can fetch strictly or just fire-and-forget if we knew participants.
+    // `makePayment` doesn't return participants.
+    // Let's fetch basic info to know who to notify.
+    const dSnap = await getDoc(doc(db, 'debts', debtId));
+    if (dSnap.exists()) {
+        const d = dSnap.data() as Debt;
+        const target = d.lenderId === performedBy ? d.borrowerId : d.lenderId;
+        updateContactActivity(performedBy, target, 'Ödeme yapıldı');
+    }
 };
 
 // ... subscriptions ...
 
 export const respondToDebtRequest = async (debtId: string, status: 'ACTIVE' | 'REJECTED' | 'REJECTED_BY_RECEIVER', performedBy: string) => {
-        await runTransaction(db, async (transaction) => {
-            const debtRef = doc(db, 'debts', debtId);
-            const debtDoc = await transaction.get(debtRef);
+    await runTransaction(db, async (transaction) => {
+        const debtRef = doc(db, 'debts', debtId);
+        const debtDoc = await transaction.get(debtRef);
 
-            if (!debtDoc.exists()) {
-                throw new Error("Debt document does not exist!");
-            }
-
-            const debtData = debtDoc.data() as Debt;
-
-            // Update debt status
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            const updates: any = { status };
-            if (status === 'REJECTED_BY_RECEIVER') {
-                updates.rejectedAt = serverTimestamp();
-            }
-
-            transaction.update(debtRef, updates);
-
-            // Add log
-            const logRef = doc(collection(db, `debts/${debtId}/logs`));
-            let note = 'Durum güncellendi';
-            if (status === 'ACTIVE') note = 'Borç isteği onaylandı';
-            else if (status === 'REJECTED') note = 'Borç isteği reddedildi';
-            else if (status === 'REJECTED_BY_RECEIVER') note = 'Kayıt silindi/reddedildi (Soft Delete)';
-
-            transaction.set(logRef, {
-                type: 'NOTE_ADDED',
-                previousRemaining: debtData.remainingAmount,
-                newRemaining: debtData.remainingAmount,
-                performedBy,
-                timestamp: serverTimestamp(),
-                note
-            });
-        });
-
-        // Activity Feed
-        const dSnap = await getDoc(doc(db, 'debts', debtId));
-        if (dSnap.exists()) {
-            const d = dSnap.data() as Debt;
-            const target = d.lenderId === performedBy ? d.borrowerId : d.lenderId;
-            let msg = 'Borç durumu güncellendi';
-            if (status === 'ACTIVE') msg = 'Borç onaylandı';
-            else if (status === 'REJECTED') msg = 'Borç reddedildi';
-            updateContactActivity(performedBy, target, msg);
+        if (!debtDoc.exists()) {
+            throw new Error("Debt document does not exist!");
         }
+
+        const debtData = debtDoc.data() as Debt;
+
+        // Update debt status
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const updates: any = {
+            status,
+            updatedAt: serverTimestamp(),
+            auditMeta: {
+                actorId: performedBy,
+                timestamp: serverTimestamp(),
+                platform: 'Web'
+            }
+        };
+        if (status === 'REJECTED_BY_RECEIVER') {
+            updates.rejectedAt = serverTimestamp();
+        }
+
+        transaction.update(debtRef, updates);
+
+        // Add log
+        const logRef = doc(collection(db, `debts/${debtId}/logs`));
+        let note = 'Durum güncellendi';
+        if (status === 'ACTIVE') note = 'Borç isteği onaylandı';
+        else if (status === 'REJECTED') note = 'Borç isteği reddedildi';
+        else if (status === 'REJECTED_BY_RECEIVER') note = 'Kayıt silindi/reddedildi (Soft Delete)';
+
+        transaction.set(logRef, {
+            type: 'NOTE_ADDED',
+            previousRemaining: debtData.remainingAmount,
+            newRemaining: debtData.remainingAmount,
+            performedBy,
+            timestamp: serverTimestamp(),
+            note
+        });
+    });
+
+    // Activity Feed
+    const dSnap = await getDoc(doc(db, 'debts', debtId));
+    if (dSnap.exists()) {
+        const d = dSnap.data() as Debt;
+        const target = d.lenderId === performedBy ? d.borrowerId : d.lenderId;
+        let msg = 'Borç durumu güncellendi';
+        if (status === 'ACTIVE') msg = 'Borç onaylandı';
+        else if (status === 'REJECTED') msg = 'Borç reddedildi';
+        updateContactActivity(performedBy, target, msg);
+    }
 };
 
 export const searchUserByPhone = async (phoneNumber: string): Promise<User | null> => {
@@ -787,11 +806,11 @@ export const searchContacts = async (userId: string, searchQuery: string) => {
     try {
         const contacts = await getContacts(userId);
         const lowerQuery = searchQuery.toLowerCase();
-        
+
         // Import standardizeRawPhone for phone format matching
         const { standardizeRawPhone } = await import('../utils/phoneUtils');
         const normalizedQuery = standardizeRawPhone(searchQuery);
-        
+
         return contacts.filter(c =>
             c.name.toLowerCase().includes(lowerQuery) ||
             c.phoneNumber.includes(searchQuery) ||
@@ -826,42 +845,48 @@ export const claimLegacyDebts = async (userId: string, phoneNumber: string): Pro
         const debtsRef = collection(db, 'debts');
         // Use array-contains-any to find debts containing ANY of the possible formats in participants
         const q = query(debtsRef, where('participants', 'array-contains-any', possiblePhones));
-        
+
         const snapshot = await getDocs(q);
-        
+
         if (snapshot.empty) return 0;
-        
+
         const batch = writeBatch(db);
         let updateCount = 0;
-        
+
         snapshot.docs.forEach(docSnap => {
             const data = docSnap.data();
             const participants = data.participants || [];
-            
+
             // Filter out ANY of the matched phone formats, Add UID
             const updatedParticipants = participants.filter((p: string) => !possiblePhones.includes(p));
             if (!updatedParticipants.includes(userId)) updatedParticipants.push(userId);
-            
+
             const updates: Record<string, unknown> = {
-                participants: updatedParticipants
+                participants: updatedParticipants,
+                updatedAt: serverTimestamp(),
+                auditMeta: {
+                    actorId: userId,
+                    timestamp: serverTimestamp(),
+                    platform: 'Web'
+                }
             };
-            
+
             // Update lender/borrower if they match the phone number
             if (possiblePhones.includes(data.lenderId)) updates.lenderId = userId;
             if (possiblePhones.includes(data.borrowerId)) updates.borrowerId = userId;
-            
+
             // Normalize locked phone number
             updates.lockedPhoneNumber = cleanPhone;
-            
+
             batch.update(docSnap.ref, updates);
             updateCount++;
         });
-        
+
         if (updateCount > 0) {
             await batch.commit();
             console.log(`[GhostProtocol] ${updateCount} borç başarıyla üzerine alındı.`);
         }
-        
+
         return updateCount;
 
     } catch (error: any) { // eslint-disable-line @typescript-eslint/no-explicit-any
@@ -878,9 +903,9 @@ export const claimDebts = claimLegacyDebts;
  * Primarily used by Lenders to fix "Wrong Number" entries.
  */
 export const relinkDebtToNewPhone = async (
-    debtId: string, 
-    oldPhone: string, 
-    newPhone: string, 
+    debtId: string,
+    oldPhone: string,
+    newPhone: string,
     performedBy: string
 ) => {
     const cleanOld = cleanPhoneNumber(oldPhone);
@@ -956,14 +981,14 @@ export const bulkRelinkDebts = async (
 ) => {
     const cleanOld = cleanPhoneNumber(oldPhone);
     const cleanNew = cleanPhoneNumber(newPhone);
-    
+
     // Find all debts created by performer where oldPhone is involved
-    const qLender = query(collection(db, 'debts'), 
-        where('createdBy', '==', performedBy), 
+    const qLender = query(collection(db, 'debts'),
+        where('createdBy', '==', performedBy),
         where('borrowerId', '==', cleanOld)
     );
-    const qBorrower = query(collection(db, 'debts'), 
-        where('createdBy', '==', performedBy), 
+    const qBorrower = query(collection(db, 'debts'),
+        where('createdBy', '==', performedBy),
         where('lenderId', '==', cleanOld)
     );
 
@@ -978,12 +1003,12 @@ export const bulkRelinkDebts = async (
 };
 
 // Restoration of subscribeToUserDebts
-export const subscribeToUserDebts = (userId: string, callback: (debts: Debt[]) => void) => {
+export const subscribeToUserDebts = (identifiers: string[], callback: (debts: Debt[]) => void) => {
     const debtsRef = collection(db, 'debts');
-    // We want all debts where user is a participant
+    // We want all debts where user is a participant (UID or Phone)
     const q = query(
         debtsRef,
-        where('participants', 'array-contains', userId),
+        where('participants', 'array-contains-any', identifiers),
         orderBy('createdAt', 'desc')
     );
 
@@ -1029,12 +1054,12 @@ export const getDebtsBetweenParticipants = async (p1: string, p2: string): Promi
     // Firestore limitation: cannot use array-contains and != in same query safely without complex composite index
     // So we fetch by participants and filter status in memory (it's a small list per contact)
     const q = query(
-        debtsRef, 
-        where('participants', 'array-contains', p1), 
+        debtsRef,
+        where('participants', 'array-contains', p1),
         orderBy('createdAt', 'desc')
     );
     const snap = await getDocs(q);
-    
+
     return snap.docs
         .map(d => ({ id: d.id, ...d.data() } as Debt))
         .filter(d => d.participants.includes(p2) && (d.status === 'ACTIVE' || d.status === 'PENDING'));
@@ -1230,7 +1255,7 @@ export const deleteDebt = async (debtId: string, currentUserId: string) => {
 
         // Hard Delete
         await deleteDoc(debtRef);
-        
+
         // Also delete subcollection logs (non-blocking)
         try {
             const logsRef = collection(db, 'debts', debtId, 'logs');
@@ -1566,35 +1591,35 @@ export const deletePersonHistory = async (
 
             // ACTION: Delete or Leave
             if (data.createdBy === currentUserId) {
-                 // I created it -> Hard Delete
+                // I created it -> Hard Delete
 
-                 // If it is a Ledger, delete transactions first
-                 if (data.type === 'LEDGER') {
-                     const txRef = collection(db, 'debts', docSnap.id, 'transactions');
-                     const txSnap = await getDocs(txRef);
-                     const txDeletePromises = txSnap.docs.map(tx => deleteDoc(tx.ref));
-                     await Promise.all(txDeletePromises);
-                 }
+                // If it is a Ledger, delete transactions first
+                if (data.type === 'LEDGER') {
+                    const txRef = collection(db, 'debts', docSnap.id, 'transactions');
+                    const txSnap = await getDocs(txRef);
+                    const txDeletePromises = txSnap.docs.map(tx => deleteDoc(tx.ref));
+                    await Promise.all(txDeletePromises);
+                }
 
-                 // Also delete logs subcollection for any debt type to be clean
-                 const logsRef = collection(db, 'debts', docSnap.id, 'logs');
-                 const logsSnap = await getDocs(logsRef);
-                 const logsDeletePromises = logsSnap.docs.map(log => deleteDoc(log.ref));
-                 await Promise.all(logsDeletePromises);
+                // Also delete logs subcollection for any debt type to be clean
+                const logsRef = collection(db, 'debts', docSnap.id, 'logs');
+                const logsSnap = await getDocs(logsRef);
+                const logsDeletePromises = logsSnap.docs.map(log => deleteDoc(log.ref));
+                await Promise.all(logsDeletePromises);
 
-                 await deleteDoc(docSnap.ref);
+                await deleteDoc(docSnap.ref);
             } else {
-                 // I did not create it -> Leave (Remove myself from participants)
-                 const newParticipants = data.participants.filter(p => p !== currentUserId);
+                // I did not create it -> Leave (Remove myself from participants)
+                const newParticipants = data.participants.filter(p => p !== currentUserId);
 
-                 // If no participants left, maybe delete?
-                 // If the other person is still there, they keep it.
-                 // If I was the only one (unlikely), it becomes orphaned.
-                 if (newParticipants.length === 0) {
-                     await deleteDoc(docSnap.ref);
-                 } else {
-                     await updateDoc(docSnap.ref, { participants: newParticipants });
-                 }
+                // If no participants left, maybe delete?
+                // If the other person is still there, they keep it.
+                // If I was the only one (unlikely), it becomes orphaned.
+                if (newParticipants.length === 0) {
+                    await deleteDoc(docSnap.ref);
+                } else {
+                    await updateDoc(docSnap.ref, { participants: newParticipants });
+                }
             }
         });
 
@@ -1618,18 +1643,18 @@ export const autoLinkSystemContacts = async (
     try {
         // 1. Identify "Blue" System Users (UIDs > 20) with no local link
         const systemUserIds = new Set<string>();
-        
+
         existingDebts.forEach(d => {
-             const otherId = d.lenderId === currentUserId ? d.borrowerId : d.lenderId;
-             if (otherId && otherId.length > 20) {
-                 // Check if it's already linked?
-                 // contactsMap is keyed by Phone AND ID.
-                 // If contactsMap.has(otherId), it means we know this UID as a contact.
-                 // If NOT, it's a candidate for auto-linking.
-                 if (!contactsMap.has(otherId)) {
-                     systemUserIds.add(otherId);
-                 }
-             }
+            const otherId = d.lenderId === currentUserId ? d.borrowerId : d.lenderId;
+            if (otherId && otherId.length > 20) {
+                // Check if it's already linked?
+                // contactsMap is keyed by Phone AND ID.
+                // If contactsMap.has(otherId), it means we know this UID as a contact.
+                // If NOT, it's a candidate for auto-linking.
+                if (!contactsMap.has(otherId)) {
+                    systemUserIds.add(otherId);
+                }
+            }
         });
 
         if (systemUserIds.size === 0) return 0;
@@ -1642,48 +1667,48 @@ export const autoLinkSystemContacts = async (
         const contactsRef = collection(db, 'users', currentUserId, 'contacts');
 
         for (const uid of systemUserIds) {
-             // A. Fetch System User Profile to get their phone
-             try {
-                 const userSnap = await getDoc(doc(db, 'users', uid));
-                 if (!userSnap.exists()) continue;
+            // A. Fetch System User Profile to get their phone
+            try {
+                const userSnap = await getDoc(doc(db, 'users', uid));
+                if (!userSnap.exists()) continue;
 
-                 const userData = userSnap.data() as User;
-                 const userPhone = userData.primaryPhoneNumber || userData.phoneNumber;
-                 
-                 if (userPhone) {
-                     const cleanUserPhone = cleanPhoneNumber(userPhone);
+                const userData = userSnap.data() as User;
+                const userPhone = userData.primaryPhoneNumber || userData.phoneNumber;
 
-                     // B. Check if we have this phone in our map (Orange state but unlinked)
-                     // Using our robust map lookups
-                     const localContact = contactsMap.get(cleanUserPhone);
-                     
-                     if (localContact) {
-                         // FOUND A MATCH!
-                         // The user has this person in contacts, but the contact entry doesn't have the linkedUserId.
-                         
-                         // Double check not to overwrite if it already has a DIFFERENT link (conflict)?
-                         if (!localContact.linkedUserId) {
-                             console.log(`[AutoLink] Linking ${localContact.name} (${cleanUserPhone}) -> ${uid}`);
-                             
-                             const contactRef = doc(contactsRef, localContact.id);
-                             batch.update(contactRef, { 
-                                 linkedUserId: uid,
-                                 updatedAt: serverTimestamp() 
-                             });
-                             linkCount++;
-                         }
-                     }
-                 }
-             } catch (e) {
-                 console.warn(`[AutoLink] Failed to process uid ${uid}`, e);
-             }
+                if (userPhone) {
+                    const cleanUserPhone = cleanPhoneNumber(userPhone);
+
+                    // B. Check if we have this phone in our map (Orange state but unlinked)
+                    // Using our robust map lookups
+                    const localContact = contactsMap.get(cleanUserPhone);
+
+                    if (localContact) {
+                        // FOUND A MATCH!
+                        // The user has this person in contacts, but the contact entry doesn't have the linkedUserId.
+
+                        // Double check not to overwrite if it already has a DIFFERENT link (conflict)?
+                        if (!localContact.linkedUserId) {
+                            console.log(`[AutoLink] Linking ${localContact.name} (${cleanUserPhone}) -> ${uid}`);
+
+                            const contactRef = doc(contactsRef, localContact.id);
+                            batch.update(contactRef, {
+                                linkedUserId: uid,
+                                updatedAt: serverTimestamp()
+                            });
+                            linkCount++;
+                        }
+                    }
+                }
+            } catch (e) {
+                console.warn(`[AutoLink] Failed to process uid ${uid}`, e);
+            }
         }
 
         if (linkCount > 0) {
             await batch.commit();
             console.log(`[AutoLink] Successfully linked ${linkCount} contacts.`);
         }
-        
+
         return linkCount;
 
     } catch (error) {

@@ -24,9 +24,12 @@ interface DeletedNotifications {
     [key: string]: boolean;
 }
 
+import { useUserIdentifiers } from './useUserIdentifiers';
+
 export const useNotifications = () => {
     const { allDebts: debts } = useDebts();
     const { user } = useAuth();
+    const { isMe } = useUserIdentifiers();
     const [readNotifications, setReadNotifications] = useState<NotificationReadState>({});
     const [deletedNotifications, setDeletedNotifications] = useState<DeletedNotifications>({});
 
@@ -60,18 +63,19 @@ export const useNotifications = () => {
         const nowTime = now.getTime();
 
         debts.forEach(debt => {
-            const isBorrower = debt.borrowerId === user.uid;
-            const isLender = debt.lenderId === user.uid;
+            const isBorrower = isMe(debt.borrowerId);
+            const isLender = isMe(debt.lenderId);
 
-            // 1. NEW DEBT CREATED - Show for 24 hours after creation
-            if ((isBorrower || isLender) && debt.createdAt) {
+
+            // 1. NEW DEBT CREATED
+            if ((isBorrower || isLender) && debt.createdAt && !isMe(debt.createdBy)) {
                 const debtCreatedTime = debt.createdAt.toDate().getTime();
                 const hoursSinceCreation = (nowTime - debtCreatedTime) / (60 * 60 * 1000);
+                const notifId = `created-${debt.id}`;
+                const isRead = readNotifications[notifId] === true;
 
-                // Show notification if debt created in last 24 hours
-                if (hoursSinceCreation >= 0 && hoursSinceCreation < 24) {
-                    const notifId = `created-${debt.id}`;
-
+                // Show if unread OR if created in last 24 hours
+                if (!isRead || (hoursSinceCreation >= 0 && hoursSinceCreation < 24)) {
                     if (isLender) {
                         notifs.push({
                             id: notifId,
@@ -79,7 +83,7 @@ export const useNotifications = () => {
                             message: `${debt.borrowerName} ile ${debt.originalAmount} ${debt.currency} borç kaydedildi.`,
                             date: debt.createdAt.toDate(),
                             debtId: debt.id,
-                            read: readNotifications[notifId] || false,
+                            read: isRead,
                             actorId: debt.createdBy,
                             amount: debt.originalAmount
                         });
@@ -90,7 +94,7 @@ export const useNotifications = () => {
                             message: `${debt.lenderName} tarafından ${debt.originalAmount} ${debt.currency} borç kaydı oluşturuldu.`,
                             date: debt.createdAt.toDate(),
                             debtId: debt.id,
-                            read: readNotifications[notifId] || false,
+                            read: isRead,
                             actorId: debt.createdBy,
                             amount: debt.originalAmount
                         });
@@ -98,12 +102,52 @@ export const useNotifications = () => {
                 }
             }
 
-            // 2. Due Date Approaching (for whole debt)
+            // 2. EXTERNAL UPDATES (Payments, Edits, Rejections)
+            if (debt.updatedAt && debt.auditMeta && !isMe(debt.auditMeta.actorId)) {
+                const updateTime = debt.updatedAt.toDate().getTime();
+                const creationTime = debt.createdAt ? debt.createdAt.toDate().getTime() : 0;
+
+                // Only show if updatedAt is NEWER than createdAt (avoid double notif on creation)
+                if (updateTime > creationTime + 2000) {
+                    const hoursSinceUpdate = (nowTime - updateTime) / (60 * 60 * 1000);
+                    // Use a sturdy ID that changes ONLY when updatedAt changes
+                    const notifId = `update-${debt.id}-${updateTime}`;
+                    const isRead = readNotifications[notifId] === true;
+
+                    if (!isRead || (hoursSinceUpdate >= 0 && hoursSinceUpdate < 24)) {
+                        let type: Notification['type'] = 'DEBT_EDITED';
+                        let message = '';
+                        const otherPartyName = isLender ? debt.borrowerName : debt.lenderName;
+
+                        if (debt.status === 'REJECTED' || debt.status === 'REJECTED_BY_RECEIVER' || debt.status === 'DISPUTED') {
+                            type = 'DEBT_REJECTED';
+                            message = `${otherPartyName} borç kaydını reddetti.`;
+                        } else if (debt.status === 'PAID' || (debt.remainingAmount < debt.originalAmount)) {
+                            type = 'PAYMENT_MADE';
+                            message = `${otherPartyName} ödeme yaptı.`;
+                        } else {
+                            message = `${otherPartyName} kaydı güncelledi.`;
+                        }
+
+                        notifs.push({
+                            id: notifId,
+                            type: type,
+                            message: message,
+                            date: debt.updatedAt.toDate(),
+                            debtId: debt.id,
+                            read: isRead,
+                            actorId: debt.auditMeta.actorId
+                        });
+                    }
+                }
+            }
+
+            // 3. Due Date Approaching
             if (isBorrower && debt.status === 'ACTIVE' && debt.dueDate) {
                 const dueDate = debt.dueDate.toDate();
                 const diff = differenceInDays(dueDate, now);
                 const isOverdue = diff < 0;
-                const notifId = `due-${debt.id}`; // Unified ID for both due and overdue
+                const notifId = `due-${debt.id}`; // Unified ID
 
                 if (diff >= 0 && diff <= 3) {
                     notifs.push({
@@ -126,14 +170,14 @@ export const useNotifications = () => {
                 }
             }
 
-            // 3. Installments Due
+            // 4. Installments Due
             if (isBorrower && debt.installments) {
                 debt.installments.forEach(inst => {
                     if (!inst.isPaid) {
                         const dueDate = inst.dueDate.toDate();
                         const diff = differenceInDays(dueDate, now);
                         const isOverdue = diff < 0;
-                        const notifId = `inst-${inst.id}`; // Unified ID for installments
+                        const notifId = `inst-${inst.id}`;
 
                         if (diff >= 0 && diff <= 3) {
                             notifs.push({

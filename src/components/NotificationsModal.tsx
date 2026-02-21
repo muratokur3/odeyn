@@ -100,11 +100,16 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                                             "text-xs font-bold px-2 py-0.5 rounded-full",
                                             notif.type === 'INSTALLMENT_DUE' ? "bg-purple-100 text-purple-700"
                                                 : notif.type === 'DEBT_CREATED' ? "bg-green-100 text-green-700"
-                                                    : "bg-orange-100 text-orange-700"
+                                                    : notif.type === 'PAYMENT_MADE' ? "bg-blue-100 text-blue-700"
+                                                        : notif.type === 'DEBT_REJECTED' ? "bg-red-100 text-red-700"
+                                                            : "bg-orange-100 text-orange-700"
                                         )}>
                                             {notif.type === 'INSTALLMENT_DUE' ? 'Taksit'
-                                                : notif.type === 'DEBT_CREATED' ? 'Yeni'
-                                                    : 'Vade'}
+                                                : notif.type === 'DEBT_CREATED' ? 'Yeni Borç'
+                                                    : notif.type === 'PAYMENT_MADE' ? 'Ödeme'
+                                                        : notif.type === 'DEBT_REJECTED' ? 'Red'
+                                                            : notif.type === 'DEBT_EDITED' ? 'Düzenleme'
+                                                                : 'Vade'}
                                         </span>
                                         {!notif.read && (
                                             <span className="inline-block w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>

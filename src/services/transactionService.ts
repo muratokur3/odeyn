@@ -51,7 +51,7 @@ export const getOrCreateLedger = async (
 
     // First, try to find an existing active LEDGER
     const debtsRef = collection(db, 'debts');
-    
+
     // Query for existing LEDGER between these two users
     const q = query(
         debtsRef,
@@ -59,9 +59,9 @@ export const getOrCreateLedger = async (
         where('type', '==', 'LEDGER'),
         where('status', '==', 'ACTIVE')
     );
-    
+
     const snapshot = await getDocs(q);
-    
+
     // Check if any of the results include the other party
     for (const docSnap of snapshot.docs) {
         const data = docSnap.data() as Debt;
@@ -69,7 +69,7 @@ export const getOrCreateLedger = async (
             return docSnap.id; // Found existing ledger
         }
     }
-    
+
     // No existing ledger, create a new one
     const newLedger: Omit<Debt, 'id'> = {
         lenderId: currentUserId, // Arbitrary, both have equal rights
@@ -86,7 +86,7 @@ export const getOrCreateLedger = async (
         type: 'LEDGER',
         note: 'Cari Hesap Defteri'
     };
-    
+
     const docRef = await addDoc(debtsRef, newLedger);
     return docRef.id;
 };
@@ -99,7 +99,7 @@ export const subscribeLedger = (
     callback: (ledger: Debt | null) => void
 ): (() => void) => {
     const ledgerRef = doc(db, 'debts', ledgerId);
-    
+
     return onSnapshot(ledgerRef, (snapshot) => {
         if (snapshot.exists()) {
             callback({ id: snapshot.id, ...snapshot.data() } as Debt);
@@ -117,7 +117,7 @@ export const findActiveLedger = async (
     otherPartyId: string
 ): Promise<Debt | null> => {
     const debtsRef = collection(db, 'debts');
-    
+
     const q = query(
         debtsRef,
         where('participants', 'array-contains', userId),
@@ -125,16 +125,16 @@ export const findActiveLedger = async (
         where('status', '==', 'ACTIVE'),
         limit(10) // Get a few to filter
     );
-    
+
     const snapshot = await getDocs(q);
-    
+
     for (const docSnap of snapshot.docs) {
         const data = docSnap.data() as Debt;
         if (data.participants.includes(otherPartyId)) {
             return { ...data, id: docSnap.id };
         }
     }
-    
+
     return null;
 };
 
@@ -170,7 +170,7 @@ export const addLedgerTransaction = async (
     currency: string = 'TRY'
 ): Promise<string> => {
     const txRef = getLedgerTransactionsRef(ledgerId);
-    
+
     // Build transaction object without undefined values
     const newTx: Record<string, unknown> = {
         amount,
@@ -185,18 +185,18 @@ export const addLedgerTransaction = async (
             platform: 'Web'
         }
     };
-    
+
     // Only add description if it has a value
     if (description && description.trim()) {
         newTx.description = description.trim();
     }
 
     const docRef = await addDoc(txRef, newTx);
-    
+
     // Update ledger's remainingAmount based on direction
     // Note: We need to update the balance on the ledger document
-    await updateLedgerBalance(ledgerId);
-    
+    await updateLedgerBalance(ledgerId, userId);
+
     return docRef.id;
 };
 
@@ -226,12 +226,12 @@ export const subscribeLedgerTransactions = (
  */
 export const getLedgerTransactionsPage = async (
     ledgerId: string,
-    lastVisibleTx: QueryDocumentSnapshot | null, 
+    lastVisibleTx: QueryDocumentSnapshot | null,
     pageSize: number = 20
 ): Promise<{ transactions: Transaction[], lastVisible: QueryDocumentSnapshot | null }> => {
     const txRef = getLedgerTransactionsRef(ledgerId);
     let q = query(txRef, orderBy('createdAt', 'desc'), limit(pageSize));
-    
+
     if (lastVisibleTx) {
         q = query(txRef, orderBy('createdAt', 'desc'), startAfter(lastVisibleTx), limit(pageSize));
     }
@@ -254,7 +254,8 @@ export const getLedgerTransactionsPage = async (
  */
 export const deleteLedgerTransaction = async (
     ledgerId: string,
-    transactionId: string
+    transactionId: string,
+    actorId: string // Added actorId
 ): Promise<void> => {
     try {
         const txDoc = doc(db, 'debts', ledgerId, 'transactions', transactionId);
@@ -271,10 +272,10 @@ export const deleteLedgerTransaction = async (
         }
 
         await deleteDoc(txDoc);
-        
+
         // Recalculate balance (non-blocking)
         try {
-            await updateLedgerBalance(ledgerId);
+            await updateLedgerBalance(ledgerId, actorId);
         } catch (balanceError) {
             console.warn("Balance update failed after transaction deletion:", balanceError);
             // Transaction is deleted, balance will be recalculated on next operation
@@ -288,19 +289,19 @@ export const deleteLedgerTransaction = async (
 /**
  * Update ledger's remainingAmount based on all transactions
  */
-const updateLedgerBalance = async (ledgerId: string): Promise<void> => {
+const updateLedgerBalance = async (ledgerId: string, actorId?: string): Promise<void> => {
     const txRef = getLedgerTransactionsRef(ledgerId);
     const snapshot = await getDocs(txRef);
-    
+
     // Get ledger to determine perspective
     const ledgerRef = doc(db, 'debts', ledgerId);
     const ledgerSnap = await getDoc(ledgerRef);
-    
+
     if (!ledgerSnap.exists()) return;
-    
+
     const ledger = ledgerSnap.data() as Debt;
     const lenderId = ledger.lenderId;
-    
+
     // Calculate balance from lender's perspective
     let balance = 0;
     snapshot.docs.forEach(docSnap => {
@@ -321,10 +322,21 @@ const updateLedgerBalance = async (ledgerId: string): Promise<void> => {
             }
         }
     });
-    
-    await updateDoc(ledgerRef, {
-        remainingAmount: balance
-    });
+
+    const updates: Record<string, unknown> = {
+        remainingAmount: balance,
+        updatedAt: serverTimestamp(),
+    };
+
+    if (actorId) {
+        updates.auditMeta = {
+            actorId,
+            timestamp: serverTimestamp(),
+            platform: 'Web'
+        };
+    }
+
+    await updateDoc(ledgerRef, updates);
 };
 
 /**
@@ -369,7 +381,7 @@ export const addTransaction = async (
     // This is now deprecated - keeping for migration period
     console.warn('addTransaction is deprecated, use addLedgerTransaction');
     const txRef = collection(db, 'users', userId, 'contacts', contactId, 'transactions');
-    
+
     const newTx: Omit<Transaction, 'id'> = {
         amount,
         direction,

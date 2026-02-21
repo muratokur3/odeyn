@@ -2,36 +2,38 @@ import { useState, useEffect } from 'react';
 import type { Debt } from '../types';
 import { subscribeToUserDebts } from '../services/db';
 import { useAuth } from './useAuth';
+import { useUserIdentifiers } from './useUserIdentifiers';
 
 export const useDebts = () => {
     const { user } = useAuth();
+    const { identifiers } = useUserIdentifiers();
     const [dashboardDebts, setDashboardDebts] = useState<Debt[]>([]);
     const [allDebts, setAllDebts] = useState<Debt[]>([]);
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        if (!user) {
+        if (!user || identifiers.length === 0) {
             setDashboardDebts([]);
             setAllDebts([]);
             setLoading(false);
             return;
         }
 
-        const unsubscribe = subscribeToUserDebts(user.uid, (data: Debt[]) => {
+        const unsubscribe = subscribeToUserDebts(identifiers, (data: Debt[]) => {
             // No soft delete - accept all debts
             const processed = data;
             setAllDebts(processed);
 
             // Filter for Dashboard Main List
-           const mainList = processed.filter(d => {
+            const mainList = processed.filter(d => {
                 const isPaid = d.status === 'PAID';
                 if (isPaid) return false;
 
                 // Treat PENDING as ACTIVE for visibility
-                const isVisibleStatus = 
-                    d.status === 'ACTIVE' || 
-                    d.status === 'PENDING' || 
-                    d.status === 'REJECTED_BY_RECEIVER' || 
+                const isVisibleStatus =
+                    d.status === 'ACTIVE' ||
+                    d.status === 'PENDING' ||
+                    d.status === 'REJECTED_BY_RECEIVER' ||
                     d.status === 'AUTO_HIDDEN';
 
                 return isVisibleStatus;

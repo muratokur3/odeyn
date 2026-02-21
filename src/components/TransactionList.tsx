@@ -61,7 +61,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
     // Auto-Reset: Click anywhere else closes row
     useEffect(() => {
         const handleClickOutside = () => {
-             if (openRowId) setOpenRowId(null);
+            if (openRowId) setOpenRowId(null);
         };
         window.addEventListener('click', handleClickOutside);
         return () => window.removeEventListener('click', handleClickOutside);
@@ -70,7 +70,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
 
     const handleDelete = async (txId: string) => {
         if (!user) return;
-        
+
         const confirmed = await showConfirm(
             "Kaydı Sil",
             "Bu işlem geri alınamaz. Kayıt tamamen silinecek. Emin misin?",
@@ -79,7 +79,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
 
         if (confirmed) {
             try {
-                await deleteLedgerTransaction(ledgerId, txId);
+                await deleteLedgerTransaction(ledgerId, txId, user.uid);
                 showAlert("Silindi", "Kayıt başarıyla silindi.", "success");
             } catch (error) {
                 console.error(error);
@@ -114,9 +114,9 @@ export const TransactionList: React.FC<TransactionListProps> = ({
 
                     if (checkDate.getTime() === today.getTime()) return 'Bugün';
                     if (checkDate.getTime() === yesterday.getTime()) return 'Dün';
-                    
+
                     const diffTime = Math.abs(today.getTime() - checkDate.getTime());
-                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24)); 
+                    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
                     if (diffDays < 7) return format(date, 'EEEE', { locale: tr });
                     return format(date, 'd MMMM yyyy', { locale: tr });
                 };
@@ -129,7 +129,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
 
                     const createdAt = tx.createdAt?.toDate ? tx.createdAt.toDate() : new Date();
                     const dateTitle = getGroupTitle(createdAt);
-                    
+
                     // Grouping Logic for DESC order: 
                     // Show separator if it's the FIRST (top) item OR if its date differs from the PREVIOUS item (which is newer)
                     // Actually, in DESC order (Newest -> Oldest), we show separator when the date CHANGED compared to the item ABOVE it.
@@ -170,7 +170,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                             isMine ? "flex-row-reverse" : "flex-row"
                         )}>
                             {/* Avatar */}
-                            <Avatar 
+                            <Avatar
                                 uid={isMine ? user?.uid : (targetUser && 'uid' in targetUser ? targetUser.uid : (targetUser && 'linkedUserId' in targetUser ? targetUser.linkedUserId : undefined))}
                                 photoURL={!isMine && targetUser && 'photoURL' in targetUser ? targetUser.photoURL : undefined}
                                 name={!isMine && targetUser ? ('displayName' in targetUser ? targetUser.displayName : targetUser.name) : 'Ben'}

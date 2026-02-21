@@ -7,6 +7,7 @@ import { ContactRow } from '../components/ContactRow';
 import { NotificationsModal } from '../components/NotificationsModal';
 import { NotificationToast, type ToastNotification } from '../components/NotificationToast';
 import { useNotifications } from '../hooks/useNotifications';
+import { useUserIdentifiers } from '../hooks/useUserIdentifiers';
 import { useNavigate } from 'react-router-dom';
 import { Wallet, Bell, Sun, Moon, CalendarClock } from 'lucide-react';
 import { PendingPaymentsModal } from '../components/PendingPaymentsModal';
@@ -41,6 +42,7 @@ interface ContactSummary {
 export const Dashboard = () => {
     const { dashboardDebts, loading } = useDebts();
     const { user } = useAuth();
+    const { identifiers, isMe } = useUserIdentifiers();
     const navigate = useNavigate();
 
     const [showNotifications, setShowNotifications] = useState(false);
@@ -79,25 +81,34 @@ export const Dashboard = () => {
         }
     }, [user?.uid, user?.primaryPhoneNumber, user?.phoneNumber]);
 
-    // Toast notification for new DEBT_CREATED notifications
+    // Toast notification for any new unread notifications
     useEffect(() => {
         if (notifications.length === 0) return;
-        
+
         const newestNotif = notifications[0];
-        
-        // Only show toast for new unread DEBT_CREATED notifications
+
+        // Show toast for any new unread notification (regardless of type)
         if (
             !newestNotif.read &&
-            newestNotif.type === 'DEBT_CREATED' &&
             newestNotif.id !== lastNotificationId
         ) {
             setLastNotificationId(newestNotif.id);
+
+            const titles: Record<string, string> = {
+                'DEBT_CREATED': 'Yeni Borç Kaydı',
+                'PAYMENT_MADE': 'Ödeme Alındı',
+                'DEBT_REJECTED': 'İşlem Reddedildi',
+                'DEBT_EDITED': 'Kayıt Güncellendi',
+                'DUE_SOON': 'Ödeme Hatırlatması',
+                'INSTALLMENT_DUE': 'Taksit Hatırlatması'
+            };
+
             setToast({
                 id: newestNotif.id,
-                title: 'Yeni Borç Kaydı',
+                title: titles[newestNotif.type] || 'Bildirim',
                 message: newestNotif.message,
                 type: 'info',
-                duration: 4000
+                duration: 5000
             });
         }
     }, [notifications, lastNotificationId]);
@@ -116,7 +127,7 @@ export const Dashboard = () => {
 
     // Calculations & Aggregation
     const useMemoResult = useMemo(() => {
-        if (!user || !rates) return {
+        if (!user || !rates || identifiers.length === 0) return {
             contactSummaries: [],
             availableCurrencies: [],
             totalsByCurrency: {} as Record<string, { receivables: number, payables: number, net: number, currency: string }>,
@@ -138,6 +149,15 @@ export const Dashboard = () => {
         const currencies = new Set<string>();
 
         // 1. Process Dashboard Debts
+        if (identifiers.length === 0) {
+            return {
+                contactSummaries: [],
+                availableCurrencies: [],
+                totalsByCurrency: {},
+                grandTotalInTRY: { receivables: 0, payables: 0, net: 0, currency: 'TRY' }
+            };
+        }
+
         dashboardDebts.forEach(d => {
             const currency = d.currency || 'TRY';
             currencies.add(currency);
@@ -148,7 +168,7 @@ export const Dashboard = () => {
 
 
 
-            const isLender = d.lenderId === user.uid;
+            const isLender = isMe(d.lenderId);
             const otherId = isLender ? d.borrowerId : d.lenderId;
             const fallbackName = isLender ? d.borrowerName : d.lenderName;
 
@@ -324,7 +344,7 @@ export const Dashboard = () => {
 
     const { upcomingToPay, upcomingToReceive, totalUpcomingCount } = useMemo(() => {
         if (!user) return { upcomingToPay: [] as Debt[], upcomingToReceive: [] as Debt[], totalUpcomingCount: 0 };
-        
+
         const next14Days = renderNow + (14 * 24 * 60 * 60 * 1000);
 
         const filterUpcoming = (d: Debt) => {
@@ -436,7 +456,7 @@ export const Dashboard = () => {
             <FeedbackWidget />
 
             {quickPayDebt && (
-                <PaymentModal 
+                <PaymentModal
                     isOpen={!!quickPayDebt}
                     onClose={() => setQuickPayDebt(null)}
                     onSubmit={async (amount, note) => {
@@ -514,6 +534,7 @@ export const Dashboard = () => {
                             status={contact.status}
                             photoURL={undefined}
                             linkedUserId={contact.linkedUserId}
+                            hasUnreadActivity={contact.hasUnreadActivity}
                         />
                     ))}
 
