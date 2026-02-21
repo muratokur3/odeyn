@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, UserX, ChevronRight, RefreshCw, Users, User, Moon, Sun, LogOut } from 'lucide-react';
+import { ArrowLeft, UserX, ChevronRight, RefreshCw, Users, User, Moon, Sun, LogOut, Coins } from 'lucide-react';
 import { updateUserPreferences } from '../services/db';
 import { useAuth } from '../hooks/useAuth';
 import type { User as UserType } from '../types';
@@ -148,6 +148,12 @@ export const Settings = () => {
                             title="Hesap"
                             description="Numaralar, E-posta, Güvenlik"
                             onClick={() => navigate('/settings/account')}
+                        />
+                        <SettingsRow
+                            icon={Coins}
+                            title="Döviz Kurları"
+                            description="Özel döviz kurlarını ayarla"
+                            onClick={() => navigate('/settings/exchange-rates')}
                         />
                     </div>
 

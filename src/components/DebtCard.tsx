@@ -159,7 +159,7 @@ export const DebtCard: React.FC<DebtCardProps> = ({
                             uid={isMine ? currentUserId : (linkedUserId || (otherId.length > 20 ? otherId : undefined))}
                             name={isMine ? 'Ben' : finalDisplayName}
                             size="md"
-                            className="w-10 h-10 sm:w-15 sm:h-15 flex-shrink-0 mb-0.5"
+                            className="w-7 h-7 sm:w-9 sm:h-9 flex-shrink-0 mb-0.5"
                             status={isMine ? 'system' : resolvedStatus}
                         />
                     )}
@@ -168,7 +168,8 @@ export const DebtCard: React.FC<DebtCardProps> = ({
                     <div 
                         onClick={onClick}
                         className={clsx(
-                            "p-3 rounded-2xl border-2 shadow-sm transition-all max-w-[92vw] sm:max-w-[92%] min-w-[180px] relative group cursor-pointer bg-white dark:bg-slate-900 active:scale-[0.98]",
+                            "p-3 rounded-2xl border-2 shadow-sm transition-all max-w-[85vw] sm:max-w-[500px] min-w-[220px] relative group cursor-pointer bg-white dark:bg-slate-900 active:scale-[0.98]",
+                            className,
                             isLender ? "border-purple-200 dark:border-purple-800" : "border-orange-200 dark:border-orange-800",
                             isMine ? "rounded-tr-sm bg-purple-50/10" : "rounded-tl-sm bg-white dark:bg-slate-900",
                             (disabled || isRejectedByReceiver) && "opacity-50 grayscale"

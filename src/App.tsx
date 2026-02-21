@@ -8,6 +8,7 @@ import { Settings } from './pages/Settings';
 import { BlockedUsers } from './pages/BlockedUsers';
 import { MutedUsers } from './pages/MutedUsers';
 import { Tools } from './pages/Tools';
+import { ExchangeRates } from './pages/ExchangeRates';
 import { PersonStream } from './pages/PersonStream';
 import { StreamHistory } from './pages/StreamHistory';
 import { PersonProfile } from './pages/PersonProfile';
@@ -50,6 +51,7 @@ function App() {
                   <Route path="/receivables" element={<Dashboard />} />
                   <Route path="/payables" element={<Dashboard />} />
                   <Route path="/settings/account" element={<AccountSettings />} />
+                  <Route path="/settings/exchange-rates" element={<ExchangeRates />} />
                   <Route path="/debt/:id" element={<DebtDetail />} />
                   <Route path="/tools" element={<Tools />} />
                   <Route path="/person/:id" element={<PersonStream />} />

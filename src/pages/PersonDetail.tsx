@@ -4,7 +4,7 @@ import { useContacts } from '../hooks/useContacts';
 import { useAuth } from '../hooks/useAuth';
 import { useDebts } from '../hooks/useDebts';
 import { useContactName } from '../hooks/useContactName';
-import { ArrowLeft, Phone, MessageCircle, Trash2, Edit2, X, MoreVertical, Ban, UserPlus, VolumeX, Volume2, FolderOpen } from 'lucide-react';
+import { ArrowLeft, Phone, MessageCircle, Trash2, Edit2, X, MoreVertical, Ban, UserPlus, BellOff, Bell, FolderOpen } from 'lucide-react';
 import { searchUserByPhone, getContacts, updateContact, addContact, deleteContact, muteUser, unmuteUser, markContactAsRead, createDebt, permanentlyDeleteDebt } from '../services/db';
 import { blockUser, isUserBlocked, unblockUser } from '../services/blockService';
 
@@ -188,16 +188,16 @@ export const PersonDetail = () => {
         }
 
         if (isMuted) {
-            const confirmed = await showConfirm("Sessize Almayı Kaldır", "Bu kullanıcının sessize alma durumunu kaldırmak istiyor musunuz?");
+            const confirmed = await showConfirm("Sessizi Kaldır", "Bu kullanıcının sessize alma durumunu kaldırmak istiyor musunuz?");
             if (confirmed) {
                 await unmuteUser(user.uid, targetUid);
                 setIsMuted(false);
-                showAlert("Başarılı", "Kullanıcı artık sessize alınmıyor.", "success");
+                showAlert("Başarılı", "Sessize alma kaldırıldı.", "success");
             }
         } else {
             const confirmed = await showConfirm(
-                "Kullanıcıyı Sessize Al",
-                "Bu kullanıcıyı sessize almak istiyor musunuz? Size eklediği borçları göremeyeceksiniz (Otomatik Gizli), ancak karşı taraf normal eklendiğini sanacak.",
+                "Sessize Al",
+                "Bu kullanıcıyı sessize aldığınızda, size eklediği borç kayıtlarını görmezsiniz. Karşı taraf normal eklendiğini sanacaktır. Devam etmek istiyor musunuz?",
                 "info"
             );
             if (confirmed) {
@@ -572,22 +572,25 @@ export const PersonDetail = () => {
                                             </button>
                                         )}
 
-                                        <div className="h-px bg-border my-0"></div>
+                                        {isRegisteredUser && (
+                                            <>
+                                                <div className="h-px bg-border my-0"></div>
+                                                <button
+                                                    onClick={() => { handleMuteToggle(); setShowMenu(false); }}
+                                                    className="w-full text-left px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 dark:hover:bg-slate-700 flex items-center gap-2"
+                                                >
+                                                    {isMuted ? <Bell size={16} /> : <BellOff size={16} />}
+                                                    {isMuted ? 'Sessizden Çıkar' : 'Sessize Al'}
+                                                </button>
 
-                                        <button
-                                            onClick={() => { handleMuteToggle(); setShowMenu(false); }}
-                                            className="w-full text-left px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 dark:hover:bg-slate-700 flex items-center gap-2"
-                                        >
-                                            {isMuted ? <Volume2 size={16} /> : <VolumeX size={16} />}
-                                            {isMuted ? 'Sessize Almayı Kaldır' : 'Sessize Al'}
-                                        </button>
-
-                                        <button
-                                            onClick={() => { handleBlockToggle(); setShowMenu(false); }}
-                                            className="w-full text-left px-4 py-3 text-sm font-medium text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/10 flex items-center gap-2"
-                                        >
-                                            <Ban size={16} /> {isBlocked ? 'Engeli Kaldır' : 'Kullanıcıyı Engelle'}
-                                        </button>
+                                                <button
+                                                    onClick={() => { handleBlockToggle(); setShowMenu(false); }}
+                                                    className="w-full text-left px-4 py-3 text-sm font-medium text-orange-600 hover:bg-orange-50 dark:hover:bg-orange-900/10 flex items-center gap-2"
+                                                >
+                                                    <Ban size={16} /> {isBlocked ? 'Engeli Kaldır' : 'Engelle'}
+                                                </button>
+                                            </>
+                                        )}
 
                                         {contactId && (
                                             <>

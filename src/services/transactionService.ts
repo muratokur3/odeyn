@@ -178,7 +178,12 @@ export const addLedgerTransaction = async (
         currency,
         createdAt: serverTimestamp(),
         createdBy: userId,
-        type: 'SIMPLE'
+        type: 'SIMPLE',
+        auditMeta: {
+            actorId: userId,
+            timestamp: serverTimestamp(),
+            platform: 'Web'
+        }
     };
     
     // Only add description if it has a value

@@ -4,6 +4,7 @@ import { Timestamp } from 'firebase/firestore';
 import { PhoneInput } from './PhoneInput';
 import { useAuth } from '../hooks/useAuth'; // Assuming useAuth is available
 import { addContact, updateContact, getContacts, searchUserByPhone } from '../services/db'; // Assuming services are available
+import { useDebts } from '../hooks/useDebts';
 import { cleanPhone } from '../utils/phoneUtils';
 import { Avatar } from './Avatar';
 import { useModal } from '../context/ModalContext'; // Assuming ModalContext is available
@@ -37,6 +38,9 @@ export const ContactModal: React.FC<ContactModalProps> = ({
     const [duplicateContact, setDuplicateContact] = useState<Contact | null>(null);
     const [contactsCache, setContactsCache] = useState<Contact[]>([]);
     const [suggestedUser, setSuggestedUser] = useState<User | null>(null);
+    const [suggestedNameFromDebts, setSuggestedNameFromDebts] = useState<string | null>(null);
+
+    const { allDebts } = useDebts();
 
     useEffect(() => {
         if (isOpen) {
@@ -77,44 +81,57 @@ export const ContactModal: React.FC<ContactModalProps> = ({
 
     // System User Lookup Effect
     useEffect(() => {
-        const checkSystemUser = async () => {
+        const checkSuggestions = async () => {
             // Reset if empty or editing
             if (!phone || contactToEdit) {
                 setSuggestedUser(null);
+                setSuggestedNameFromDebts(null);
                 return;
             }
 
             const rawInput = phone.replace(/\s/g, '');
             const cleanedInput = cleanPhone(rawInput);
-            // Check if it's a valid length (e.g. 10 digits w/o country code = 10, or total length 12-13)
-            // cleanPhone returns +90..., so length > 10 is reasonable check
-            // "10 haneli numara(ülke kodu hariç)" -> usually 10 digits + 2/3 country code = 12/13
-            if (cleanedInput && cleanedInput.length >= 10) {
-                // Optimization: Don't search if we already found this specific number
-                if (suggestedUser && (suggestedUser.phoneNumber === cleanedInput || suggestedUser.primaryPhoneNumber === cleanedInput)) return;
 
+            if (cleanedInput && cleanedInput.length >= 10) {
+                // 1. Check System User (Registered)
                 try {
                     const found = await searchUserByPhone(cleanedInput);
-                    // Don't suggest self
                     if (found && found.uid !== user?.uid) {
                         setSuggestedUser(found);
-                    } else {
-                        setSuggestedUser(null);
-                    }
+                        setSuggestedNameFromDebts(null); // System user takes priority
+                        return;
+                    } 
+                    setSuggestedUser(null);
                 } catch (err) {
                     console.error("User lookup failed", err);
-                    setSuggestedUser(null);
-                } finally {
-                    // done
+                }
+
+                // 2. Fallback: Check Debt History for names
+                const latestDebt = [...allDebts]
+                    .sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0))
+                    .find(d => cleanPhone(d.lenderId) === cleanedInput || cleanPhone(d.borrowerId) === cleanedInput);
+
+                if (latestDebt) {
+                    const isLender = latestDebt.lenderId === user?.uid || cleanPhone(latestDebt.lenderId) === cleanPhone(user?.phoneNumber || '');
+                    const debtName = isLender ? latestDebt.borrowerName : latestDebt.lenderName;
+                    
+                    if (debtName && debtName !== cleanedInput && debtName !== 'Bilinmeyen') {
+                        setSuggestedNameFromDebts(debtName);
+                    } else {
+                        setSuggestedNameFromDebts(null);
+                    }
+                } else {
+                    setSuggestedNameFromDebts(null);
                 }
             } else {
                 setSuggestedUser(null);
+                setSuggestedNameFromDebts(null);
             }
         };
 
-        const debounce = setTimeout(checkSystemUser, 500);
+        const debounce = setTimeout(checkSuggestions, 500);
         return () => clearTimeout(debounce);
-    }, [phone, user, contactToEdit, suggestedUser]);
+    }, [phone, user, contactToEdit, allDebts]);
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
@@ -240,6 +257,28 @@ export const ContactModal: React.FC<ContactModalProps> = ({
                                         </p>
                                         <p className="text-xs text-blue-700 dark:text-blue-300">
                                             İsim olarak <strong>{suggestedUser.displayName}</strong> kullanmak için tıklayın.
+                                        </p>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Debt History Suggestion */}
+                        {!suggestedUser && suggestedNameFromDebts && !duplicateContact && (
+                            <div
+                                onClick={() => setName(suggestedNameFromDebts)}
+                                className="mt-2 p-3 bg-emerald-50 dark:bg-emerald-900/20 rounded-xl border border-emerald-100 dark:border-emerald-800 cursor-pointer hover:bg-emerald-100 dark:hover:bg-emerald-900/30 transition-colors group"
+                            >
+                                <div className="flex items-center gap-3">
+                                    <div className="w-10 h-10 rounded-full bg-emerald-100 dark:bg-emerald-800 flex items-center justify-center">
+                                        <Avatar name={suggestedNameFromDebts} size="md" status="none" />
+                                    </div>
+                                    <div className="flex-1">
+                                        <p className="text-sm text-emerald-900 dark:text-emerald-100 font-medium">
+                                            Geçmiş işlemlerde bulundu!
+                                        </p>
+                                        <p className="text-xs text-emerald-700 dark:text-emerald-300">
+                                            Bu numaraya daha önce <strong>{suggestedNameFromDebts}</strong> demişsiniz. Kullanmak için tıklayın.
                                         </p>
                                     </div>
                                 </div>

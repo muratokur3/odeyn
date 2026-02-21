@@ -160,10 +160,20 @@ export const normalizeAllUserContacts = async (userId: string): Promise<number> 
         let fixedCount = 0;
         const batch = writeBatch(db);
         
+        // Import standardizeRawPhone for fallback normalization
+        const { standardizeRawPhone } = await import('../utils/phoneUtils');
+        
         snapshot.docs.forEach(docSnap => {
             const data = docSnap.data();
             const originalPhone = data.phoneNumber || '';
-            const normalizedPhone = cleanPhoneNumber(originalPhone);
+            
+            // Try cleanPhoneNumber first (strict E.164 parser)
+            let normalizedPhone = cleanPhoneNumber(originalPhone);
+            
+            // If that fails, try standardizeRawPhone (more lenient)
+            if (!normalizedPhone) {
+                normalizedPhone = standardizeRawPhone(originalPhone);
+            }
             
             // If the phone is NOT in E.164 format or differs after cleaning
             if (normalizedPhone && normalizedPhone !== originalPhone) {
@@ -228,7 +238,7 @@ export const createDebt = async (
     installments?: Installment[],
     canBorrowerAddPayment?: boolean,
     // requestApproval removed
-        initialPayment: number = 0
+    initialPayment: number = 0
     ) => {
         const isLending = type === 'LENDING';
 
@@ -691,8 +701,16 @@ export const respondToDebtRequest = async (debtId: string, status: 'ACTIVE' | 'R
 };
 
 export const searchUserByPhone = async (phoneNumber: string): Promise<User | null> => {
-    // Attempt to format to E.164 if not already, but usually it should be.
-    const cleanPhone = cleanPhoneNumber(phoneNumber) || phoneNumber;
+    // Standardize input to E.164 format with multiple fallbacks
+    let cleanPhone = cleanPhoneNumber(phoneNumber);
+    if (!cleanPhone) {
+        // If cleanPhoneNumber fails, try standardizing raw input
+        const { standardizeRawPhone } = await import('../utils/phoneUtils');
+        cleanPhone = standardizeRawPhone(phoneNumber);
+    }
+    if (!cleanPhone) {
+        return null; // Cannot parse phone
+    }
 
     // Use registry lookup to resolve UID securely
     const { resolvePhoneToUid } = await import('./identity');
@@ -769,11 +787,21 @@ export const searchContacts = async (userId: string, searchQuery: string) => {
     try {
         const contacts = await getContacts(userId);
         const lowerQuery = searchQuery.toLowerCase();
-        // search logic should probably be smarter with phone cleaning too if possible,
-        // but simple includes check works for names. For phones, we might want to check against dirty & clean.
+        
+        // Import standardizeRawPhone for phone format matching
+        const { standardizeRawPhone } = await import('../utils/phoneUtils');
+        const normalizedQuery = standardizeRawPhone(searchQuery);
+        
         return contacts.filter(c =>
             c.name.toLowerCase().includes(lowerQuery) ||
-            c.phoneNumber.includes(searchQuery)
+            c.phoneNumber.includes(searchQuery) ||
+            // Also match against normalized phone format for partial matches
+            (normalizedQuery && c.phoneNumber.includes(normalizedQuery)) ||
+            // Match E.164 variants (0555... vs +90555... etc)
+            (normalizedQuery && (
+                c.phoneNumber.startsWith(normalizedQuery) ||
+                normalizedQuery.startsWith(c.phoneNumber.replace('+90', '0'))
+            ))
         );
     } catch (error) {
         console.error("Error searching contacts:", error);

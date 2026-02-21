@@ -1,5 +1,5 @@
 import React from 'react';
-import { X, Bell, Calendar, ArrowRight } from 'lucide-react';
+import { X, Bell, Calendar, ArrowRight, Trash2, Eye } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import type { Notification } from '../hooks/useNotifications';
 import { format } from 'date-fns';
@@ -10,12 +10,52 @@ interface NotificationsModalProps {
     isOpen: boolean;
     onClose: () => void;
     notifications: Notification[];
+    onMarkAsRead?: (notificationId: string) => void;
+    onDelete?: (notificationId: string) => void;
+    onClearAll?: () => void;
 }
 
-export const NotificationsModal: React.FC<NotificationsModalProps> = ({ isOpen, onClose, notifications }) => {
+export const NotificationsModal: React.FC<NotificationsModalProps> = ({ 
+    isOpen, 
+    onClose, 
+    notifications, 
+    onMarkAsRead,
+    onDelete,
+    onClearAll 
+}) => {
     const navigate = useNavigate();
 
     if (!isOpen) return null;
+
+    // Filter: only show unread AND not deleted notifications
+    const visibleNotifications = notifications.filter(n => !n.read);
+    const unreadCount = visibleNotifications.length;
+
+    const handleNotificationClick = (notif: Notification) => {
+        // Mark as read immediately (optimistic update)
+        if (!notif.read && onMarkAsRead) {
+            onMarkAsRead(notif.id);
+        }
+        // Small delay to show the visual change
+        setTimeout(() => {
+            navigate(`/debt/${notif.debtId}`);
+            onClose();
+        }, 200);
+    };
+
+    const handleMarkAsRead = (e: React.MouseEvent, notif: Notification) => {
+        e.stopPropagation();
+        if (onMarkAsRead) {
+            onMarkAsRead(notif.id);
+        }
+    };
+
+    const handleDelete = (e: React.MouseEvent, notifId: string) => {
+        e.stopPropagation();
+        if (onDelete) {
+            onDelete(notifId);
+        }
+    };
 
     return (
         <div className="fixed inset-0 z-50 flex items-start justify-center p-4 pt-20 bg-black/50 backdrop-blur-sm">
@@ -23,7 +63,12 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({ isOpen, 
                 <div className="flex justify-between items-center p-4 border-b border-slate-700">
                     <div className="flex items-center gap-2">
                         <Bell size={20} className="text-primary" />
-                        <h2 className="text-lg font-bold text-text-primary">Bildirimler</h2>
+                        <div>
+                            <h2 className="text-lg font-bold text-text-primary">Bildirimler</h2>
+                            {unreadCount > 0 && (
+                                <p className="text-xs text-primary">{unreadCount} okunmamış</p>
+                            )}
+                        </div>
                     </div>
                     <button onClick={onClose} className="p-2 hover:bg-slate-700/50 rounded-full">
                         <X size={20} className="text-text-secondary" />
@@ -31,46 +76,94 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({ isOpen, 
                 </div>
 
                 <div className="overflow-y-auto p-4 space-y-3 flex-1">
-                    {notifications.length === 0 ? (
+                    {visibleNotifications.length === 0 ? (
                         <div className="text-center py-10 text-text-secondary">
                             <Bell size={32} className="mx-auto mb-2 opacity-20" />
                             <p>Yeni bildiriminiz yok.</p>
                         </div>
                     ) : (
-                        notifications.map((notif) => (
+                        visibleNotifications.map((notif) => (
                             <div
                                 key={notif.id}
-                                onClick={() => {
-                                    navigate(`/debt/${notif.debtId}`);
-                                    onClose();
-                                }}
                                 className={clsx(
-                                    "p-3 rounded-xl border cursor-pointer transition-colors active:scale-95",
-                                    notif.message.includes('gecikti') ? "bg-red-900/20 border-red-800" : "bg-slate-800/50 border-slate-700"
+                                    "p-3 rounded-xl border cursor-pointer transition-all active:scale-95 group",
+                                    notif.read 
+                                        ? "bg-slate-800/30 border-slate-800" 
+                                        : notif.message.includes('gecikti') 
+                                            ? "bg-red-900/30 border-red-700" 
+                                            : "bg-blue-900/20 border-blue-700"
                                 )}
                             >
                                 <div className="flex justify-between items-start mb-1">
-                                    <span className={clsx(
-                                        "text-xs font-bold px-2 py-0.5 rounded-full",
-                                        notif.type === 'INSTALLMENT_DUE' ? "bg-purple-100 text-purple-700" : "bg-orange-100 text-orange-700"
-                                    )}>
-                                        {notif.type === 'INSTALLMENT_DUE' ? 'Taksit' : 'Vade'}
-                                    </span>
+                                    <div className="flex items-center gap-2 flex-1" onClick={() => handleNotificationClick(notif)}>
+                                        <span className={clsx(
+                                            "text-xs font-bold px-2 py-0.5 rounded-full",
+                                            notif.type === 'INSTALLMENT_DUE' ? "bg-purple-100 text-purple-700" 
+                                            : notif.type === 'DEBT_CREATED' ? "bg-green-100 text-green-700"
+                                            : "bg-orange-100 text-orange-700"
+                                        )}>
+                                            {notif.type === 'INSTALLMENT_DUE' ? 'Taksit' 
+                                            : notif.type === 'DEBT_CREATED' ? 'Yeni'
+                                            : 'Vade'}
+                                        </span>
+                                        {!notif.read && (
+                                            <span className="inline-block w-2 h-2 bg-blue-500 rounded-full"></span>
+                                        )}
+                                    </div>
                                     <span className="text-xs text-text-secondary flex items-center gap-1">
                                         <Calendar size={10} />
                                         {format(notif.date, 'd MMM', { locale: tr })}
                                     </span>
                                 </div>
-                                <p className="text-sm text-text-primary mb-2">{notif.message}</p>
-                                <div className="flex justify-end">
+                                
+                                <p 
+                                    onClick={() => handleNotificationClick(notif)}
+                                    className={clsx("text-sm mb-2", notif.read ? "text-text-secondary" : "text-text-primary font-medium")}
+                                >
+                                    {notif.message}
+                                </p>
+                                
+                                <div className="flex justify-between items-center">
                                     <span className="text-xs text-primary flex items-center gap-1">
                                         Detay <ArrowRight size={12} />
                                     </span>
+                                    
+                                    {/* Action Buttons */}
+                                    <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                                        {!notif.read && (
+                                            <button
+                                                onClick={(e) => handleMarkAsRead(e, notif)}
+                                                title="Okundu olarak işaretle"
+                                                className="p-1.5 hover:bg-slate-700/50 rounded-lg transition-colors"
+                                            >
+                                                <Eye size={14} className="text-text-secondary hover:text-primary" />
+                                            </button>
+                                        )}
+                                        <button
+                                            onClick={(e) => handleDelete(e, notif.id)}
+                                            title="Sil"
+                                            className="p-1.5 hover:bg-red-700/20 rounded-lg transition-colors"
+                                        >
+                                            <Trash2 size={14} className="text-text-secondary hover:text-red-400" />
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         ))
                     )}
                 </div>
+
+                {/* Footer */}
+                {visibleNotifications.length > 0 && (
+                    <div className="border-t border-slate-700 p-4 flex gap-2">
+                        <button
+                            onClick={onClearAll}
+                            className="flex-1 px-4 py-2 bg-red-900/30 text-red-400 hover:bg-red-900/40 rounded-lg transition-colors text-sm font-medium"
+                        >
+                            Tümünü Temizle
+                        </button>
+                    </div>
+                )}
             </div>
         </div>
     );

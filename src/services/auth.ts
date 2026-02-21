@@ -89,13 +89,22 @@ export const linkPasswordToPhone = async (user: User, password: string, displayN
             
             if (userDocSnap.exists()) {
                 // UPDATE existing doc
+                const userData = userDocSnap.data() as any; // eslint-disable-line @typescript-eslint/no-explicit-any
+                const currentPhones = userData.phoneNumbers || [];
+                
+                // Add phone to phoneNumbers array if not already present
+                const updatedPhones = currentPhones.includes(cleanPhone) 
+                    ? currentPhones 
+                    : [...currentPhones, cleanPhone];
+
                 await updateDoc(userDocRef, {
                     displayName: displayName,
                     authEmail: pseudoEmail,
                     recoveryEmail: recoveryEmail || null,
+                    phoneNumber: cleanPhone,
+                    phoneNumbers: updatedPhones,
+                    primaryPhoneNumber: cleanPhone || userData.primaryPhoneNumber
                     // Do NOT update createdAt
-                    // Do NOT overwrite phoneNumbers array with legacy field unless needed
-                    ...(cleanPhone ? { phoneNumber: cleanPhone } : {}) 
                 });
                 console.log("[DEBUG_AUTH] User doc UPDATED successfully.");
             } else {
@@ -117,6 +126,18 @@ export const linkPasswordToPhone = async (user: User, password: string, displayN
         } catch (dbError: any) {
             console.error("[DEBUG_AUTH] Firestore write failed:", dbError);
             throw new Error(`DB Write Failed: ${dbError.code || dbError.message}`);
+        }
+
+        // Register phone in phone_registry (CRITICAL for resolvePhoneToUid to work)
+        try {
+            const regRef = doc(db, 'phone_registry', cleanPhone);
+            await setDoc(regRef, {
+                uid: linkedUser.uid,
+                verifiedAt: serverTimestamp()
+            }, { merge: true });
+            console.log("[DEBUG_AUTH] Phone registered in registry:", cleanPhone);
+        } catch (regError) {
+            console.warn("Registry write failed (non-fatal):", regError);
         }
 
         // Claim existing debts related to this phone number
@@ -142,15 +163,30 @@ export const loginWithPhoneAndPassword = async (phoneNumber: string, password: s
         const userCredential = await signInWithEmailAndPassword(auth, pseudoEmail, password);
 
         // Ensure fresh claims - CRITICAL: clean phone to E.164 format!
+        let cleanedPhone = '';
         if (userCredential.user.phoneNumber) {
-            const cleanedPhone = cleanPhoneNumber(userCredential.user.phoneNumber);
-            await claimLegacyDebts(userCredential.user.uid, cleanedPhone);
+            cleanedPhone = cleanPhoneNumber(userCredential.user.phoneNumber);
         } else {
             // If phone number is somehow missing from auth object (rare for this flow), try to get from email
             const extractedPhone = pseudoEmail.replace(EMAIL_DOMAIN, '');
-            const cleanedPhone = cleanPhoneNumber(extractedPhone);
-            await claimLegacyDebts(userCredential.user.uid, cleanedPhone);
+            cleanedPhone = cleanPhoneNumber(extractedPhone);
         }
+
+        // Register phone in phone_registry (CRITICAL for resolvePhoneToUid to work)
+        if (cleanedPhone) {
+            try {
+                const regRef = doc(db, 'phone_registry', cleanedPhone);
+                await setDoc(regRef, {
+                    uid: userCredential.user.uid,
+                    verifiedAt: serverTimestamp()
+                }, { merge: true });
+                console.log("[DEBUG_AUTH] Phone registered in registry on login:", cleanedPhone);
+            } catch (regError) {
+                console.warn("Registry write failed on login (non-fatal):", regError);
+            }
+        }
+
+        await claimLegacyDebts(userCredential.user.uid, cleanedPhone);
 
         return userCredential.user;
     } catch (error) {

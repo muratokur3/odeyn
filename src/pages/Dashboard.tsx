@@ -5,6 +5,7 @@ import { useAuth } from '../hooks/useAuth';
 import { useContactName } from '../hooks/useContactName';
 import { ContactRow } from '../components/ContactRow';
 import { NotificationsModal } from '../components/NotificationsModal';
+import { NotificationToast, type ToastNotification } from '../components/NotificationToast';
 import { useNotifications } from '../hooks/useNotifications';
 import { useNavigate } from 'react-router-dom';
 import { Wallet, Bell, Sun, Moon, CalendarClock } from 'lucide-react';
@@ -43,11 +44,13 @@ export const Dashboard = () => {
     const navigate = useNavigate();
 
     const [showNotifications, setShowNotifications] = useState(false);
-    const { notifications } = useNotifications();
+    const { notifications, markAsRead, deleteNotification, clearAllNotifications } = useNotifications();
     const { contactsMap } = useContacts(); // Get contacts map
     const { resolveName } = useContactName();
     const [editingDebt, setEditingDebt] = useState<Debt | null>(null);
     const [quickPayDebt, setQuickPayDebt] = useState<Debt | null>(null);
+    const [toast, setToast] = useState<ToastNotification | null>(null);
+    const [lastNotificationId, setLastNotificationId] = useState<string | null>(null);
     const [showUpcomingPayments, setShowUpcomingPayments] = useState(false);
 
     // State
@@ -62,11 +65,11 @@ export const Dashboard = () => {
         const phone = user?.primaryPhoneNumber || user?.phoneNumber;
         if (user?.uid && phone) {
             // 1. Claim Legacy Debts (Multi-format)
+            // Note: Firestore real-time listeners will automatically update when debts are claimed
             claimLegacyDebts(user.uid, phone)
                 .then(count => {
                     if (count > 0) {
-                        console.log(`[GhostUser] ${count} legacy debts claimed. Triggering refresh...`);
-                        window.location.reload();
+                        console.log(`[GhostUser] ${count} legacy debts claimed and will appear automatically.`);
                     }
                 })
                 .catch(err => console.error("Ghost User background claim failed:", err));
@@ -75,6 +78,29 @@ export const Dashboard = () => {
             import('../services/db').then(m => m.normalizeAllUserContacts(user.uid));
         }
     }, [user?.uid, user?.primaryPhoneNumber, user?.phoneNumber]);
+
+    // Toast notification for new DEBT_CREATED notifications
+    useEffect(() => {
+        if (notifications.length === 0) return;
+        
+        const newestNotif = notifications[0];
+        
+        // Only show toast for new unread DEBT_CREATED notifications
+        if (
+            !newestNotif.read &&
+            newestNotif.type === 'DEBT_CREATED' &&
+            newestNotif.id !== lastNotificationId
+        ) {
+            setLastNotificationId(newestNotif.id);
+            setToast({
+                id: newestNotif.id,
+                title: 'Yeni Borç Kaydı',
+                message: newestNotif.message,
+                type: 'info',
+                duration: 4000
+            });
+        }
+    }, [notifications, lastNotificationId]);
 
 
 
@@ -398,8 +424,10 @@ export const Dashboard = () => {
                         aria-label="Bildirimler"
                     >
                         <Bell size={18} />
-                        {notifications.length > 0 && (
-                            <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full border-2 border-white"></span>
+                        {notifications.some(n => !n.read) && (
+                            <span className="absolute top-1 right-1 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white dark:border-slate-800 px-1">
+                                {notifications.filter(n => !n.read).length}
+                            </span>
                         )}
                     </button>
                 </div>
@@ -501,12 +529,18 @@ export const Dashboard = () => {
                 </div>
             </main>
 
-
+            <NotificationToast
+                notification={toast}
+                onClose={() => setToast(null)}
+            />
 
             <NotificationsModal
                 isOpen={showNotifications}
                 onClose={() => setShowNotifications(false)}
                 notifications={notifications}
+                onMarkAsRead={markAsRead}
+                onDelete={deleteNotification}
+                onClearAll={clearAllNotifications}
             />
 
             <PendingPaymentsModal

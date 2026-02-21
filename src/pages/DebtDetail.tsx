@@ -336,26 +336,6 @@ export const DebtDetail = () => {
                             Ara Ödeme Yap
                         </button>
 
-                        {/* Smart "Pay Next Installment" Button */}
-                        {(() => {
-                            const nextInst = debt.installments?.find(i => !i.isPaid);
-                            if (!nextInst) return null;
-
-                            // Calculate installment index for the label
-                            const instIndex = debt.installments?.indexOf(nextInst) || 0;
-
-                            return (
-                                <button
-                                    onClick={() => handleInstallmentPayment(nextInst.amount, `${instIndex + 1}. Taksit Ödemesi`, nextInst.id)}
-                                    className="w-full py-4 bg-green-50 dark:bg-green-900/20 text-green-700 dark:text-green-400 border border-green-200 dark:border-green-800 rounded-2xl font-bold active:scale-[0.98] transition-all flex items-center justify-center gap-2"
-                                >
-                                    <div className="bg-green-500 text-white rounded-full p-0.5">
-                                        <CheckCircle size={14} />
-                                    </div>
-                                    Sıradaki Taksiti Öde ({formatCurrency(nextInst.amount, debt.currency)})
-                                </button>
-                            );
-                        })()}
                     </div>
                 )}
 

@@ -8,7 +8,7 @@ import { useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { useDebts } from '../hooks/useDebts';
 import { useContactName } from '../hooks/useContactName';
-import { ArrowLeft, Phone, MessageCircle, Edit2, MoreVertical, Ban, VolumeX, Volume2, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Phone, MessageCircle, Edit2, MoreVertical, Ban, BellOff, Bell, ExternalLink } from 'lucide-react';
 import { searchUserByPhone, getContacts, updateContact, muteUser, unmuteUser, createDebt } from '../services/db';
 import { blockUser, isUserBlocked, unblockUser } from '../services/blockService';
 import { Avatar } from '../components/Avatar';
@@ -104,8 +104,27 @@ export const PersonProfile = () => {
     const personInfo = useMemo(() => {
         const locationState = location.state as { name?: string; phone?: string } | undefined;
         let name = locationState?.name || '';
-        let phone = locationState?.phone || (id && id.length > 20 ? '' : cleanPhoneNumber(id || ''));
+        const cleanId = cleanPhoneNumber(id || '');
+        let phone = id && id.length > 20 ? '' : cleanId;
 
+        // 1. Try to find the latest name from ANY debt related to this person (including LEDGER)
+        const latestDebtWithPossibleName = [...debts]
+            .sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0))
+            .find(d => {
+                const isMatch = d.lenderId === id || d.borrowerId === id || 
+                               cleanPhoneNumber(d.lenderId) === cleanId || 
+                               cleanPhoneNumber(d.borrowerId) === cleanId ||
+                               (resolvedUid && (d.lenderId === resolvedUid || d.borrowerId === resolvedUid));
+                return isMatch;
+            });
+
+        if (latestDebtWithPossibleName) {
+            const isLender = latestDebtWithPossibleName.lenderId === user?.uid || 
+                             cleanPhoneNumber(latestDebtWithPossibleName.lenderId) === cleanPhoneNumber(user?.phoneNumber || '');
+            name = isLender ? latestDebtWithPossibleName.borrowerName : latestDebtWithPossibleName.lenderName;
+        }
+
+        // 2. If we have a targetUserObject (contact), prioritize its fields if they exist
         if (targetUserObject) {
             if ('displayName' in targetUserObject) name = targetUserObject.displayName || name;
             else if ('name' in targetUserObject) name = targetUserObject.name || name;
@@ -113,9 +132,17 @@ export const PersonProfile = () => {
             else if ('phoneNumber' in targetUserObject) phone = targetUserObject.phoneNumber || phone;
         }
 
-        const { displayName, status } = resolveName(id || '', name, phone);
+        let { displayName, status } = resolveName(id || '', name, phone);
+
+        // --- 3. DASHBOARD-CONSISTENT ULTIMATE FALLBACK ---
+        const isPhoneFormat = displayName.replace(/\s/g, '').replace(/\+/g, '').length >= 10 && !isNaN(Number(displayName.replace(/\s/g, '').replace(/\+/g, '')));
+        
+        if ((isPhoneFormat || displayName === 'Bilinmeyen') && name && name !== id && name !== 'Bilinmeyen') {
+            displayName = name;
+        }
+
         return { name: displayName, phone, status };
-    }, [id, targetUserObject, resolveName, location.state]);
+    }, [id, targetUserObject, resolveName, location.state, debts, user, resolvedUid]);
 
     // Ledger for balance
     const otherPartyId = getTargetUid() || id;
@@ -189,11 +216,18 @@ export const PersonProfile = () => {
             if (isMuted) {
                 await unmuteUser(user.uid, targetUid);
                 setIsMuted(false);
-                showAlert("Başarılı", "Bildirimler açıldı.", "success");
+                showAlert("Başarılı", "Sessize alma kaldırıldı.", "success");
             } else {
-                await muteUser(user.uid, targetUid);
-                setIsMuted(true);
-                showAlert("Başarılı", "Bildirimler kapatıldı.", "success");
+                const confirmed = await showConfirm(
+                    "Sessize Al",
+                    "Bu kullanıcıyı sessize aldığınızda, size eklediği borç kayıtlarını görmezsiniz. Karşı taraf normal eklendiğini sanacaktır. Devam etmek istiyor musunuz?",
+                    "info"
+                );
+                if (confirmed) {
+                    await muteUser(user.uid, targetUid);
+                    setIsMuted(true);
+                    showAlert("Sessize Alındı", "Kullanıcı sessize alındı.", "success");
+                }
             }
         } catch {
             showAlert("Hata", "İşlem başarısız.", "error");
@@ -250,20 +284,24 @@ export const PersonProfile = () => {
                             Kişiyi Düzenle
                         </button>
                     )}
-                    <button
-                        onClick={handleMute}
-                        className="w-full px-4 py-3 text-left text-sm text-text-primary hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-3"
-                    >
-                        {isMuted ? <Volume2 size={16} /> : <VolumeX size={16} />}
-                        {isMuted ? "Bildirimleri Aç" : "Bildirimleri Kapat"}
-                    </button>
-                    <button
-                        onClick={handleBlock}
-                        className="w-full px-4 py-3 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-3"
-                    >
-                        <Ban size={16} />
-                        {isBlocked ? "Engeli Kaldır" : "Engelle"}
-                    </button>
+                    {resolvedUid && (
+                        <>
+                            <button
+                                onClick={handleMute}
+                                className="w-full px-4 py-3 text-left text-sm text-text-primary hover:bg-slate-50 dark:hover:bg-slate-800 flex items-center gap-3"
+                            >
+                                {isMuted ? <Bell size={16} /> : <BellOff size={16} />}
+                                {isMuted ? "Sessizden Çıkar" : "Sessize Al"}
+                            </button>
+                            <button
+                                onClick={handleBlock}
+                                className="w-full px-4 py-3 text-left text-sm text-red-600 hover:bg-red-50 dark:hover:bg-red-900/20 flex items-center gap-3"
+                            >
+                                <Ban size={16} />
+                                {isBlocked ? "Engeli Kaldır" : "Engelle"}
+                            </button>
+                        </>
+                    )}
                 </div>
             )}
 

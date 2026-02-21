@@ -1,11 +1,10 @@
 import React, { useState, useEffect } from 'react';
-import { X, FileText, ChevronDown, ChevronUp, Search, Ban, RefreshCw, MessageCircle, AlertTriangle, Paperclip, Trash2, File as FileIcon } from 'lucide-react';
+import { X, FileText, ChevronDown, ChevronUp, Search, Ban, RefreshCw, AlertTriangle } from 'lucide-react';
 import { Avatar } from './Avatar';
 import { SelectedUserCard } from './SelectedUserCard';
 
 import { searchUserByPhone, searchContacts, createDebt, updateDebtHardReset } from '../services/db';
 import { getOrCreateLedger, addLedgerTransaction } from '../services/transactionService';
-import { uploadDebtAttachment } from '../services/storage';
 import { formatCurrency, formatAmountToWords } from '../utils/format';
 import { formatPhoneForDisplay, cleanPhone } from '../utils/phoneUtils';
 import type { User, Contact, Installment, Debt } from '../types';
@@ -100,9 +99,6 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
     // Custom Rate
     const [manualRate, setManualRate] = useState('');
     const [useManualRate, setUseManualRate] = useState(false);
-
-    // Attachments
-    const [selectedFiles, setSelectedFiles] = useState<File[]>([]);
 
     // Blocked check
     const [isTargetBlocked, setIsTargetBlocked] = useState(false);
@@ -239,7 +235,7 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
             setStep('SEARCH');
             setIsResolvingInitial(false);
         }
-    }, [isOpen, initialPhoneNumber, targetUser, user, propInitialName, editMode, initialData, derivedInitialName, initialPhone, isSpecialDebt, dueDate]);
+    }, [isOpen, editMode, initialData]); // 🎯 Optimized: Only re-run when modal opens or edit data changes
 
     // Check blocked status whenever foundUser or foundContact changes
     useEffect(() => {
@@ -388,22 +384,22 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
             finalBorrowerName = formatPhoneForDisplay(finalBorrowerId);
         }
 
+        // Resolve phone to UID if necessary (for unregistered users)
+        if (finalBorrowerId.length < 20) {
+            try {
+                const { resolvePhoneToUid } = await import('../services/identity');
+                const resolved = await resolvePhoneToUid(finalBorrowerId);
+                if (resolved) {
+                    finalBorrowerId = resolved;
+                }
+                // If not resolved, it stays as phone number (shadow user - will be claimed later)
+            } catch (error) {
+                console.error('Failed to resolve phone to UID:', error);
+            }
+        }
+
         setLoading(true);
         try {
-            // --- UPLOAD ATTACHMENTS ---
-            const attachmentsToSave: unknown[] = [];
-            if (selectedFiles.length > 0) {
-                // We need a temporary or final debt ID for storage path.
-                // In create mode, we don't have it yet.
-                // Using a random seed for temp path or using 'temp'
-                const tempId = editMode ? initialData?.id || 'new' : `new-${Date.now()}`;
-                
-                for (const file of selectedFiles) {
-                    const result = await uploadDebtAttachment(file, tempId, user.uid);
-                    attachmentsToSave.push(result);
-                }
-            }
-
             let generatedInstallments: Installment[] | undefined;
             if (isInstallment && installmentCount > 1) {
                 generatedInstallments = [];
@@ -522,19 +518,10 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
     return (
         <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
             <div className={clsx(
-                "rounded-2xl w-full max-w-sm shadow-xl animate-in fade-in zoom-in duration-200 h-auto max-h-[90dvh] flex flex-col border-2 transition-all",
-                isSpecialDebt 
-                    ? "bg-surface border-dashed border-purple-500 shadow-purple-500/10"
-                    : "bg-surface border-solid border-slate-700 shadow-lg"
+                "bg-surface rounded-2xl w-full max-w-sm shadow-xl animate-in fade-in zoom-in duration-200 h-auto max-h-[90dvh] flex flex-col border-2 border-slate-700 transition-all shadow-lg"
             )}>
-                <div className={clsx(
-                    "flex justify-between items-center p-6 pb-2 flex-none rounded-t-2xl transition-colors",
-                    isSpecialDebt ? "bg-purple-500/5" : ""
-                )}>
-                    <h2 className={clsx(
-                        "text-xl font-bold flex items-center gap-2",
-                        isSpecialDebt ? "text-purple-600 dark:text-purple-300" : "text-text-primary"
-                    )}>
+                <div className="flex justify-between items-center p-6 pb-2 flex-none rounded-t-2xl">
+                    <h2 className="text-xl font-bold flex items-center gap-2 text-text-primary">
                         {editMode ? (
                             <>
                             <FileText size={24} className="text-orange-500" />
@@ -542,8 +529,8 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                             </>
                         ) : (
                             <>
-                            {isSpecialDebt ? <FileText size={24} className="text-purple-600 dark:text-purple-400" /> : <MessageCircle size={24} className="text-blue-600 dark:text-blue-400" />}
-                            {isSpecialDebt ? 'Özel Borç Ekle' : 'Hızlı Akış Ekle'}
+                             <FileText size={24} className="text-blue-600 dark:text-blue-400" />
+                             Borç Ekle
                             </>
                         )}
                     </h2>
@@ -793,60 +780,17 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                             </div>
                         )}
 
-                        {/* Note & Attachments */}
+                        {/* Note */}
                         <div>
-                            <div className="flex justify-between items-center mb-1">
-                                <label className="block text-sm font-medium text-text-secondary">Not</label>
-                                <button 
-                                    type="button"
-                                    onClick={() => document.getElementById('debt-file-input')?.click()}
-                                    className="flex items-center gap-1 text-xs text-blue-600 font-bold hover:text-blue-700"
-                                >
-                                    <Paperclip size={14} /> Dosya Ekle
-                                </button>
-                                <input 
-                                    id="debt-file-input"
-                                    type="file"
-                                    multiple
-                                    accept="image/*,application/pdf"
-                                    className="hidden"
-                                    onChange={(e) => {
-                                        if (e.target.files) {
-                                            setSelectedFiles(prev => [...prev, ...Array.from(e.target.files!)]);
-                                        }
-                                    }}
-                                />
-                            </div>
+                            <label className="block text-sm font-medium text-text-secondary mb-1">Not</label>
                             <textarea
                                 value={note}
                                 onChange={(e) => setNote(e.target.value)}
                                 rows={2}
                                 disabled={isTargetBlocked}
-                                className="w-full px-4 py-3 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary focus:ring-2 focus:ring-blue-900/50 outline-none transition-all resize-none disabled:opacity-50 disabled:cursor-not-allowed mb-2"
+                                className="w-full px-4 py-3 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary focus:ring-2 focus:ring-blue-900/50 outline-none transition-all resize-none disabled:opacity-50 disabled:cursor-not-allowed"
                                 placeholder="İşlem ile ilgili not..."
                             />
-
-                            {/* Selected Files Preview */}
-                            {selectedFiles.length > 0 && (
-                                <div className="space-y-2 mb-4">
-                                    {selectedFiles.map((file, idx) => (
-                                        <div key={idx} className="flex items-center justify-between p-2 bg-slate-800/50 rounded-lg border border-slate-700">
-                                            <div className="flex items-center gap-2 overflow-hidden">
-                                                <FileIcon size={16} className="text-blue-500 shrink-0" />
-                                                <span className="text-xs text-text-primary truncate">{file.name}</span>
-                                                <span className="text-[10px] text-text-secondary">({(file.size / 1024).toFixed(0)} KB)</span>
-                                            </div>
-                                            <button 
-                                                type="button"
-                                                onClick={() => setSelectedFiles(prev => prev.filter((_, i) => i !== idx))}
-                                                className="p-1 hover:bg-red-500/20 rounded-full text-red-500"
-                                            >
-                                                <Trash2 size={14} />
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
-                            )}
                         </div>
 
 

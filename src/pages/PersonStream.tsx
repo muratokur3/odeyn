@@ -7,9 +7,10 @@ import { useState, useEffect, useMemo, useRef } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { usePersonDebts } from '../hooks/usePersonDebts';
+import { useDebts } from '../hooks/useDebts';
 import { useContactName } from '../hooks/useContactName';
 import { useLedger } from '../hooks/useLedger';
-import { ArrowLeft, MoreVertical, Edit2, UserPlus, Volume2, VolumeX, Ban, Trash2 } from 'lucide-react';
+import { ArrowLeft, MoreVertical, Edit2, UserPlus, Bell, BellOff, Ban, Trash2 } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
 import clsx from 'clsx';
 import { SummaryCard } from '../components/SummaryCard';
@@ -155,10 +156,33 @@ export const PersonStream = () => {
         return () => window.removeEventListener('trigger-person-fab-action', handleFabTrigger);
     }, [isBlocked]);
 
+    // Custom hooks for data
+    const { allDebts: rawDebts } = useDebts();
+    const { allDebts } = usePersonDebts(id || '', resolvedUid);
+
     const personInfo = useMemo(() => {
         let name = '';
-        let phone = id && id.length > 20 ? '' : cleanPhone(id || '');
+        const cleanId = cleanPhone(id || '');
+        let phone = id && id.length > 20 ? '' : cleanId;
 
+        // 1. Try to find the latest name from ANY debt related to this person (including LEDGER)
+        const latestDebtWithPossibleName = [...rawDebts]
+            .sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0))
+            .find(d => {
+                const isMatch = d.lenderId === id || d.borrowerId === id || 
+                               cleanPhone(d.lenderId) === cleanId || 
+                               cleanPhone(d.borrowerId) === cleanId ||
+                               (resolvedUid && (d.lenderId === resolvedUid || d.borrowerId === resolvedUid));
+                return isMatch;
+            });
+
+        if (latestDebtWithPossibleName) {
+            const isLender = latestDebtWithPossibleName.lenderId === user?.uid || 
+                             cleanPhone(latestDebtWithPossibleName.lenderId) === cleanPhone(user?.phoneNumber || '');
+            name = isLender ? latestDebtWithPossibleName.borrowerName : latestDebtWithPossibleName.lenderName;
+        }
+
+        // 2. If we have a targetUserObject (contact), its saved name might be better
         if (targetUserObject) {
             if ('displayName' in targetUserObject) name = targetUserObject.displayName || name;
             else if ('name' in targetUserObject) name = targetUserObject.name || name;
@@ -166,12 +190,17 @@ export const PersonStream = () => {
             else if ('phoneNumber' in targetUserObject) phone = targetUserObject.phoneNumber || phone;
         }
 
-        const { displayName, status } = resolveName(id || '', name, phone);
-        return { name: displayName, phone, status };
-    }, [id, targetUserObject, resolveName]);
+        let { displayName, status } = resolveName(id || '', name, phone);
 
-    // Custom hooks for data
-    const { allDebts } = usePersonDebts(id || '', resolvedUid);
+        // --- 3. DASHBOARD-CONSISTENT ULTIMATE FALLBACK ---
+        const isPhoneFormat = displayName.replace(/\s/g, '').replace(/\+/g, '').length >= 10 && !isNaN(Number(displayName.replace(/\s/g, '').replace(/\+/g, '')));
+        
+        if ((isPhoneFormat || displayName === 'Bilinmeyen') && name && name !== id && name !== 'Bilinmeyen') {
+            displayName = name;
+        }
+
+        return { name: displayName, phone, status };
+    }, [id, targetUserObject, resolveName, rawDebts, user, resolvedUid]);
 
     // useLedger for LEDGER tab
     const { 
@@ -288,29 +317,23 @@ export const PersonStream = () => {
         const el = carouselRef.current;
         if (!el) return;
 
-        const observer = new IntersectionObserver((entries) => {
-            // Find the entry that is currently most visible (most centered)
-            // We look at all entries and pick the one with the highest intersectionRatio
+        const handleIntersect = (entries: IntersectionObserverEntry[]) => {
+            // Find the entry that is mostly visible
+            const visibleEntry = entries.find(entry => entry.isIntersecting && entry.intersectionRatio >= 0.6);
             
-            let mostCenteredEntry = entries[0];
-            for (const entry of entries) {
-                if (entry.intersectionRatio > mostCenteredEntry.intersectionRatio) {
-                    mostCenteredEntry = entry;
-                }
-            }
-
-            // If the user is manually scrolling (not a programmatic scrollTo), update tabMode
-            if (!isScrollingRef.current && mostCenteredEntry.isIntersecting && mostCenteredEntry.intersectionRatio > 0.5) {
-                const mode = mostCenteredEntry.target.getAttribute('data-mode') as TabMode;
+            if (visibleEntry && !isScrollingRef.current) {
+                const mode = visibleEntry.target.getAttribute('data-mode') as TabMode;
                 if (mode && mode !== tabModeRef.current) {
                     lastUpdateSourceRef.current = 'SCROLL';
                     setTabMode(mode);
                 }
             }
-        }, {
+        };
+
+        const observer = new IntersectionObserver(handleIntersect, {
             root: el,
-            threshold: [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0],
-            rootMargin: '0px' // Allow full detection across the container
+            threshold: 0.6,
+            rootMargin: '0px'
         });
 
         const cards = el.querySelectorAll('[data-mode]');
@@ -397,9 +420,16 @@ export const PersonStream = () => {
             setIsMuted(false);
             showAlert("Başarılı", "Sessize alma kaldırıldı.", "success");
         } else {
-            await muteUser(user.uid, targetUid);
-            setIsMuted(true);
-            showAlert("Sessize Alındı", "Kullanıcı sessize alındı.", "success");
+            const confirmed = await showConfirm(
+                "Sessize Al",
+                "Bu kullanıcıyı sessize aldığınızda, size eklediği borç kayıtlarını görmezsiniz. Karşı taraf normal eklendiğini sanacaktır. Devam etmek istiyor musunuz?",
+                "info"
+            );
+            if (confirmed) {
+                await muteUser(user.uid, targetUid);
+                setIsMuted(true);
+                showAlert("Sessize Alındı", "Kullanıcı sessize alındı.", "success");
+            }
         }
     };
 
@@ -468,20 +498,24 @@ export const PersonStream = () => {
                                 >
                                     {contactId ? <><Edit2 size={16} /> Düzenle</> : <><UserPlus size={16} /> Rehbere Ekle</>}
                                 </button>
-                                <div className="h-px bg-border"></div>
-                                <button
-                                    onClick={() => { handleMuteToggle(); setShowMenu(false); }}
-                                    className="w-full text-left px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 flex items-center gap-2"
-                                >
-                                    {isMuted ? <Volume2 size={16} /> : <VolumeX size={16} />}
-                                    {isMuted ? 'Sessizi Kaldır' : 'Sessize Al'}
-                                </button>
-                                <button
-                                    onClick={() => { handleBlockToggle(); setShowMenu(false); }}
-                                    className="w-full text-left px-4 py-3 text-sm font-medium text-orange-600 hover:bg-orange-50 flex items-center gap-2"
-                                >
-                                    <Ban size={16} /> {isBlocked ? 'Engeli Kaldır' : 'Engelle'}
-                                </button>
+                                {resolvedUid && (
+                                    <>
+                                        <div className="h-px bg-border"></div>
+                                        <button
+                                            onClick={() => { handleMuteToggle(); setShowMenu(false); }}
+                                            className="w-full text-left px-4 py-3 text-sm font-medium text-gray-600 hover:bg-gray-50 dark:hover:bg-slate-800 flex items-center gap-2"
+                                        >
+                                            {isMuted ? <Bell size={16} /> : <BellOff size={16} />}
+                                            {isMuted ? 'Sessizden Çıkar' : 'Sessize Al'}
+                                        </button>
+                                        <button
+                                            onClick={() => { handleBlockToggle(); setShowMenu(false); }}
+                                            className="w-full text-left px-4 py-3 text-sm font-medium text-orange-600 hover:bg-orange-50 flex items-center gap-2"
+                                        >
+                                            <Ban size={16} /> {isBlocked ? 'Engeli Kaldır' : 'Engelle'}
+                                        </button>
+                                    </>
+                                )}
                                 {contactId && (
                                     <button
                                         onClick={() => { handleDeleteContact(); setShowMenu(false); }}
@@ -513,7 +547,11 @@ export const PersonStream = () => {
                 <div 
                     ref={carouselRef}
                     className="flex gap-4 overflow-x-auto pb-8 pt-4 px-4 snap-x snap-mandatory scrollbar-hide bg-surface/50 border-b border-border"
+                    style={{ scrollPadding: '0 2rem' }}
                 >
+                    {/* Left Spacer for centering first card */}
+                    <div className="shrink-0 w-[8vw] sm:w-[15vw]" />
+
                     {/* Card 1: TOPLAM */}
                     {(() => {
                         const entries = Array.from(totalBalance.entries());
@@ -594,6 +632,9 @@ export const PersonStream = () => {
                             />
                         );
                     })()}
+
+                    {/* Right Spacer for centering last card */}
+                    <div className="shrink-0 w-[8vw] sm:w-[15vw]" />
                 </div>
 
                 {/* 2. Tab Navigation removed as per user request */}

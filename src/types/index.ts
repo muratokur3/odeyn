@@ -18,15 +18,6 @@ export interface AmountHistory {
     changedBy: string;   // UID
 }
 
-export interface Attachment {
-    id: string;
-    url: string;
-    type: 'IMAGE' | 'PDF';
-    fileName: string;
-    uploadedAt: Timestamp;
-    uploadedBy: string;
-}
-
 export interface User {
     uid: string;
     phoneNumber?: string; // @deprecated Use phoneNumbers array
@@ -125,7 +116,6 @@ export interface Debt {
     type?: DebtType; // Default: 'ONE_TIME', 'LEDGER' for shared stream
 
     // Blueprint v1 Fields
-    attachments?: Attachment[];
     editHistory?: AmountHistory[];
     customExchangeRate?: number;
     archivedAt?: Timestamp;
@@ -151,9 +141,8 @@ export interface PaymentLog {
     note?: string;
     status?: 'PENDING' | 'APPROVED' | 'REJECTED';
     installmentId?: string;
-    attachments?: Attachment[]; // ✅ New
-    auditMeta?: AuditMeta; // ✅ New
-    method?: 'CASH' | 'IBAN' | 'CREDIT_CARD' | 'OTHER'; // ✅ New
+    auditMeta?: AuditMeta;
+    method?: 'CASH' | 'IBAN' | 'CREDIT_CARD' | 'OTHER';
 }
 
 export interface DisplayProfile {
@@ -180,7 +169,6 @@ export interface Transaction {
     createdAt: Timestamp;
     createdBy: string; // UID of who created this entry
     type: 'SIMPLE';
-    attachments?: Attachment[]; // ✅ New
-    auditMeta?: AuditMeta; // ✅ New
+    auditMeta?: AuditMeta;
 }
 
