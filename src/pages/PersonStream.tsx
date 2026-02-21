@@ -333,8 +333,6 @@ export const PersonStream = () => {
         let scrollTimer: ReturnType<typeof setTimeout> | null = null;
 
         const detectActiveCard = () => {
-            // ⚠️ isScrollingRef check KALDİRİLDİ — cleanup clearTimeout'u iptal eder
-            // ve ref sonsuza kadar true kalır. mode!==tabModeRef koruyor.
             const containerCenter = el.scrollLeft + el.offsetWidth / 2;
             const cards = el.querySelectorAll('[data-mode]');
             let closestCard: Element | null = null;
@@ -369,35 +367,38 @@ export const PersonStream = () => {
             el.removeEventListener('scroll', handleScroll);
             if (scrollTimer) clearTimeout(scrollTimer);
         };
-    }, []); // Stable
+    }, [carouselRef.current, id]);
 
-    // Scroll to active tab when changed via click or initial load
+    // Kartlar render edildikten sonra scrollTo işlemini tetikle
+    const [cardCount, setCardCount] = useState(0);
     useEffect(() => {
         const el = carouselRef.current;
         if (!el) return;
+        const cards = el.querySelectorAll('[data-mode]');
+        setCardCount(cards.length);
+    });
 
-        const shouldScroll = isFirstLoadRef.current || lastUpdateSourceRef.current === 'CLICK';
-        lastUpdateSourceRef.current = null;
-
-        if (!shouldScroll) return;
-
+    useEffect(() => {
+        const el = carouselRef.current;
+        if (!el) return;
         const modes: TabMode[] = ['TOTAL', 'LEDGER', 'INSTALLMENT'];
         const index = modes.indexOf(tabMode);
         if (index === -1) return;
-
         const cards = el.querySelectorAll('[data-mode]');
         const targetCard = cards[index] as HTMLElement;
-
         if (targetCard) {
-            const targetScroll = targetCard.offsetLeft - (el.offsetWidth - targetCard.offsetWidth) / 2;
+            let targetScroll = targetCard.offsetLeft - (el.offsetWidth - targetCard.offsetWidth) / 2;
+            const maxScroll = el.scrollWidth - el.offsetWidth;
+            targetScroll = Math.max(0, Math.min(targetScroll, maxScroll > 0 ? maxScroll : 0));
             const isFirst = isFirstLoadRef.current;
-            isFirstLoadRef.current = false; // reset before scroll
+            isFirstLoadRef.current = false;
             el.scrollTo({
                 left: targetScroll,
                 behavior: isFirst ? 'auto' : 'smooth'
             });
         }
-    }, [tabMode]);
+        lastUpdateSourceRef.current = null;
+    }, [tabMode, cardCount]);
 
 
     // Tab configuration
