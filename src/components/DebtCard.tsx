@@ -120,8 +120,8 @@ export const DebtCard: React.FC<DebtCardProps> = ({
         e.stopPropagation();
         setShowMenu(false);
         if (!isEditable) {
-             showAlert("Hata", "Düzenleme süresi doldu.", "error");
-              return;
+            showAlert("Hata", "Düzenleme süresi doldu.", "error");
+            return;
         }
         setShowEditModal(true);
     };
@@ -150,7 +150,7 @@ export const DebtCard: React.FC<DebtCardProps> = ({
         return (
             <div className={clsx("flex w-full mb-3 px-1", isMine ? "justify-end" : "justify-start")}>
                 <div className={clsx(
-                    "flex items-end gap-3",
+                    "flex items-end gap-3 w-full",
                     isMine ? "flex-row-reverse" : "flex-row"
                 )}>
                     {/* Avatar */}
@@ -158,17 +158,17 @@ export const DebtCard: React.FC<DebtCardProps> = ({
                         <Avatar
                             uid={isMine ? currentUserId : (linkedUserId || (otherId.length > 20 ? otherId : undefined))}
                             name={isMine ? 'Ben' : finalDisplayName}
-                            size="md"
-                            className="w-7 h-7 sm:w-9 sm:h-9 flex-shrink-0 mb-0.5"
+                            size="sm"
+                            className="w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0 mb-0.5"
                             status={isMine ? 'system' : resolvedStatus}
                         />
                     )}
 
                     {/* Bubble Card */}
-                    <div 
+                    <div
                         onClick={onClick}
                         className={clsx(
-                            "p-3 rounded-2xl border-2 shadow-sm transition-all max-w-[85vw] sm:max-w-[500px] min-w-[220px] relative group cursor-pointer bg-white dark:bg-slate-900 active:scale-[0.98]",
+                            "p-3 rounded-2xl border-2 shadow-sm transition-all flex-1 relative group cursor-pointer bg-white dark:bg-slate-900 active:scale-[0.98]",
                             className,
                             isLender ? "border-purple-200 dark:border-purple-800" : "border-orange-200 dark:border-orange-800",
                             isMine ? "rounded-tr-sm bg-purple-50/10" : "rounded-tl-sm bg-white dark:bg-slate-900",
@@ -219,6 +219,11 @@ export const DebtCard: React.FC<DebtCardProps> = ({
                             )}
                         </div>
                     </div>
+
+                    {/* Spacer to achieve "total - 2x avatar" look */}
+                    {!hideAvatar && (
+                        <div className="w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0" aria-hidden="true" />
+                    )}
                 </div>
             </div>
         );
@@ -240,7 +245,7 @@ export const DebtCard: React.FC<DebtCardProps> = ({
                     {!hideAvatar && (
                         <Avatar
                             name={finalDisplayName}
-                            size="md"
+                            size="sm"
                             className={clsx("shadow-sm bg-white", (disabled || isRejectedByReceiver) && "grayscale")}
                             status={otherPartyStatus}
                             uid={linkedUserId || (otherId.length > 20 ? otherId : undefined)}
@@ -303,17 +308,17 @@ export const DebtCard: React.FC<DebtCardProps> = ({
 
                         {/* Progress Bar */}
                         {debt.originalAmount && debt.originalAmount > 0 && (
-                             <div className="w-full h-1.5 bg-gray-100 dark:bg-slate-800 rounded-full overflow-hidden mt-3">
-                                 <div 
-                                     className={clsx(
-                                         "h-full rounded-full transition-all duration-500",
-                                         isLender ? "bg-purple-500" : "bg-orange-500"
-                                     )}
-                                     style={{ 
-                                         width: `${Math.min(100, Math.max(0, ((debt.originalAmount - debt.remainingAmount) / debt.originalAmount) * 100))}%` 
-                                     }}
-                                 />
-                             </div>
+                            <div className="w-full h-1.5 bg-gray-100 dark:bg-slate-800 rounded-full overflow-hidden mt-3">
+                                <div
+                                    className={clsx(
+                                        "h-full rounded-full transition-all duration-500",
+                                        isLender ? "bg-purple-500" : "bg-orange-500"
+                                    )}
+                                    style={{
+                                        width: `${Math.min(100, Math.max(0, ((debt.originalAmount - debt.remainingAmount) / debt.originalAmount) * 100))}%`
+                                    }}
+                                />
+                            </div>
                         )}
                     </div>
 
@@ -387,7 +392,7 @@ export const DebtCard: React.FC<DebtCardProps> = ({
                 initialData={debt}
                 targetUser={
                     linkedUserId ? { uid: linkedUserId, displayName: finalDisplayName } as User :
-                    { name: finalDisplayName, phoneNumber: lockedPhone || '' } as Contact
+                        { name: finalDisplayName, phoneNumber: lockedPhone || '' } as Contact
                 }
             />
         </>
