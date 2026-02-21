@@ -39,10 +39,10 @@ export const useNotifications = () => {
             const deletedMap: DeletedNotifications = {};
             snapshot.forEach(doc => {
                 const data = doc.data();
-                readMap[doc.id] = data.isRead || false;
-                // Mark as deleted if isDeleted flag is present and true
+                const id = doc.id;
+                readMap[id] = data.isRead || false;
                 if (data.isDeleted === true) {
-                    deletedMap[doc.id] = true;
+                    deletedMap[id] = true;
                 }
             });
             setReadNotifications(readMap);
@@ -67,11 +67,11 @@ export const useNotifications = () => {
             if ((isBorrower || isLender) && debt.createdAt) {
                 const debtCreatedTime = debt.createdAt.toDate().getTime();
                 const hoursSinceCreation = (nowTime - debtCreatedTime) / (60 * 60 * 1000);
-                
+
                 // Show notification if debt created in last 24 hours
                 if (hoursSinceCreation >= 0 && hoursSinceCreation < 24) {
                     const notifId = `created-${debt.id}`;
-                    
+
                     if (isLender) {
                         notifs.push({
                             id: notifId,
@@ -103,7 +103,7 @@ export const useNotifications = () => {
                 const dueDate = debt.dueDate.toDate();
                 const diff = differenceInDays(dueDate, now);
                 const isOverdue = diff < 0;
-                const notifId = isOverdue ? `overdue-${debt.id}` : `due-${debt.id}`;
+                const notifId = `due-${debt.id}`; // Unified ID for both due and overdue
 
                 if (diff >= 0 && diff <= 3) {
                     notifs.push({
@@ -133,7 +133,7 @@ export const useNotifications = () => {
                         const dueDate = inst.dueDate.toDate();
                         const diff = differenceInDays(dueDate, now);
                         const isOverdue = diff < 0;
-                        const notifId = isOverdue ? `inst-overdue-${inst.id}` : `inst-${inst.id}`;
+                        const notifId = `inst-${inst.id}`; // Unified ID for installments
 
                         if (diff >= 0 && diff <= 3) {
                             notifs.push({
@@ -162,10 +162,11 @@ export const useNotifications = () => {
         // Sort by date desc (newest first)
         const filtered = notifs.filter(n => {
             // Never show if explicitly deleted
-            if (deletedNotifications[n.id] === true) return false;
+            const isDeleted = deletedNotifications[n.id] === true;
+            if (isDeleted) return false;
             return true;
         });
-        
+
         return filtered.sort((a, b) => b.date.getTime() - a.date.getTime());
     }, [debts, user, readNotifications, deletedNotifications]);
 
@@ -181,7 +182,7 @@ export const useNotifications = () => {
         // Background save to Firestore (no need to await)
         try {
             const notifRef = doc(db, 'users', user.uid, 'notificationReadStatus', notificationId);
-            setDoc(notifRef, { isRead: true, markedAt: new Date() }).catch(error => {
+            setDoc(notifRef, { isRead: true, markedAt: new Date() }, { merge: true }).catch(error => {
                 console.error('Failed to mark notification as read in Firestore:', error);
                 // Revert on error
                 setReadNotifications(prev => ({
@@ -206,8 +207,8 @@ export const useNotifications = () => {
             if (!user) return;
             const notifRef = doc(db, 'users', user.uid, 'notificationReadStatus', notificationId);
             // Only update with isDeleted flag, keeping isRead if it exists
-            setDoc(notifRef, { 
-                isDeleted: true, 
+            setDoc(notifRef, {
+                isDeleted: true,
                 deletedAt: new Date(),
                 isRead: true  // Also mark as read when deleted
             }, { merge: true }).catch(error => {

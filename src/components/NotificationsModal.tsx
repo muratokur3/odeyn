@@ -15,21 +15,21 @@ interface NotificationsModalProps {
     onClearAll?: () => void;
 }
 
-export const NotificationsModal: React.FC<NotificationsModalProps> = ({ 
-    isOpen, 
-    onClose, 
-    notifications, 
+export const NotificationsModal: React.FC<NotificationsModalProps> = ({
+    isOpen,
+    onClose,
+    notifications,
     onMarkAsRead,
     onDelete,
-    onClearAll 
+    onClearAll
 }) => {
     const navigate = useNavigate();
 
     if (!isOpen) return null;
 
-    // Filter: only show unread AND not deleted notifications
-    const visibleNotifications = notifications.filter(n => !n.read);
-    const unreadCount = visibleNotifications.length;
+    // Show all notifications (unread and read)
+    const visibleNotifications = notifications;
+    const unreadCount = notifications.filter(n => !n.read).length;
 
     const handleNotificationClick = (notif: Notification) => {
         // Mark as read immediately (optimistic update)
@@ -87,27 +87,27 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                                 key={notif.id}
                                 className={clsx(
                                     "p-3 rounded-xl border cursor-pointer transition-all active:scale-95 group",
-                                    notif.read 
-                                        ? "bg-slate-800/30 border-slate-800" 
-                                        : notif.message.includes('gecikti') 
-                                            ? "bg-red-900/30 border-red-700" 
-                                            : "bg-blue-900/20 border-blue-700"
+                                    notif.read
+                                        ? "bg-slate-800/10 border-slate-800/50 opacity-60"
+                                        : notif.message.includes('gecikti')
+                                            ? "bg-red-900/30 border-red-700"
+                                            : "bg-blue-900/20 border-blue-700 shadow-sm shadow-blue-900/10"
                                 )}
                             >
                                 <div className="flex justify-between items-start mb-1">
                                     <div className="flex items-center gap-2 flex-1" onClick={() => handleNotificationClick(notif)}>
                                         <span className={clsx(
                                             "text-xs font-bold px-2 py-0.5 rounded-full",
-                                            notif.type === 'INSTALLMENT_DUE' ? "bg-purple-100 text-purple-700" 
-                                            : notif.type === 'DEBT_CREATED' ? "bg-green-100 text-green-700"
-                                            : "bg-orange-100 text-orange-700"
+                                            notif.type === 'INSTALLMENT_DUE' ? "bg-purple-100 text-purple-700"
+                                                : notif.type === 'DEBT_CREATED' ? "bg-green-100 text-green-700"
+                                                    : "bg-orange-100 text-orange-700"
                                         )}>
-                                            {notif.type === 'INSTALLMENT_DUE' ? 'Taksit' 
-                                            : notif.type === 'DEBT_CREATED' ? 'Yeni'
-                                            : 'Vade'}
+                                            {notif.type === 'INSTALLMENT_DUE' ? 'Taksit'
+                                                : notif.type === 'DEBT_CREATED' ? 'Yeni'
+                                                    : 'Vade'}
                                         </span>
                                         {!notif.read && (
-                                            <span className="inline-block w-2 h-2 bg-blue-500 rounded-full"></span>
+                                            <span className="inline-block w-2 h-2 bg-blue-500 rounded-full animate-pulse"></span>
                                         )}
                                     </div>
                                     <span className="text-xs text-text-secondary flex items-center gap-1">
@@ -115,19 +115,19 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                                         {format(notif.date, 'd MMM', { locale: tr })}
                                     </span>
                                 </div>
-                                
-                                <p 
+
+                                <p
                                     onClick={() => handleNotificationClick(notif)}
                                     className={clsx("text-sm mb-2", notif.read ? "text-text-secondary" : "text-text-primary font-medium")}
                                 >
                                     {notif.message}
                                 </p>
-                                
+
                                 <div className="flex justify-between items-center">
                                     <span className="text-xs text-primary flex items-center gap-1">
                                         Detay <ArrowRight size={12} />
                                     </span>
-                                    
+
                                     {/* Action Buttons */}
                                     <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
                                         {!notif.read && (
@@ -154,16 +154,14 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                 </div>
 
                 {/* Footer */}
-                {visibleNotifications.length > 0 && (
-                    <div className="border-t border-slate-700 p-4 flex gap-2">
-                        <button
-                            onClick={onClearAll}
-                            className="flex-1 px-4 py-2 bg-red-900/30 text-red-400 hover:bg-red-900/40 rounded-lg transition-colors text-sm font-medium"
-                        >
-                            Tümünü Temizle
-                        </button>
-                    </div>
-                )}
+                <div className="border-t border-slate-700 p-4 flex gap-2">
+                    <button
+                        onClick={onClearAll}
+                        className="flex-1 px-4 py-2 bg-red-900/30 text-red-400 hover:bg-red-900/40 rounded-lg transition-colors text-sm font-medium"
+                    >
+                        Tüm Bildirimleri Sil
+                    </button>
+                </div>
             </div>
         </div>
     );
