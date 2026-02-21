@@ -10,7 +10,7 @@ import { usePersonDebts } from '../hooks/usePersonDebts';
 import { useDebts } from '../hooks/useDebts';
 import { useContactName } from '../hooks/useContactName';
 import { useLedger } from '../hooks/useLedger';
-import { ArrowLeft, MoreVertical, Edit2, UserPlus, Bell, BellOff, Ban, Trash2 } from 'lucide-react';
+import { ArrowLeft, MoreVertical, Edit2, UserPlus, Bell, BellOff, Ban, Trash2, Phone, MessageCircle } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
 import clsx from 'clsx';
 import { SummaryCard } from '../components/SummaryCard';
@@ -51,6 +51,7 @@ export const PersonStream = () => {
 
     // State
     const [tabMode, setTabMode] = useState<TabMode>(() => {
+        // ⚠️ DEFAULT: 'TOTAL' — başlangıçta toplam görünür
         return (localStorage.getItem(`tabMode_${id}`) as TabMode) || 'TOTAL';
     });
     const carouselRef = useRef<HTMLDivElement>(null);
@@ -63,6 +64,7 @@ export const PersonStream = () => {
     const [showMenu, setShowMenu] = useState(false);
     const [showCreateDebtModal, setShowCreateDebtModal] = useState(false);
     const [showEditModal, setShowEditModal] = useState(false);
+    const [showProfilePanel, setShowProfilePanel] = useState(false);
     const [editName, setEditName] = useState('');
     const [editPhone, setEditPhone] = useState('');
     const isFirstLoadRef = useRef(true);
@@ -169,16 +171,16 @@ export const PersonStream = () => {
         const latestDebtWithPossibleName = [...rawDebts]
             .sort((a, b) => (b.createdAt?.toMillis?.() || 0) - (a.createdAt?.toMillis?.() || 0))
             .find(d => {
-                const isMatch = d.lenderId === id || d.borrowerId === id || 
-                               cleanPhone(d.lenderId) === cleanId || 
-                               cleanPhone(d.borrowerId) === cleanId ||
-                               (resolvedUid && (d.lenderId === resolvedUid || d.borrowerId === resolvedUid));
+                const isMatch = d.lenderId === id || d.borrowerId === id ||
+                    cleanPhone(d.lenderId) === cleanId ||
+                    cleanPhone(d.borrowerId) === cleanId ||
+                    (resolvedUid && (d.lenderId === resolvedUid || d.borrowerId === resolvedUid));
                 return isMatch;
             });
 
         if (latestDebtWithPossibleName) {
-            const isLender = latestDebtWithPossibleName.lenderId === user?.uid || 
-                             cleanPhone(latestDebtWithPossibleName.lenderId) === cleanPhone(user?.phoneNumber || '');
+            const isLender = latestDebtWithPossibleName.lenderId === user?.uid ||
+                cleanPhone(latestDebtWithPossibleName.lenderId) === cleanPhone(user?.phoneNumber || '');
             name = isLender ? latestDebtWithPossibleName.borrowerName : latestDebtWithPossibleName.lenderName;
         }
 
@@ -194,7 +196,7 @@ export const PersonStream = () => {
 
         // --- 3. DASHBOARD-CONSISTENT ULTIMATE FALLBACK ---
         const isPhoneFormat = displayName.replace(/\s/g, '').replace(/\+/g, '').length >= 10 && !isNaN(Number(displayName.replace(/\s/g, '').replace(/\+/g, '')));
-        
+
         if ((isPhoneFormat || displayName === 'Bilinmeyen') && name && name !== id && name !== 'Bilinmeyen') {
             displayName = name;
         }
@@ -203,12 +205,12 @@ export const PersonStream = () => {
     }, [id, targetUserObject, resolveName, rawDebts, user, resolvedUid]);
 
     // useLedger for LEDGER tab
-    const { 
-        transactions, 
-        ledgerId, 
-        loadMore, 
-        hasMore, 
-        loadingMore 
+    const {
+        transactions,
+        ledgerId,
+        loadMore,
+        hasMore,
+        loadingMore
     } = useLedger(
         user?.uid,
         user?.displayName,
@@ -226,7 +228,7 @@ export const PersonStream = () => {
     const getDebtType = (debt: Debt): string => {
         // If type exists, use it
         if (debt.type) return debt.type;
-        
+
         // Fallback: infer from other fields
         if (debt.dueDate || (debt.installments && debt.installments.length > 0)) {
             return 'INSTALLMENT';
@@ -238,7 +240,7 @@ export const PersonStream = () => {
     const normalDebts = useMemo(() => {
         return allDebts.filter(d => getDebtType(d) === 'ONE_TIME');
     }, [allDebts]);
-    
+
     const installmentDebts = useMemo(() => allDebts.filter(d => getDebtType(d) === 'INSTALLMENT'), [allDebts]);
 
     // Calculate balances
@@ -312,17 +314,44 @@ export const PersonStream = () => {
         }
     };
 
-    // Carousel Scroll Sync using IntersectionObserver
+    // ===========================================================================
+    // ⚠️  KRİTİK: CAROUSEL SCROLL SYNC — DOKUNMA!
+    // ===========================================================================
+    // Kaydırmayla sekme değişme mantığı: carousel div'indeki 'scroll' eventini dinle.
+    //   - Kaydırma durduktan 100ms sonra merkeze en yakın kartı geometrik hesapla.
+    //   - isScrollingRef KULLANILMAZ: React cleanup clearTimeout'u iptal edebilir
+    //     ve ref sonsuza kadar true kalır → swipe hiç çalışmaz.
+    //   - Döngü koruması: mode !== tabModeRef.current zaten saptırıyor.
+    //   - IntersectionObserver KULLANILMAZ (entries[] yanlış/eksik olabilir).
+    //   - window.scroll KULLANILMAZ (yatay kaydırmayı da tetikler).
+    // 🚫 BU BLOĞU DEĞİŞTİRME!
+    // ===========================================================================
     useEffect(() => {
         const el = carouselRef.current;
         if (!el) return;
 
-        const handleIntersect = (entries: IntersectionObserverEntry[]) => {
-            // Find the entry that is mostly visible
-            const visibleEntry = entries.find(entry => entry.isIntersecting && entry.intersectionRatio >= 0.6);
-            
-            if (visibleEntry && !isScrollingRef.current) {
-                const mode = visibleEntry.target.getAttribute('data-mode') as TabMode;
+        let scrollTimer: ReturnType<typeof setTimeout> | null = null;
+
+        const detectActiveCard = () => {
+            // ⚠️ isScrollingRef check KALDİRİLDİ — cleanup clearTimeout'u iptal eder
+            // ve ref sonsuza kadar true kalır. mode!==tabModeRef koruyor.
+            const containerCenter = el.scrollLeft + el.offsetWidth / 2;
+            const cards = el.querySelectorAll('[data-mode]');
+            let closestCard: Element | null = null;
+            let closestDist = Infinity;
+
+            cards.forEach(card => {
+                const cardEl = card as HTMLElement;
+                const cardCenter = cardEl.offsetLeft + cardEl.offsetWidth / 2;
+                const dist = Math.abs(cardCenter - containerCenter);
+                if (dist < closestDist) {
+                    closestDist = dist;
+                    closestCard = card;
+                }
+            });
+
+            if (closestCard) {
+                const mode = (closestCard as HTMLElement).getAttribute('data-mode') as TabMode;
                 if (mode && mode !== tabModeRef.current) {
                     lastUpdateSourceRef.current = 'SCROLL';
                     setTabMode(mode);
@@ -330,27 +359,25 @@ export const PersonStream = () => {
             }
         };
 
-        const observer = new IntersectionObserver(handleIntersect, {
-            root: el,
-            threshold: 0.6,
-            rootMargin: '0px'
-        });
+        const handleScroll = () => {
+            if (scrollTimer) clearTimeout(scrollTimer);
+            scrollTimer = setTimeout(detectActiveCard, 150);
+        };
 
-        const cards = el.querySelectorAll('[data-mode]');
-        cards.forEach(card => observer.observe(card));
+        el.addEventListener('scroll', handleScroll, { passive: true });
+        return () => {
+            el.removeEventListener('scroll', handleScroll);
+            if (scrollTimer) clearTimeout(scrollTimer);
+        };
+    }, []); // Stable
 
-        return () => observer.disconnect();
-    }, []); // Stable observer
-
-    // Scroll to active tab
+    // Scroll to active tab when changed via click or initial load
     useEffect(() => {
         const el = carouselRef.current;
         if (!el) return;
 
-        // ONLY scrollTo if it's the first load OR if it was a CLICK change
-        // Manual scrolls (SCROLL) already have the element in view.
         const shouldScroll = isFirstLoadRef.current || lastUpdateSourceRef.current === 'CLICK';
-        lastUpdateSourceRef.current = null; // Reset for next change
+        lastUpdateSourceRef.current = null;
 
         if (!shouldScroll) return;
 
@@ -363,21 +390,14 @@ export const PersonStream = () => {
 
         if (targetCard) {
             const targetScroll = targetCard.offsetLeft - (el.offsetWidth - targetCard.offsetWidth) / 2;
-            
-            isScrollingRef.current = true;
-            el.scrollTo({ 
-                left: targetScroll, 
-                behavior: isFirstLoadRef.current ? 'auto' : 'smooth' 
+            const isFirst = isFirstLoadRef.current;
+            isFirstLoadRef.current = false; // reset before scroll
+            el.scrollTo({
+                left: targetScroll,
+                behavior: isFirst ? 'auto' : 'smooth'
             });
-            
-            const timer = setTimeout(() => { 
-                isScrollingRef.current = false;
-                isFirstLoadRef.current = false;
-            }, 600);
-            return () => clearTimeout(timer);
         }
     }, [tabMode]);
-
 
 
     // Tab configuration
@@ -467,21 +487,26 @@ export const PersonStream = () => {
     return (
         <div className="bg-background min-h-[calc(100vh-64px)] pb-24">
             {/* Header */}
-            <header className="sticky top-0 z-30 bg-surface/95 backdrop-blur-md border-b border-border px-4 py-3 flex items-center gap-3">
+            <header className="sticky top-0 z-30 bg-surface/95 backdrop-blur-md border-b border-border px-4 py-3 flex items-center gap-3 relative">
                 <button onClick={() => navigate(-1)} className="p-2 -ml-2 text-text-secondary hover:bg-slate-100 dark:hover:bg-slate-800 rounded-full">
                     <ArrowLeft size={22} />
                 </button>
 
-                <Avatar 
-                    name={personInfo.name} 
-                    size="md" 
-                    photoURL={targetUserObject && 'photoURL' in targetUserObject ? targetUserObject.photoURL : undefined} 
-                    status={personInfo.status}
-                />
+                <div
+                    onClick={() => setShowProfilePanel(!showProfilePanel)}
+                    className="flex-1 flex items-center gap-3 min-w-0 cursor-pointer hover:opacity-80 transition-opacity"
+                >
+                    <Avatar
+                        name={personInfo.name}
+                        size="md"
+                        photoURL={targetUserObject && 'photoURL' in targetUserObject ? targetUserObject.photoURL : undefined}
+                        status={personInfo.status as 'none' | 'system' | 'contact'}
+                    />
 
-                <div className="flex-1 min-w-0 text-center">
-                    <h1 className="font-semibold text-text-primary truncate">{personInfo.name}</h1>
-                    <p className="text-xs text-text-secondary">{formatPhoneForDisplay(personInfo.phone)}</p>
+                    <div className="flex-1 min-w-0">
+                        <h1 className="font-semibold text-text-primary truncate">{personInfo.name}</h1>
+                        <p className="text-[10px] text-text-secondary leading-none mt-0.5">{formatPhoneForDisplay(personInfo.phone)}</p>
+                    </div>
                 </div>
 
                 <div className="relative">
@@ -534,7 +559,57 @@ export const PersonStream = () => {
                         </>
                     )}
                 </div>
+
             </header>
+
+
+            {/* Profile panel - fixed overlay below header */}
+            {showProfilePanel && (
+                <>
+                    {/* Backdrop */}
+                    <div
+                        className="fixed inset-0 z-[29] bg-black/20"
+                        onClick={() => setShowProfilePanel(false)}
+                    />
+                    {/* Panel */}
+                    <div className="fixed top-[60px] left-0 right-0 z-[30] max-w-3xl mx-auto bg-surface border-b border-border shadow-2xl animate-in slide-in-from-top-2 duration-200">
+                        <div className="p-5 flex flex-col items-center text-center space-y-4">
+                            <Avatar
+                                name={personInfo.name}
+                                photoURL={targetUserObject && 'photoURL' in targetUserObject ? targetUserObject.photoURL : undefined}
+                                size="xl"
+                                status={personInfo.status as 'none' | 'system' | 'contact'}
+                            />
+                            <div>
+                                <h2 className="text-xl font-bold text-text-primary">{personInfo.name}</h2>
+                                {personInfo.phone && (
+                                    <p className="text-sm text-text-secondary mt-1">{formatPhoneForDisplay(personInfo.phone)}</p>
+                                )}
+                            </div>
+                            <div className="flex justify-center gap-4 w-full pt-1">
+                                <a
+                                    href={`tel:+${cleanPhone(personInfo.phone || '')}`}
+                                    onClick={() => setShowProfilePanel(false)}
+                                    className="flex flex-col items-center gap-2 p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-border hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors flex-1"
+                                >
+                                    <Phone size={24} className="text-blue-600" />
+                                    <span className="text-xs font-semibold text-text-secondary">Ara</span>
+                                </a>
+                                <a
+                                    href={`https://wa.me/${cleanPhone(personInfo.phone || '').replace(/^\+/, '')}`}
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    onClick={() => setShowProfilePanel(false)}
+                                    className="flex flex-col items-center gap-2 p-4 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-border hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors flex-1"
+                                >
+                                    <MessageCircle size={24} className="text-green-500" />
+                                    <span className="text-xs font-semibold text-text-secondary">WhatsApp</span>
+                                </a>
+                            </div>
+                        </div>
+                    </div>
+                </>
+            )}
 
             {isBlocked && (
                 <div className="bg-orange-50 dark:bg-orange-900/20 px-4 py-2 text-center text-sm text-orange-700 dark:text-orange-300">
@@ -543,11 +618,12 @@ export const PersonStream = () => {
             )}
 
             <main className="p-0 space-y-0">
+
                 {/* 1. Carousel Section */}
-                <div 
+                <div
                     ref={carouselRef}
                     className="flex gap-4 overflow-x-auto pb-8 pt-4 px-4 snap-x snap-mandatory scrollbar-hide bg-surface/50 border-b border-border"
-                    style={{ scrollPadding: '0 2rem' }}
+                    style={{ scrollPadding: '0 2rem', touchAction: 'pan-x' }}
                 >
                     {/* Left Spacer for centering first card */}
                     <div className="shrink-0 w-[8vw] sm:w-[15vw]" />
@@ -643,7 +719,7 @@ export const PersonStream = () => {
                 <div className="p-4">
                     {tabMode === 'TOTAL' && (
                         <div className="space-y-4 animate-in fade-in slide-in-from-bottom-2">
-                             <div className="grid gap-3">
+                            <div className="grid gap-3">
                                 {Array.from(totalBalance.entries()).sort((a) => a[0] === 'TRY' ? -1 : 1).map(([curr, bal]) => (
                                     <div key={curr} className="flex justify-between items-center p-4 bg-surface rounded-xl border border-border shadow-sm">
                                         <div className="flex items-center gap-3">
@@ -667,7 +743,7 @@ export const PersonStream = () => {
                                         </div>
                                     </div>
                                 ))}
-                             </div>
+                            </div>
                         </div>
                     )}
                     {tabMode === 'LEDGER' && (
@@ -677,9 +753,9 @@ export const PersonStream = () => {
                                 <DateFilterDropdown onFilterChange={handleLedgerDateChange} />
                             </div>
 
-                            <TransactionList 
-                                ledgerId={ledgerId || ''} 
-                                transactions={filteredTransactions} 
+                            <TransactionList
+                                ledgerId={ledgerId || ''}
+                                transactions={filteredTransactions}
                                 onLoadMore={loadMore}
                                 hasMore={hasMore}
                                 loadingMore={loadingMore}
@@ -703,17 +779,17 @@ export const PersonStream = () => {
                 initialPhoneNumber={personInfo.phone}
             />
 
-                <ContactModal
-                    isOpen={showEditModal}
-                    onClose={() => setShowEditModal(false)}
-                    contactToEdit={targetUserObject && !('uid' in targetUserObject) ? (targetUserObject as Contact) : null}
-                    initialName={editName}
-                    initialPhone={editPhone}
-                    onSuccess={() => {
-                        window.location.reload();
-                    }}
-                    checkDuplicates={!contactId} // Only check duplicates if creating new (though here we mostly edit)
-                />
+            <ContactModal
+                isOpen={showEditModal}
+                onClose={() => setShowEditModal(false)}
+                contactToEdit={targetUserObject && !('uid' in targetUserObject) ? (targetUserObject as Contact) : null}
+                initialName={editName}
+                initialPhone={editPhone}
+                onSuccess={() => {
+                    window.location.reload();
+                }}
+                checkDuplicates={!contactId} // Only check duplicates if creating new (though here we mostly edit)
+            />
         </div>
     );
 };

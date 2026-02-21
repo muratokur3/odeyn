@@ -11,7 +11,6 @@ import { Tools } from './pages/Tools';
 import { ExchangeRates } from './pages/ExchangeRates';
 import { PersonStream } from './pages/PersonStream';
 import { StreamHistory } from './pages/StreamHistory';
-import { PersonProfile } from './pages/PersonProfile';
 import { Layout } from './components/Layout';
 import { useAuth } from './hooks/useAuth';
 import { ActiveSessions } from './pages/ActiveSessions';
@@ -56,7 +55,6 @@ function App() {
                   <Route path="/tools" element={<Tools />} />
                   <Route path="/person/:id" element={<PersonStream />} />
                   <Route path="/person/:id/history" element={<StreamHistory />} />
-                  <Route path="/person/:id/profile" element={<PersonProfile />} />
                   <Route path="/contacts" element={<Contacts />} />
                   <Route path="/settings" element={<Settings />} />
                   <Route path="/settings/sessions" element={<ActiveSessions />} />
