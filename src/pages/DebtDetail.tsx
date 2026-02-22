@@ -280,7 +280,7 @@ export const DebtDetail = () => {
                 <div className="bg-surface p-6 rounded-2xl shadow-sm border border-border text-center transition-colors duration-200">
                     <p className="text-text-secondary mb-1">Kalan Tutar</p>
                     <h2 className="text-4xl font-bold text-text-primary mb-6">
-                        {formatCurrency(debt.remainingAmount, debt.currency)}
+                        {formatCurrency(debt.remainingAmount, debt.currency, debt.goldDetail)}
                     </h2>
 
                     {debt.dueDate && (
@@ -344,6 +344,7 @@ export const DebtDetail = () => {
                     <InstallmentList
                         installments={debt.installments}
                         currency={debt.currency}
+                        goldDetail={debt.goldDetail}
                         onPayInstallment={handleInstallmentPayment}
                         isBorrower={!!isBorrower}
                     />
@@ -353,6 +354,7 @@ export const DebtDetail = () => {
                 <HistoryList
                     logs={filteredLogs}
                     currency={debt.currency}
+                    goldDetail={debt.goldDetail}
                     isLender={!!isLender}
                     debtId={debt.id}
                     otherPartyId={isLender ? debt.borrowerId : debt.lenderId}
@@ -365,6 +367,7 @@ export const DebtDetail = () => {
                 onSubmit={handlePayment}
                 maxAmount={debt.remainingAmount}
                 currency={debt.currency}
+                goldDetail={debt.goldDetail}
                 initialAmount={paymentInitialAmount}
                 initialNote={paymentInitialNote}
             />

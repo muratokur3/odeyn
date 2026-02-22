@@ -29,9 +29,18 @@ export const ExchangeRates = () => {
         setLoading(true);
         try {
             const customExchangeRates: Record<string, number> = {};
-            if (usdRate) customExchangeRates['USD'] = parseFloat(usdRate);
-            if (eurRate) customExchangeRates['EUR'] = parseFloat(eurRate);
-            if (goldRate) customExchangeRates['GOLD'] = parseFloat(goldRate);
+            const parse = (v: string) => {
+                const n = parseFloat(v);
+                return (!isNaN(n) && isFinite(n)) ? n : null;
+            };
+
+            const u = parse(usdRate);
+            const e = parse(eurRate);
+            const g = parse(goldRate);
+
+            if (u !== null) customExchangeRates['USD'] = u;
+            if (e !== null) customExchangeRates['EUR'] = e;
+            if (g !== null) customExchangeRates['GOLD'] = g;
 
             await updateUserProfile(user.uid, {
                 customExchangeRates

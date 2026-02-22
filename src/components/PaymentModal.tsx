@@ -2,6 +2,13 @@ import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { formatCurrency, formatAmountToWords } from '../utils/format';
 import { AmountInput } from './AmountInput';
+import type { GoldDetail } from '../types';
+
+// Helper to prevent NaN in Firestore
+const safeParseFloat = (val: string | number): number | undefined => {
+    const num = typeof val === 'string' ? parseFloat(val.replace(',', '.')) : val;
+    return (num !== null && num !== undefined && !isNaN(num) && isFinite(num)) ? num : undefined;
+};
 
 interface PaymentModalProps {
     isOpen: boolean;
@@ -9,12 +16,13 @@ interface PaymentModalProps {
     onSubmit: (amount: number, note: string) => Promise<void>;
     maxAmount: number;
     currency: string;
+    goldDetail?: GoldDetail;
     initialAmount?: number;
     initialNote?: string;
 }
 
 export const PaymentModal: React.FC<PaymentModalProps> = ({
-    isOpen, onClose, onSubmit, maxAmount, currency, initialAmount, initialNote
+    isOpen, onClose, onSubmit, maxAmount, currency, goldDetail, initialAmount, initialNote
 }) => {
     const [amount, setAmount] = useState('');
     const [note, setNote] = useState('');
@@ -31,8 +39,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        const numAmount = parseFloat(amount);
-        if (isNaN(numAmount) || numAmount <= 0 || numAmount > maxAmount) return;
+        const numAmount = safeParseFloat(amount);
+        if (numAmount === undefined || numAmount <= 0 || numAmount > maxAmount) return;
 
         setLoading(true);
         try {
@@ -60,18 +68,18 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="space-y-1">
                         <AmountInput
-                            label={`Tutar (${currency})`}
+                            label={(currency === 'GOLD' || currency === 'SILVER') ? (goldDetail?.type.includes('GRAM') || goldDetail?.type.includes('SILVER') ? 'Gram' : 'Adet') : `Tutar (${currency})`}
                             value={amount}
                             onChange={setAmount}
                             required
                         />
                         {amount && (
                             <p className="text-[10px] text-text-secondary italic text-left animate-in fade-in slide-in-from-top-1 px-1 mt-0.5">
-                                {formatAmountToWords(amount, currency)}
+                                {formatAmountToWords(amount, currency, goldDetail)}
                             </p>
                         )}
                         <p className="text-xs text-text-secondary mt-1">
-                            Kalan: {formatCurrency(maxAmount, currency)}
+                            Kalan: {formatCurrency(maxAmount, currency, goldDetail)}
                         </p>
                     </div>
 

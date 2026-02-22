@@ -4,13 +4,17 @@
  */
 
 import { useState, useEffect } from 'react';
-import { X, ArrowUpRight, ArrowDownLeft, CheckCircle2 } from 'lucide-react';
+import { X, ArrowUpRight, ArrowDownLeft, CheckCircle2, ChevronDown, ChevronUp } from 'lucide-react';
+import { Toggle } from './Toggle';
 import { addLedgerTransaction, getOrCreateLedger } from '../services/transactionService';
 import { getDebtsBetweenParticipants, makePayment } from '../services/db';
+import { formatAmountToWords, safeParseFloat, CURRENCIES } from '../utils/format';
 import { useAuth } from '../hooks/useAuth';
 import { useModal } from '../context/ModalContext';
 import clsx from 'clsx';
-import type { TransactionDirection } from '../types';
+import type { TransactionDirection, Transaction, GoldDetail } from '../types';
+import { GOLD_TYPES, GOLD_CATEGORIES, SILVER_CATEGORIES, BILEZIK_MODELS, TAKI_TYPES, GOLD_CARATS, getGoldType } from '../utils/goldConstants';
+import { MetalSelectionFields } from './MetalSelectionFields';
 
 interface QuickTransactionModalProps {
     isOpen: boolean;
@@ -38,6 +42,39 @@ export const QuickTransactionModal: React.FC<QuickTransactionModalProps> = ({
     const { showAlert } = useModal();
 
     const [amount, setAmount] = useState('');
+    const [currency, setCurrency] = useState('TRY');
+
+    // Gold State
+    const [goldCategory, setGoldCategory] = useState<string>('GRAM');
+    const [goldTypeId, setGoldTypeId] = useState<string>('GRAM_24');
+    const [goldSubType, setGoldSubType] = useState<string>('');
+    const [goldWeightPerUnit, setGoldWeightPerUnit] = useState<string>('');
+    const [goldCustomCarat, setGoldCustomCarat] = useState<number>(22);
+
+    // Sync Metal Type ID
+    useEffect(() => {
+        if (currency === 'GOLD' && goldCategory === 'BILEZIK') {
+            const model = BILEZIK_MODELS.find(m => m.id === goldSubType);
+            const effectiveCarat = model?.fixedCarat || goldCustomCarat;
+            const targetType = `BILEZIK_${effectiveCarat}`;
+            if (GOLD_TYPES.some(t => t.id === targetType)) {
+                setGoldTypeId(targetType);
+            } else {
+                setGoldTypeId('BILEZIK_22'); // Fallback
+            }
+        } else if (currency === 'SILVER') {
+            if (goldCategory === 'SILVER') {
+                if (!goldTypeId.startsWith('SILVER_')) {
+                    setGoldTypeId('SILVER_999');
+                }
+            }
+        }
+    }, [currency, goldCategory, goldSubType, goldCustomCarat, goldTypeId]);
+
+    // Custom Rate
+    const [manualRate, setManualRate] = useState('');
+    const [useManualRate, setUseManualRate] = useState(false);
+
     const [description, setDescription] = useState('');
     const [direction, setDirection] = useState<TransactionDirection>('OUTGOING');
     const [submitting, setSubmitting] = useState(false);
@@ -61,8 +98,8 @@ export const QuickTransactionModal: React.FC<QuickTransactionModalProps> = ({
 
     // Perform Matching Logic
     useEffect(() => {
-        const numAmount = parseFloat(amount.replace(',', '.'));
-        if (isNaN(numAmount) || numAmount <= 0 || availableDebts.length === 0) {
+        const numAmount = safeParseFloat(amount) || 0;
+        if (numAmount <= 0 || availableDebts.length === 0) {
             setMatchedDebt(null);
             return;
         }
@@ -88,7 +125,7 @@ export const QuickTransactionModal: React.FC<QuickTransactionModalProps> = ({
         if (!matchedDebt || !user) return;
         setSubmitting(true);
         try {
-            const numAmount = parseFloat(amount.replace(',', '.'));
+            const numAmount = safeParseFloat(amount) || 0;
             await makePayment(
                 matchedDebt.id, 
                 numAmount, 
@@ -111,8 +148,8 @@ export const QuickTransactionModal: React.FC<QuickTransactionModalProps> = ({
             return;
         }
 
-        const numAmount = parseFloat(amount.replace(',', '.'));
-        if (isNaN(numAmount) || numAmount <= 0) {
+        const numAmount = safeParseFloat(amount) || 0;
+        if (numAmount <= 0) {
             showAlert("Hata", "Geçerli bir tutar girin.", "error");
             return;
         }
@@ -158,12 +195,31 @@ export const QuickTransactionModal: React.FC<QuickTransactionModalProps> = ({
 
             console.log('Adding transaction to ledger:', targetLedgerId);
 
+            let goldDetail: Transaction['goldDetail'] | undefined;
+            if (currency === 'GOLD' || currency === 'SILVER') {
+                const typeData = getGoldType(goldTypeId);
+                const selectedModel = (goldCategory === 'BILEZIK' ? BILEZIK_MODELS : TAKI_TYPES).find(m => m.id === goldSubType);
+
+                goldDetail = {
+                    type: goldTypeId,
+                    label: typeData?.label || goldTypeId,
+                    subTypeLabel: goldSubType || undefined,
+                    carat: selectedModel?.fixedCarat || (typeData?.fixedCarat ? typeData.defaultCarat : goldCustomCarat),
+                    weightPerUnit: safeParseFloat(goldWeightPerUnit),
+                };
+            }
+
+            const customRate = useManualRate ? safeParseFloat(manualRate) : undefined;
+
             await addLedgerTransaction(
                 targetLedgerId,
                 user.uid,
                 numAmount,
                 direction,
-                description.trim() || undefined
+                description.trim() || undefined,
+                currency,
+                goldDetail,
+                customRate
             );
 
             showAlert("Başarılı", "İşlem eklendi.", "success");
@@ -231,20 +287,74 @@ export const QuickTransactionModal: React.FC<QuickTransactionModalProps> = ({
                             </button>
                         </div>
 
-                        {/* Amount */}
-                        <div>
-                            <label className="block text-sm font-medium text-text-secondary mb-2">Tutar (₺)</label>
-                            <input
-                                type="text"
-                                inputMode="decimal"
-                                value={amount}
-                                onChange={(e) => setAmount(e.target.value)}
-                                placeholder="0"
-                                className="w-full px-4 py-4 text-3xl font-bold text-center rounded-xl border border-slate-200 dark:border-slate-700 bg-background text-text-primary focus:ring-2 focus:ring-primary outline-none"
-                                required
-                                autoFocus
-                            />
+                        {/* Amount & Currency */}
+                        <div className="flex gap-3">
+                            <div className="flex-1">
+                                <label className="block text-sm font-medium text-text-secondary mb-2">
+                                    {currency === 'GOLD' ? (getGoldType(goldTypeId)?.category === 'GRAM' ? 'Gram' : 'Adet') : 'Tutar'}
+                                </label>
+                                <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    value={amount}
+                                    onChange={(e) => setAmount(e.target.value)}
+                                    placeholder="0"
+                                    className="w-full px-4 py-4 text-3xl font-bold text-center rounded-xl border border-slate-200 dark:border-slate-700 bg-background text-text-primary focus:ring-2 focus:ring-primary outline-none"
+                                    required
+                                    autoFocus
+                                />
+                            </div>
+                            <div className="w-24 flex flex-col">
+                                <label className="block text-sm font-medium text-text-secondary mb-2">Birim</label>
+                                <select
+                                    value={currency}
+                                    onChange={(e) => {
+                                        const newCurr = e.target.value;
+                                        setCurrency(newCurr);
+                                        if (newCurr === 'SILVER') {
+                                            setGoldCategory('SILVER');
+                                            setGoldTypeId('SILVER_999');
+                                        } else if (newCurr === 'GOLD') {
+                                            setGoldCategory('GRAM');
+                                            setGoldTypeId('GRAM_24');
+                                        }
+                                    }}
+                                    className="w-full px-2 py-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-background text-text-primary focus:ring-2 focus:ring-primary outline-none font-bold h-full text-xs"
+                                >
+                                    {CURRENCIES.map(c => (
+                                        <option key={c.code} value={c.code}>{c.symbol} {c.code}</option>
+                                    ))}
+                                </select>
+                            </div>
                         </div>
+                        {amount && (
+                            <p className="text-[10px] text-text-secondary italic text-left animate-in fade-in slide-in-from-top-1 px-1 mt-0.5">
+                                {formatAmountToWords(amount, currency, (currency === 'GOLD' || currency === 'SILVER') ? {
+                                    type: goldTypeId,
+                                    label: getGoldType(goldTypeId)?.label || '',
+                                    subTypeLabel: goldSubType,
+                                    weightPerUnit: safeParseFloat(goldWeightPerUnit),
+                                    carat: (goldCategory === 'BILEZIK' ? BILEZIK_MODELS : TAKI_TYPES).find(m => m.id === goldSubType)?.fixedCarat || (getGoldType(goldTypeId)?.fixedCarat ? getGoldType(goldTypeId)?.defaultCarat : goldCustomCarat)
+                                } : undefined)}
+                            </p>
+                        )}
+
+                        {/* Metal Sub-selection */}
+                        {(currency === 'GOLD' || currency === 'SILVER') && (
+                            <MetalSelectionFields
+                                metal={currency as 'GOLD' | 'SILVER'}
+                                goldCategory={goldCategory}
+                                setGoldCategory={setGoldCategory}
+                                goldTypeId={goldTypeId}
+                                setGoldTypeId={setGoldTypeId}
+                                goldSubType={goldSubType}
+                                setGoldSubType={setGoldSubType}
+                                goldWeightPerUnit={goldWeightPerUnit}
+                                setGoldWeightPerUnit={setGoldWeightPerUnit}
+                                goldCustomCarat={goldCustomCarat}
+                                setGoldCustomCarat={setGoldCustomCarat}
+                            />
+                        )}
 
                         {/* Smart Match Suggestion */}
                         {matchedDebt && (
@@ -265,6 +375,35 @@ export const QuickTransactionModal: React.FC<QuickTransactionModalProps> = ({
                                         </button>
                                     </div>
                                 </div>
+                            </div>
+                        )}
+
+                        {/* Custom Rate Input */}
+                        {currency !== 'TRY' && (
+                            <div className="p-3 bg-orange-50 dark:bg-orange-900/10 rounded-xl border border-orange-200 dark:border-orange-800 animate-in fade-in transition-all">
+                                <div className="flex items-center justify-between mb-2">
+                                    <label className="text-xs font-bold text-orange-700 dark:text-orange-300">Özel Kur Kullan</label>
+                                    <Toggle
+                                        checked={useManualRate}
+                                        onChange={setUseManualRate}
+                                    />
+                                </div>
+                                {useManualRate && (
+                                    <div className="flex items-center gap-2">
+                                        <span className="text-sm text-text-secondary">
+                                            1 {(currency === 'GOLD' || currency === 'SILVER') ? (getGoldType(goldTypeId)?.label || (currency === 'GOLD' ? 'Altın' : 'Gümüş')) : currency} =
+                                        </span>
+                                        <input
+                                            type="number"
+                                            value={manualRate}
+                                            onChange={(e) => setManualRate(e.target.value)}
+                                            step="0.01"
+                                            className="flex-1 px-3 py-2 rounded-lg border border-orange-300 dark:border-orange-700 bg-white dark:bg-slate-800 text-sm font-bold text-text-primary outline-none focus:ring-1 focus:ring-orange-500"
+                                            placeholder="Örn: 34.50"
+                                        />
+                                        <span className="text-sm text-text-secondary">TRY</span>
+                                    </div>
+                                )}
                             </div>
                         )}
 

@@ -1,10 +1,14 @@
 import React, { useState, useEffect } from 'react';
 import { X, Calendar, AlertCircle } from 'lucide-react';
-import type { Debt } from '../types';
 import { Timestamp, deleteField } from 'firebase/firestore';
 import { useModal } from '../context/ModalContext';
-import { formatAmountToWords } from '../utils/format';
+import { formatAmountToWords, safeParseFloat, CURRENCIES } from '../utils/format';
 import { AmountInput } from './AmountInput';
+import type { Debt, GoldDetail } from '../types';
+import { GOLD_TYPES, GOLD_CATEGORIES, SILVER_CATEGORIES, BILEZIK_MODELS, TAKI_TYPES, GOLD_CARATS, getGoldType } from '../utils/goldConstants';
+import clsx from 'clsx';
+import { Toggle } from './Toggle';
+import { MetalSelectionFields } from './MetalSelectionFields';
 
 interface EditDebtModalProps {
     isOpen: boolean;
@@ -16,6 +20,38 @@ interface EditDebtModalProps {
 export const EditDebtModal: React.FC<EditDebtModalProps> = ({ isOpen, onClose, debt, onUpdate }) => {
     const [amount, setAmount] = useState('');
     const [currency, setCurrency] = useState('TRY');
+
+    // Gold State
+    const [goldCategory, setGoldCategory] = useState<string>('GRAM');
+    const [goldTypeId, setGoldTypeId] = useState<string>('GRAM_24');
+    const [goldSubType, setGoldSubType] = useState<string>('');
+    const [goldWeightPerUnit, setGoldWeightPerUnit] = useState<string>('');
+    const [goldCustomCarat, setGoldCustomCarat] = useState<number>(22);
+
+    // Sync Metal Type ID
+    useEffect(() => {
+        if (currency === 'GOLD' && goldCategory === 'BILEZIK') {
+            const model = BILEZIK_MODELS.find(m => m.id === goldSubType);
+            const effectiveCarat = model?.fixedCarat || goldCustomCarat;
+            const targetType = `BILEZIK_${effectiveCarat}`;
+            if (GOLD_TYPES.some(t => t.id === targetType)) {
+                setGoldTypeId(targetType);
+            } else {
+                setGoldTypeId('BILEZIK_22'); // Fallback
+            }
+        } else if (currency === 'SILVER') {
+            if (goldCategory === 'SILVER') {
+                if (!goldTypeId.startsWith('SILVER_')) {
+                    setGoldTypeId('SILVER_999');
+                }
+            }
+        }
+    }, [currency, goldCategory, goldSubType, goldCustomCarat, goldTypeId]);
+
+    // Custom Rate
+    const [manualRate, setManualRate] = useState('');
+    const [useManualRate, setUseManualRate] = useState(false);
+
     const [note, setNote] = useState('');
     const [dueDate, setDueDate] = useState('');
     const [loading, setLoading] = useState(false);
@@ -28,6 +64,25 @@ export const EditDebtModal: React.FC<EditDebtModalProps> = ({ isOpen, onClose, d
             setAmount(debt.originalAmount.toString());
             setCurrency(debt.currency);
             setNote(debt.note || '');
+
+            // Gold Detail Init
+            if (debt.currency === 'GOLD' && debt.goldDetail) {
+                const type = getGoldType(debt.goldDetail.type);
+                if (type) setGoldCategory(type.category);
+                setGoldTypeId(debt.goldDetail.type);
+                setGoldSubType(debt.goldDetail.subTypeLabel || '');
+                setGoldWeightPerUnit(debt.goldDetail.weightPerUnit?.toString() || '');
+                setGoldCustomCarat(debt.goldDetail.carat || 22);
+            }
+
+            if (debt.customExchangeRate) {
+                setManualRate(debt.customExchangeRate.toString());
+                setUseManualRate(true);
+            } else {
+                setManualRate('');
+                setUseManualRate(false);
+            }
+
             if (debt.dueDate) {
                 setDueDate(debt.dueDate.toDate().toISOString().split('T')[0]);
             } else {
@@ -46,6 +101,13 @@ export const EditDebtModal: React.FC<EditDebtModalProps> = ({ isOpen, onClose, d
                 note
             };
 
+            const customRate = useManualRate ? safeParseFloat(manualRate) : undefined;
+            if (customRate) {
+                updates.customExchangeRate = customRate;
+            } else if (debt.customExchangeRate) {
+                updates.customExchangeRate = deleteField() as any;
+            }
+
             if (dueDate) {
                 updates.dueDate = Timestamp.fromDate(new Date(dueDate));
             } else {
@@ -54,11 +116,26 @@ export const EditDebtModal: React.FC<EditDebtModalProps> = ({ isOpen, onClose, d
             }
 
             if (!hasPayments) {
-                const numAmount = parseFloat(amount);
-                if (!isNaN(numAmount) && numAmount > 0) {
+                const numAmount = safeParseFloat(amount);
+                if (numAmount !== undefined && numAmount > 0) {
                     updates.originalAmount = numAmount;
                     updates.remainingAmount = numAmount; // Reset remaining if no payments
                     updates.currency = currency;
+
+                    if (currency === 'GOLD' || currency === 'SILVER') {
+                        const typeData = getGoldType(goldTypeId);
+                        const selectedModel = (goldCategory === 'BILEZIK' ? BILEZIK_MODELS : TAKI_TYPES).find(m => m.id === goldSubType);
+
+                        updates.goldDetail = {
+                            type: goldTypeId,
+                            label: typeData?.label || goldTypeId,
+                            subTypeLabel: goldSubType || undefined,
+                            carat: selectedModel?.fixedCarat || (typeData?.fixedCarat ? typeData.defaultCarat : goldCustomCarat),
+                            weightPerUnit: safeParseFloat(goldWeightPerUnit),
+                        };
+                    } else if (debt.goldDetail) {
+                        updates.goldDetail = deleteField() as any;
+                    }
                 }
             }
 
@@ -97,7 +174,7 @@ export const EditDebtModal: React.FC<EditDebtModalProps> = ({ isOpen, onClose, d
                         <div className="flex items-start gap-3">
                             <div className="flex-1">
                                 <AmountInput
-                                    label="Tutar"
+                                    label={currency === 'GOLD' ? (getGoldType(goldTypeId)?.category === 'GRAM' ? 'Gram' : 'Adet') : 'Tutar'}
                                     value={amount}
                                     onChange={setAmount}
                                     disabled={hasPayments}
@@ -108,23 +185,84 @@ export const EditDebtModal: React.FC<EditDebtModalProps> = ({ isOpen, onClose, d
                                 <label className="block text-sm font-medium text-text-secondary mb-1">Döviz</label>
                                 <select
                                     value={currency}
-                                    onChange={(e) => setCurrency(e.target.value)}
+                                    onChange={(e) => {
+                                        const newCurr = e.target.value;
+                                        setCurrency(newCurr);
+                                        if (newCurr === 'SILVER') {
+                                            setGoldCategory('SILVER');
+                                            setGoldTypeId('SILVER_999');
+                                        } else if (newCurr === 'GOLD') {
+                                            setGoldCategory('GRAM');
+                                            setGoldTypeId('GRAM_24');
+                                        }
+                                    }}
                                     disabled={hasPayments}
-                                    className="w-full px-3 py-2.5 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary focus:ring-2 focus:ring-blue-900/50 outline-none transition-all font-bold text-base disabled:opacity-50 disabled:cursor-not-allowed h-[46px]"
+                                    className="w-full px-2 py-2.5 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary focus:ring-2 focus:ring-blue-900/50 outline-none transition-all font-bold text-xs disabled:opacity-50 disabled:cursor-not-allowed h-[46px]"
                                 >
-                                    <option value="TRY">₺</option>
-                                    <option value="USD">$</option>
-                                    <option value="EUR">€</option>
-                                    <option value="GOLD">Gr</option>
+                                    {CURRENCIES.map(c => (
+                                        <option key={c.code} value={c.code}>{c.symbol} {c.code}</option>
+                                    ))}
                                 </select>
                             </div>
                         </div>
                         {amount && (
                             <p className="text-[10px] text-text-secondary italic text-left animate-in fade-in slide-in-from-top-1 px-1 mt-0.5">
-                                {formatAmountToWords(amount, currency)}
+                                {formatAmountToWords(amount, currency, (currency === 'GOLD' || currency === 'SILVER') ? {
+                                    type: goldTypeId,
+                                    label: getGoldType(goldTypeId)?.label || '',
+                                    subTypeLabel: goldSubType,
+                                    weightPerUnit: safeParseFloat(goldWeightPerUnit),
+                                    carat: (goldCategory === 'BILEZIK' ? BILEZIK_MODELS : TAKI_TYPES).find(m => m.id === goldSubType)?.fixedCarat || (getGoldType(goldTypeId)?.fixedCarat ? getGoldType(goldTypeId)?.defaultCarat : goldCustomCarat)
+                                } : undefined)}
                             </p>
                         )}
+
+                        {/* Metal Sub-selection */}
+                        {(currency === 'GOLD' || currency === 'SILVER') && !hasPayments && (
+                             <MetalSelectionFields
+                                metal={currency as 'GOLD' | 'SILVER'}
+                                goldCategory={goldCategory}
+                                setGoldCategory={setGoldCategory}
+                                goldTypeId={goldTypeId}
+                                setGoldTypeId={setGoldTypeId}
+                                goldSubType={goldSubType}
+                                setGoldSubType={setGoldSubType}
+                                goldWeightPerUnit={goldWeightPerUnit}
+                                setGoldWeightPerUnit={setGoldWeightPerUnit}
+                                goldCustomCarat={goldCustomCarat}
+                                setGoldCustomCarat={setGoldCustomCarat}
+                            />
+                        )}
                     </div>
+
+                    {/* Custom Rate Input */}
+                    {currency !== 'TRY' && (
+                        <div className="p-3 bg-orange-50 dark:bg-orange-900/10 rounded-xl border border-orange-200 dark:border-orange-800 animate-in fade-in transition-all">
+                            <div className="flex items-center justify-between mb-2">
+                                <label className="text-xs font-bold text-orange-700 dark:text-orange-300">Özel Kur Kullan</label>
+                                <Toggle
+                                    checked={useManualRate}
+                                    onChange={setUseManualRate}
+                                />
+                            </div>
+                            {useManualRate && (
+                                <div className="flex items-center gap-2">
+                                    <span className="text-sm text-text-secondary">
+                                            1 {(currency === 'GOLD' || currency === 'SILVER') ? (getGoldType(goldTypeId)?.label || (currency === 'GOLD' ? 'Altın' : 'Gümüş')) : currency} =
+                                    </span>
+                                    <input
+                                        type="number"
+                                        value={manualRate}
+                                        onChange={(e) => setManualRate(e.target.value)}
+                                        step="0.01"
+                                        className="flex-1 px-3 py-2 rounded-lg border border-orange-300 dark:border-orange-700 bg-white dark:bg-slate-800 text-sm font-bold text-text-primary outline-none focus:ring-1 focus:ring-orange-500"
+                                        placeholder="Örn: 34.50"
+                                    />
+                                    <span className="text-sm text-text-secondary">TRY</span>
+                                </div>
+                            )}
+                        </div>
+                    )}
 
                     <div>
                         <label className="block text-sm font-medium text-text-secondary mb-1">Vade Tarihi</label>

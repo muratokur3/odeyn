@@ -4,6 +4,9 @@
  */
 
 import type { Transaction, Debt } from '../types';
+import { formatCurrency } from './format';
+import { calculatePureMetalWeight } from './goldConstants';
+import { convertToTRY, type CurrencyRates } from '../services/currency';
 
 export type CurrencyBalances = Map<string, number>;
 
@@ -40,44 +43,80 @@ export type CurrencySummary = {
     net: number;
     receivables: number;
     payables: number;
+    pureGoldNet: number;
+    pureGoldReceivables: number;
+    pureGoldPayables: number;
+    netTRY: number;
+    receivablesTRY: number;
+    payablesTRY: number;
 };
 
 export type DetailedBalances = Map<string, CurrencySummary>;
 
 export const calculateStreamBalance = (
     transactions: Transaction[],
-    currentUserId: string
+    currentUserId: string,
+    rates?: CurrencyRates | null
 ): DetailedBalances => {
     const balances = new Map<string, CurrencySummary>();
     
     transactions.forEach(tx => {
-        const currency = tx.currency || 'TRY';
+        let currency = tx.currency || 'TRY';
+        const baseCurr = currency === 'GOLD' ? 'GOLD' : currency;
+
+        if (currency === 'GOLD' && tx.goldDetail?.type) {
+            currency = `GOLD:${tx.goldDetail.type}`;
+        }
         if (!balances.has(currency)) {
-            balances.set(currency, { net: 0, receivables: 0, payables: 0 });
+            balances.set(currency, {
+                net: 0, receivables: 0, payables: 0,
+                pureGoldNet: 0, pureGoldReceivables: 0, pureGoldPayables: 0,
+                netTRY: 0, receivablesTRY: 0, payablesTRY: 0
+            });
         }
         
         const summary = balances.get(currency)!;
-        let change = 0;
+
+        const pureWeight = (currency.startsWith('GOLD') && tx.goldDetail)
+            ? calculatePureMetalWeight(tx.goldDetail.type, tx.amount, tx.goldDetail.weightPerUnit)
+            : 0;
+
+        const customRates = tx.customExchangeRate ? { [baseCurr]: tx.customExchangeRate } : undefined;
+        const tryVal = rates ? convertToTRY(tx.amount, baseCurr, rates, customRates, tx.goldDetail) : 0;
 
         if (tx.createdBy === currentUserId) {
             if (tx.direction === 'OUTGOING') {
-                change = tx.amount;
+                summary.net += tx.amount;
                 summary.receivables += tx.amount;
+                summary.pureGoldNet += pureWeight;
+                summary.pureGoldReceivables += pureWeight;
+                summary.netTRY += tryVal;
+                summary.receivablesTRY += tryVal;
             } else {
-                change = -tx.amount;
+                summary.net -= tx.amount;
                 summary.payables += tx.amount;
+                summary.pureGoldNet -= pureWeight;
+                summary.pureGoldPayables += pureWeight;
+                summary.netTRY -= tryVal;
+                summary.payablesTRY += tryVal;
             }
         } else {
             if (tx.direction === 'OUTGOING') {
-                change = -tx.amount;
+                summary.net -= tx.amount;
                 summary.payables += tx.amount;
+                summary.pureGoldNet -= pureWeight;
+                summary.pureGoldPayables += pureWeight;
+                summary.netTRY -= tryVal;
+                summary.payablesTRY += tryVal;
             } else {
-                change = tx.amount;
+                summary.net += tx.amount;
                 summary.receivables += tx.amount;
+                summary.pureGoldNet += pureWeight;
+                summary.pureGoldReceivables += pureWeight;
+                summary.netTRY += tryVal;
+                summary.receivablesTRY += tryVal;
             }
         }
-
-        summary.net += change;
     });
     
     return balances;
@@ -89,7 +128,8 @@ export const calculateStreamBalance = (
  */
 export const calculateDebtsBalance = (
     debts: Debt[],
-    currentUserId: string
+    currentUserId: string,
+    rates?: CurrencyRates | null
 ): DetailedBalances => {
     const balances = new Map<string, CurrencySummary>();
     
@@ -99,21 +139,45 @@ export const calculateDebtsBalance = (
             return;
         }
         
-        const currency = debt.currency || 'TRY';
+        let currency = debt.currency || 'TRY';
+        const baseCurr = currency === 'GOLD' ? 'GOLD' : currency;
+
+        if (currency === 'GOLD' && debt.goldDetail?.type) {
+            currency = `GOLD:${debt.goldDetail.type}`;
+        }
         if (!balances.has(currency)) {
-            balances.set(currency, { net: 0, receivables: 0, payables: 0 });
+            balances.set(currency, {
+                net: 0, receivables: 0, payables: 0,
+                pureGoldNet: 0, pureGoldReceivables: 0, pureGoldPayables: 0,
+                netTRY: 0, receivablesTRY: 0, payablesTRY: 0
+            });
         }
         
         const summary = balances.get(currency)!;
         
+        const pureWeight = (currency.startsWith('GOLD') && debt.goldDetail)
+            ? calculatePureMetalWeight(debt.goldDetail.type, debt.remainingAmount, debt.goldDetail.weightPerUnit)
+            : 0;
+
+        const customRates = debt.customExchangeRate ? { [baseCurr]: debt.customExchangeRate } : undefined;
+        const tryVal = rates ? convertToTRY(debt.remainingAmount, baseCurr, rates, customRates, debt.goldDetail) : 0;
+
         if (debt.lenderId === currentUserId) {
             // I'm the lender, they owe me
             summary.receivables += debt.remainingAmount;
             summary.net += debt.remainingAmount;
+            summary.pureGoldReceivables += pureWeight;
+            summary.pureGoldNet += pureWeight;
+            summary.netTRY += tryVal;
+            summary.receivablesTRY += tryVal;
         } else {
             // I'm the borrower, I owe them
             summary.payables += debt.remainingAmount;
             summary.net -= debt.remainingAmount;
+            summary.pureGoldPayables += pureWeight;
+            summary.pureGoldNet -= pureWeight;
+            summary.netTRY -= tryVal;
+            summary.payablesTRY += tryVal;
         }
     });
     
@@ -143,6 +207,12 @@ export const mergeBalances = (
             existing.net += summary.net;
             existing.receivables += summary.receivables;
             existing.payables += summary.payables;
+            existing.pureGoldNet += summary.pureGoldNet;
+            existing.pureGoldReceivables += summary.pureGoldReceivables;
+            existing.pureGoldPayables += summary.pureGoldPayables;
+            existing.netTRY += summary.netTRY;
+            existing.receivablesTRY += summary.receivablesTRY;
+            existing.payablesTRY += summary.payablesTRY;
         }
     });
     
@@ -158,21 +228,14 @@ export const formatCurrencyAmount = (
     currency: string,
     showSign: boolean = true
 ): string => {
-    const absAmount = Math.abs(amount);
-    const symbol = getCurrencySymbol(currency);
-    
-    // Format with Turkish locale for thousands separator
-    const formattedNumber = new Intl.NumberFormat('tr-TR', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    }).format(absAmount);
+    const formatted = formatCurrency(Math.abs(amount), currency);
     
     if (showSign && amount !== 0) {
         const sign = amount > 0 ? '+' : '-';
-        return `${symbol} ${sign}${formattedNumber}`;
+        return `${sign}${formatted}`;
     }
     
-    return `${symbol} ${formattedNumber}`;
+    return formatted;
 };
 
 /**

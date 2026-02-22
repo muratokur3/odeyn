@@ -5,9 +5,9 @@ import { SelectedUserCard } from './SelectedUserCard';
 
 import { searchUserByPhone, searchContacts, createDebt, updateDebtHardReset } from '../services/db';
 import { getOrCreateLedger, addLedgerTransaction } from '../services/transactionService';
-import { formatCurrency, formatAmountToWords } from '../utils/format';
+import { formatCurrency, formatAmountToWords, safeParseFloat, CURRENCIES } from '../utils/format';
 import { formatPhoneForDisplay, cleanPhone } from '../utils/phoneUtils';
-import type { User, Contact, Installment, Debt } from '../types';
+import type { User, Contact, Installment, Debt, GoldDetail } from '../types';
 import { useAuth } from '../hooks/useAuth';
 import { useContactSync } from '../hooks/useContactSync';
 import { Toggle } from './Toggle';
@@ -15,6 +15,8 @@ import { AmountInput } from './AmountInput';
 import { Timestamp } from 'firebase/firestore';
 import clsx from 'clsx';
 import { useModal } from '../context/ModalContext';
+import { GOLD_TYPES, GOLD_CATEGORIES, SILVER_CATEGORIES, BILEZIK_MODELS, TAKI_TYPES, GOLD_CARATS, getGoldType } from '../utils/goldConstants';
+import { MetalSelectionFields } from './MetalSelectionFields';
 
 interface CreateDebtModalProps {
     isOpen: boolean;
@@ -86,6 +88,36 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
     // New Fields
     const [type, setType] = useState<'LENDING' | 'BORROWING'>('LENDING');
     const [currency, setCurrency] = useState('TRY');
+
+    // Gold State
+    const [goldCategory, setGoldCategory] = useState<string>('GRAM');
+    const [goldTypeId, setGoldTypeId] = useState<string>('GRAM_24');
+    const [goldSubType, setGoldSubType] = useState<string>('');
+    const [goldWeightPerUnit, setGoldWeightPerUnit] = useState<string>('');
+    const [goldCustomCarat, setGoldCustomCarat] = useState<number>(22);
+
+    // Sync Metal Type ID
+    useEffect(() => {
+        if (currency === 'GOLD' && goldCategory === 'BILEZIK') {
+            const model = BILEZIK_MODELS.find(m => m.id === goldSubType);
+            const effectiveCarat = model?.fixedCarat || goldCustomCarat;
+            const targetType = `BILEZIK_${effectiveCarat}`;
+            if (GOLD_TYPES.some(t => t.id === targetType)) {
+                setGoldTypeId(targetType);
+            } else {
+                setGoldTypeId('BILEZIK_22'); // Fallback
+            }
+        } else if (currency === 'SILVER') {
+            // Silver currently only has one category but let's be safe
+            if (goldCategory === 'SILVER') {
+                // Default to 999 for silver if not set
+                if (!goldTypeId.startsWith('SILVER_')) {
+                    setGoldTypeId('SILVER_999');
+                }
+            }
+        }
+    }, [currency, goldCategory, goldSubType, goldCustomCarat, goldTypeId]);
+
     const [note, setNote] = useState('');
     const [dueDate, setDueDate] = useState('');
     const [showDetails, setShowDetails] = useState(false);
@@ -133,6 +165,18 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                 setNote(initialData.note || '');
                 setPhoneNumber(initialData.lockedPhoneNumber || targetId); // Use locked phone if available
                 setBorrowerName(targetName);
+
+                // Gold prefill
+                if (initialData.currency === 'GOLD' && initialData.goldDetail) {
+                    const type = getGoldType(initialData.goldDetail.type);
+                    if (type) {
+                        setGoldCategory(type.category);
+                    }
+                    setGoldTypeId(initialData.goldDetail.type);
+                    setGoldSubType(initialData.goldDetail.subTypeLabel || '');
+                    setGoldWeightPerUnit(initialData.goldDetail.weightPerUnit?.toString() || '');
+                    setGoldCustomCarat(initialData.goldDetail.carat || 22);
+                }
 
                 // If targetId is a UID (User) and we don't have a locked phone, fetch accurate phone from User Profile
                 if (!initialData.lockedPhoneNumber && targetId.length > 20) {
@@ -360,10 +404,14 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
             return;
         }
 
-        const numAmount = parseFloat(amount);
-        const numDownPayment = parseFloat(downPayment) || 0;
+        const numAmount = safeParseFloat(amount) || 0;
+        const numDownPayment = safeParseFloat(downPayment) || 0;
+        const customRate = useManualRate ? safeParseFloat(manualRate) : undefined;
 
-        if (isNaN(numAmount) || numAmount <= 0) return;
+        if (numAmount <= 0) {
+            showAlert("Hata", "Lütfen geçerli bir tutar girin.", "error");
+            return;
+        }
         if (numDownPayment >= numAmount) {
             showAlert("Hata", "Peşinat tutarı toplam tutardan büyük veya eşit olamaz.", "error");
             return;
@@ -400,6 +448,20 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
 
         setLoading(true);
         try {
+            let goldDetail: Debt['goldDetail'] | undefined;
+            if (currency === 'GOLD' || currency === 'SILVER') {
+                const typeData = getGoldType(goldTypeId);
+                const selectedModel = (goldCategory === 'BILEZIK' ? BILEZIK_MODELS : TAKI_TYPES).find(m => m.id === goldSubType);
+
+                goldDetail = {
+                    type: goldTypeId,
+                    label: typeData?.label || goldTypeId,
+                    subTypeLabel: goldSubType || undefined,
+                    carat: selectedModel?.fixedCarat || (typeData?.fixedCarat ? typeData.defaultCarat : goldCustomCarat),
+                    weightPerUnit: safeParseFloat(goldWeightPerUnit),
+                };
+            }
+
             let generatedInstallments: Installment[] | undefined;
             if (isInstallment && installmentCount > 1) {
                 generatedInstallments = [];
@@ -421,23 +483,6 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
 
             // --- EDIT MODE LOGIC ---
             if (editMode && initialData) {
-                // For editing, we reuse the existing participants from initialData usually.
-                // But we allow updating note, amount, installments.
-                // We do NOT allow changing the person for now (complex validation),
-                // but if we did, we'd need to re-validate block status etc.
-                // We assume person is same.
-
-                // Construct Update Object
-                // If it's becoming a transaction (Stream) vs File (Debt)
-                // "Hard Reset" treats everything as a Debt Document Update.
-                // Even simple transactions are stored as Debt docs in this architecture
-                // (except Ledger specialized ones? No, createDebt covers both usually if we look at db.ts?
-                // Ah, createDebt creates a debt doc. Ledger is different service?
-                // The existing code has `getOrCreateLedger`...
-                // If the original item was a Ledger Transaction, `initialData` probably won't be a `Debt` object?
-                // Or we unify them.
-                // If initialData is passed, it implies it's a Debt object (from Firestore 'debts').
-
                 await updateDebtHardReset(
                     initialData.id,
                     user.uid,
@@ -445,10 +490,11 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                         originalAmount: numAmount,
                         currency,
                         note,
+                        goldDetail,
+                        customExchangeRate: customRate,
                         ...(dueDate ? { dueDate: Timestamp.fromDate(new Date(dueDate)) } : { dueDate: undefined }),
                         ...(generatedInstallments ? { installments: generatedInstallments } : { installments: undefined }),
                         canBorrowerAddPayment,
-                        // Update status logic handled in service based on remaining
                     },
                     numDownPayment
                 );
@@ -474,7 +520,9 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                     dueDate ? new Date(dueDate) : undefined,
                     generatedInstallments,
                     canBorrowerAddPayment,
-                    numDownPayment
+                    numDownPayment,
+                    goldDetail,
+                    customRate
                 );
             } else {
                 // NORMAL FLOW (Ledger Transaction) -> Uses Ledger system
@@ -493,7 +541,9 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                     numAmount,
                     direction,
                     note,
-                    currency
+                    currency,
+                    goldDetail,
+                    customRate
                 );
             }
 
@@ -540,6 +590,28 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                 </div>
 
                 <div className="flex-1 overflow-y-auto p-6 scrollbar-hide">
+                    {/* Contact Sync Suggestion */}
+                    {isSupported && !userInfo?.settings?.lastSyncAt && !editMode && (
+                        <div className="mb-4 p-4 bg-blue-50 dark:bg-blue-900/10 rounded-xl border border-blue-100 dark:border-blue-800 flex items-center justify-between gap-4 animate-in fade-in slide-in-from-top-2">
+                            <div className="flex items-center gap-3">
+                                <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg text-blue-600">
+                                    <RefreshCw size={20} className={isSyncing ? "animate-spin" : ""} />
+                                </div>
+                                <div>
+                                    <p className="text-xs font-bold text-blue-900 dark:text-blue-100">Rehberini Bağla</p>
+                                    <p className="text-[10px] text-blue-700 dark:text-blue-300">Arkadaşlarını daha kolay bulabilirsin.</p>
+                                </div>
+                            </div>
+                            <button
+                                onClick={() => syncContacts()}
+                                disabled={isSyncing}
+                                className="px-3 py-1.5 bg-blue-600 text-white text-[10px] font-bold rounded-lg hover:bg-blue-700 transition-colors shrink-0 shadow-sm"
+                            >
+                                {isSyncing ? 'Bağlanıyor...' : 'Şimdi Bağla'}
+                            </button>
+                        </div>
+                    )}
+
                     {/* Blocked Warning */}
                     {isTargetBlocked && (
                         <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 rounded-lg border border-red-200 dark:border-red-800 flex items-center gap-2">
@@ -584,38 +656,6 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                             </button>
                         </div>
 
-
-                        {/* Sync Banner - Hide in Edit Mode */}
-                        {!editMode && step === 'SEARCH' && isSupported && !userInfo?.settings?.contactSyncEnabled && !userInfo?.settings?.suppressSyncSuggestion && (
-                            <div className="mb-4 p-3 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-xl border border-indigo-100 dark:border-indigo-800 flex flex-col gap-2 animate-in fade-in slide-in-from-top-2">
-                                <div className="flex items-center gap-2">
-                                    <div className="p-1.5 bg-indigo-100 dark:bg-indigo-900/40 rounded-full text-indigo-600 dark:text-indigo-400">
-                                        <RefreshCw size={16} className={isSyncing ? "animate-spin" : ""} />
-                                    </div>
-                                    <p className="text-sm text-indigo-900 dark:text-indigo-200 font-medium">
-                                        Arkadaşlarını kolayca bulmak için rehberini eşle.
-                                    </p>
-                                </div>
-                                <div className="flex gap-2 pl-9">
-                                    <button
-                                        type="button"
-                                        onClick={syncContacts}
-                                        disabled={isSyncing}
-                                        className="text-xs font-bold bg-indigo-600 text-white px-3 py-1.5 rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50"
-                                    >
-                                        {isSyncing ? 'Eşleniyor...' : 'Eşle'}
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={dismissSuggestion}
-                                        disabled={isSyncing}
-                                        className="text-xs font-medium text-indigo-600 dark:text-indigo-400 px-2 py-1.5 hover:bg-indigo-100 dark:hover:bg-indigo-800/30 rounded-lg transition-colors"
-                                    >
-                                        Bir Daha Sorma
-                                    </button>
-                                </div>
-                            </div>
-                        )}
 
                         {/* Flow Control */}
                         {isResolvingInitial ? (
@@ -725,7 +765,7 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                             <div className="flex items-start gap-3">
                                 <div className="flex-1">
                                     <AmountInput
-                                        label="Tutar"
+                                        label={currency === 'GOLD' ? (getGoldType(goldTypeId)?.category === 'GRAM' ? 'Gram' : 'Adet') : 'Tutar'}
                                         value={amount}
                                         onChange={setAmount}
                                         disabled={isTargetBlocked}
@@ -736,19 +776,52 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                                     <label className="block text-sm font-medium text-text-secondary mb-1">Döviz</label>
                                     <select
                                         value={currency}
-                                        onChange={(e) => setCurrency(e.target.value)}
+                                        onChange={(e) => {
+                                            const newCurr = e.target.value;
+                                            setCurrency(newCurr);
+                                            if (newCurr === 'SILVER') {
+                                                setGoldCategory('SILVER');
+                                                setGoldTypeId('SILVER_999');
+                                            } else if (newCurr === 'GOLD') {
+                                                setGoldCategory('GRAM');
+                                                setGoldTypeId('GRAM_24');
+                                            }
+                                        }}
                                         disabled={isTargetBlocked}
-                                        className="w-full px-3 py-2.5 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary focus:ring-2 focus:ring-blue-900/50 outline-none transition-all font-bold text-base disabled:opacity-50 disabled:cursor-not-allowed h-[46px]"
+                                        className="w-full px-3 py-2.5 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary focus:ring-2 focus:ring-blue-900/50 outline-none transition-all font-bold text-sm disabled:opacity-50 disabled:cursor-not-allowed h-[46px]"
                                     >
-                                        <option value="TRY">₺</option>
-                                        <option value="USD">$</option>
-                                        <option value="EUR">€</option>
+                                        {CURRENCIES.map(c => (
+                                            <option key={c.code} value={c.code}>{c.symbol} {c.label}</option>
+                                        ))}
                                     </select>
                                 </div>
                             </div>
+
+                            {/* Metal Sub-selection */}
+                            {(currency === 'GOLD' || currency === 'SILVER') && (
+                                <MetalSelectionFields
+                                    metal={currency as 'GOLD' | 'SILVER'}
+                                    goldCategory={goldCategory}
+                                    setGoldCategory={setGoldCategory}
+                                    goldTypeId={goldTypeId}
+                                    setGoldTypeId={setGoldTypeId}
+                                    goldSubType={goldSubType}
+                                    setGoldSubType={setGoldSubType}
+                                    goldWeightPerUnit={goldWeightPerUnit}
+                                    setGoldWeightPerUnit={setGoldWeightPerUnit}
+                                    goldCustomCarat={goldCustomCarat}
+                                    setGoldCustomCarat={setGoldCustomCarat}
+                                />
+                            )}
                             {amount && (
                                 <p className="text-[10px] text-text-secondary italic text-left animate-in fade-in slide-in-from-top-1 px-1 mt-0.5">
-                                    {formatAmountToWords(amount, currency)}
+                                    {formatAmountToWords(amount, currency, (currency === 'GOLD' || currency === 'SILVER') ? {
+                                        type: goldTypeId,
+                                        label: getGoldType(goldTypeId)?.label || '',
+                                        subTypeLabel: goldSubType,
+                                        weightPerUnit: safeParseFloat(goldWeightPerUnit),
+                                        carat: (goldCategory === 'BILEZIK' ? BILEZIK_MODELS : TAKI_TYPES).find(m => m.id === goldSubType)?.fixedCarat || (getGoldType(goldTypeId)?.fixedCarat ? getGoldType(goldTypeId)?.defaultCarat : goldCustomCarat)
+                                    } : undefined)}
                                 </p>
                             )}
                         </div>
@@ -765,7 +838,9 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                                 </div>
                                 {useManualRate && (
                                     <div className="flex items-center gap-2">
-                                        <span className="text-sm text-text-secondary">1 {currency} =</span>
+                                        <span className="text-sm text-text-secondary">
+                                            1 {(currency === 'GOLD' || currency === 'SILVER') ? (getGoldType(goldTypeId)?.label || (currency === 'GOLD' ? 'Altın' : 'Gümüş')) : currency} =
+                                        </span>
                                         <input
                                             type="number"
                                             value={manualRate}
@@ -879,11 +954,11 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                                                 <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
                                                     <p className="text-xs text-blue-800 dark:text-blue-200 flex justify-between">
                                                         <span>Kalan Tutar:</span>
-                                                        <span className="font-bold">{formatCurrency(parseFloat(amount || '0') - (parseFloat(downPayment) || 0), currency)}</span>
+                                                        <span className="font-bold">{formatCurrency((safeParseFloat(amount) || 0) - (safeParseFloat(downPayment) || 0), currency)}</span>
                                                     </p>
                                                     <p className="text-xs text-blue-800 dark:text-blue-200 flex justify-between mt-1">
                                                         <span>Aylık Taksit:</span>
-                                                        <span className="font-bold">{formatCurrency(((parseFloat(amount || '0') - (parseFloat(downPayment) || 0)) / installmentCount) || 0, currency)}</span>
+                                                        <span className="font-bold">{formatCurrency(((safeParseFloat(amount) || 0) - (safeParseFloat(downPayment) || 0)) / installmentCount || 0, currency)}</span>
                                                     </p>
                                                 </div>
                                             </div>

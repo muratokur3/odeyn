@@ -91,7 +91,9 @@ export const SummaryCard: React.FC<SummaryCardProps & React.HTMLAttributes<HTMLD
                                 </button>
                             )}
                             {!showToggle && (
-                                 <span className="text-[10px] bg-white/20 px-2 py-1 rounded-lg font-bold backdrop-blur-sm uppercase">{currency}</span>
+                                 <span className="text-[10px] bg-white/20 px-2 py-1 rounded-lg font-bold backdrop-blur-sm uppercase">
+                                     {currency.startsWith('GOLD:') ? currency.split(':')[1] : currency}
+                                 </span>
                             )}
                         </div>
 

@@ -167,7 +167,9 @@ export const addLedgerTransaction = async (
     amount: number,
     direction: TransactionDirection,
     description?: string,
-    currency: string = 'TRY'
+    currency: string = 'TRY',
+    goldDetail?: Transaction['goldDetail'],
+    customExchangeRate?: number
 ): Promise<string> => {
     const txRef = getLedgerTransactionsRef(ledgerId);
 
@@ -179,6 +181,8 @@ export const addLedgerTransaction = async (
         createdAt: serverTimestamp(),
         createdBy: userId,
         type: 'SIMPLE',
+        goldDetail,
+        customExchangeRate,
         auditMeta: {
             actorId: userId,
             timestamp: serverTimestamp(),

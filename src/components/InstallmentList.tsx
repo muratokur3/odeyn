@@ -2,17 +2,18 @@ import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { Check, Calendar } from 'lucide-react';
 import { formatCurrency } from '../utils/format';
-import type { Installment } from '../types';
+import type { Installment, GoldDetail } from '../types';
 import clsx from 'clsx';
 
 interface InstallmentListProps {
     installments: Installment[];
     currency: string;
+    goldDetail?: GoldDetail;
     onPayInstallment: (amount: number, note: string, installmentId: string) => void;
     isBorrower: boolean;
 }
 
-export const InstallmentList: React.FC<InstallmentListProps> = ({ installments, currency, onPayInstallment, isBorrower }) => {
+export const InstallmentList: React.FC<InstallmentListProps> = ({ installments, currency, goldDetail, onPayInstallment, isBorrower }) => {
     return (
         <div className="space-y-4">
             <h3 className="font-semibold text-gray-900 flex items-center gap-2">
@@ -43,7 +44,7 @@ export const InstallmentList: React.FC<InstallmentListProps> = ({ installments, 
                                     "font-semibold",
                                     inst.isPaid ? "text-green-600" : "text-gray-900"
                                 )}>
-                                    {formatCurrency(inst.amount, currency)}
+                                    {formatCurrency(inst.amount, currency, goldDetail)}
                                 </span>
 
                                 {inst.isPaid ? (

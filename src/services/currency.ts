@@ -1,3 +1,5 @@
+import { calculatePureMetalWeight } from '../utils/goldConstants';
+
 export interface CurrencyRates {
     date: string;
     usd: Record<string, number>;
@@ -82,7 +84,8 @@ export const convertToTRY = (
     amount: number, 
     currency: string, 
     rates: CurrencyRates | null, 
-    customRates?: Record<string, number>
+    customRates?: Record<string, number>,
+    goldDetail?: any
 ): number => {
     if (currency === 'TRY') return amount;
     
@@ -101,12 +104,23 @@ export const convertToTRY = (
 
     if (currency === 'USD') {
         amountInUsd = amount;
-    } else if (currency === 'GOLD') {
-        const xauRate = rates.usd['xau']; 
-        if (xauRate) {
-            const pricePerOzInUsd = 1 / xauRate;
+    } else if (currency === 'GOLD' || currency === 'SILVER') {
+        const metalKey = currency === 'GOLD' ? 'xau' : 'xag';
+        const rate = rates.usd[metalKey];
+        if (rate) {
+            const pricePerOzInUsd = 1 / rate;
             const pricePerGramInUsd = pricePerOzInUsd / 31.1034768;
-            amountInUsd = amount * pricePerGramInUsd;
+
+            let effectiveGrams = amount;
+            if (goldDetail) {
+                effectiveGrams = calculatePureMetalWeight(
+                    goldDetail.type,
+                    amount,
+                    goldDetail.weightPerUnit
+                );
+            }
+
+            amountInUsd = effectiveGrams * pricePerGramInUsd;
         }
     } else {
         const rate = rates.usd[currency.toLowerCase()];
@@ -117,4 +131,15 @@ export const convertToTRY = (
 
     // 3. Convert USD to TRY
     return amountInUsd * usdToTry;
+};
+
+export const convertPureMetalToTRY = (grams: number, rates: CurrencyRates | null, metal: 'GOLD' | 'SILVER' = 'GOLD'): number => {
+    if (!rates || !rates.usd) return 0;
+    const metalKey = metal === 'GOLD' ? 'xau' : 'xag';
+    const rate = rates.usd[metalKey];
+    const usdToTry = rates.usd['try'];
+    if (!rate || !usdToTry) return 0;
+
+    const pricePerGramInUsd = (1 / rate) / 31.1034768;
+    return grams * pricePerGramInUsd * usdToTry;
 };

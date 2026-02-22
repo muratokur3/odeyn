@@ -87,6 +87,15 @@ export interface Installment {
     paidAt?: Timestamp;
 }
 
+export interface GoldDetail {
+    type: string;
+    label: string;
+    subTypeLabel?: string;
+    carat?: number;
+    weightPerUnit?: number;
+    totalWeight?: number;
+}
+
 export interface Debt {
     id: string;
     lenderId: string;
@@ -104,6 +113,8 @@ export interface Debt {
     updatedAt?: Timestamp;
     createdBy: string;
     installments?: Installment[];
+    goldDetail?: GoldDetail;
+    customExchangeRate?: number;
     // [REMOVED] isDeleted, deletedAt
     canBorrowerAddPayment?: boolean;
     lockedPhoneNumber?: string; // Immutable E.164 phone number for recovery/display
@@ -117,7 +128,6 @@ export interface Debt {
 
     // Blueprint v1 Fields
     editHistory?: AmountHistory[];
-    customExchangeRate?: number;
     archivedAt?: Timestamp;
     isArchived?: boolean;
     auditMeta?: AuditMeta;
@@ -169,6 +179,7 @@ export interface Transaction {
     createdAt: Timestamp;
     createdBy: string; // UID of who created this entry
     type: 'SIMPLE';
+    goldDetail?: GoldDetail;
+    customExchangeRate?: number;
     auditMeta?: AuditMeta;
 }
-

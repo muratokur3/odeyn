@@ -193,7 +193,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                                             "text-lg font-bold leading-none",
                                             isAlacak ? "text-green-700 dark:text-green-400" : "text-red-700 dark:text-red-400"
                                         )}>
-                                            {formatCurrency(tx.amount, tx.currency || 'TRY')}
+                                            {formatCurrency(tx.amount, tx.currency || 'TRY', tx.goldDetail)}
                                         </p>
                                         <div className="text-[10px] text-text-secondary opacity-70 whitespace-nowrap">
                                             {tx.createdAt?.toDate ? format(tx.createdAt.toDate(), 'HH:mm', { locale: tr }) : ''}
@@ -266,6 +266,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                         originalAmount: editingTx.amount,
                         remainingAmount: editingTx.amount,
                         currency: editingTx.currency || 'TRY',
+                        goldDetail: editingTx.goldDetail,
                         note: editingTx.description,
                         createdAt: editingTx.createdAt,
                         createdBy: editingTx.createdBy,

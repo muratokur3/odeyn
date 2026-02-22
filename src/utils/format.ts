@@ -1,8 +1,50 @@
-export const formatCurrency = (amount: number | undefined | null, currency: string) => {
+import type { GoldDetail } from '../types';
+import { getGoldType, BILEZIK_MODELS, TAKI_TYPES } from './goldConstants';
+
+export const CURRENCIES = [
+    { code: 'TRY', symbol: '₺', label: 'TRY (Türk Lirası)' },
+    { code: 'USD', symbol: '$', label: 'USD (Amerikan Doları)' },
+    { code: 'EUR', symbol: '€', label: 'EUR (Euro)' },
+    { code: 'GOLD', symbol: 'GA', label: 'GOLD (Altın)' },
+    { code: 'SILVER', symbol: 'GM', label: 'SILVER (Gümüş)' },
+    { code: 'GBP', symbol: '£', label: 'GBP (İngiliz Sterlini)' },
+    { code: 'CHF', symbol: 'Fr', label: 'CHF (İsviçre Frangı)' },
+    { code: 'SAR', symbol: 'SR', label: 'SAR (Suudi Arabistan Riyali)' },
+    { code: 'CAD', symbol: '$', label: 'CAD (Kanada Doları)' },
+    { code: 'AUD', symbol: '$', label: 'AUD (Avustralya Doları)' },
+    { code: 'JPY', symbol: '¥', label: 'JPY (Japon Yeni)' },
+] as const;
+
+export const formatCurrency = (amount: number | undefined | null, currency: string, goldDetail?: GoldDetail) => {
     const validAmount = amount ?? 0;
 
-    if (currency === 'GOLD') {
-        return `${validAmount.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Gr`;
+    if (currency === 'GOLD' || currency.startsWith('GOLD:') || currency === 'SILVER' || currency.startsWith('SILVER:')) {
+        const isGold = currency === 'GOLD' || currency.startsWith('GOLD:');
+        const typeId = goldDetail?.type || (currency.includes(':') ? currency.split(':')[1] : 'GRAM_24');
+        const type = getGoldType(typeId);
+
+        if (type) {
+            if (type.category === 'SIKKE') {
+                return `${validAmount.toLocaleString('tr-TR')} Adet ${type.label}`;
+            }
+            if (type.category === 'BILEZIK' || type.category === 'TAKI') {
+                let label = `${validAmount.toLocaleString('tr-TR')} Adet`;
+                if (goldDetail?.carat) label += ` ${goldDetail.carat} Ayar`;
+                if (goldDetail?.weightPerUnit) label += ` ${goldDetail.weightPerUnit} Gr`;
+
+                let subLabel = '';
+                if (goldDetail?.subTypeLabel) {
+                    const modelList = type.category === 'BILEZIK' ? BILEZIK_MODELS : TAKI_TYPES;
+                    const model = modelList.find(m => m.id === goldDetail.subTypeLabel);
+                    subLabel = model?.label || goldDetail.subTypeLabel;
+                }
+
+                label += ` ${subLabel} ${type.label}`;
+                return label.replace(/\s+/g, ' ').trim();
+            }
+            return `${validAmount.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Gr ${type.label}`;
+        }
+        return `${validAmount.toLocaleString('tr-TR', { minimumFractionDigits: 2 })} Gr ${isGold ? 'Altın' : 'Gümüş'}`;
     }
 
     try {
@@ -36,6 +78,16 @@ export const parseAmount = (formattedValue: string): number => {
     const num = parseFloat(cleaned);
     return isNaN(num) ? 0 : num;
 };
+
+/**
+ * Safely parses a value to a number, returning undefined if invalid or NaN.
+ */
+export const safeParseFloat = (val: string | number | undefined | null): number | undefined => {
+    if (val === undefined || val === null) return undefined;
+    const num = typeof val === 'string' ? parseFloat(val.replace(',', '.')) : val;
+    return (num !== null && num !== undefined && !isNaN(num) && isFinite(num)) ? num : undefined;
+};
+
 /**
  * Converts a number to its Turkish verbal representation.
  * Purely local string manipulation, no external API calls.
@@ -86,19 +138,66 @@ export const numberToTurkishWords = (num: number): string => {
 /**
  * Returns a formatted string like "On Bin Türk Lirası"
  */
-export const formatAmountToWords = (amount: number | string, currency: string): string => {
-    const num = typeof amount === 'string' ? parseInt(amount.replace(/\D/g, '')) : amount;
+export const formatAmountToWords = (amount: number | string, currency: string, goldDetail?: GoldDetail): string => {
+    const cleanAmount = typeof amount === 'string' ? amount.replace(',', '.') : amount.toString();
+    const num = parseFloat(cleanAmount);
+
     if (isNaN(num) || num <= 0) return '';
 
-    const verbal = numberToTurkishWords(num);
+    // Integer part
+    const integerPart = Math.floor(num);
+    let verbal = numberToTurkishWords(integerPart);
+
+    // Fractional part (up to 2 decimals)
+    const fraction = Math.round((num - integerPart) * 100);
+    if (fraction > 0) {
+        verbal += ` virgül ${numberToTurkishWords(fraction)}`;
+    }
+
     if (!verbal) return '';
+
+    if (currency === 'GOLD' || currency.startsWith('GOLD:') || currency === 'SILVER' || currency.startsWith('SILVER:')) {
+        const isGold = currency === 'GOLD' || currency.startsWith('GOLD:');
+        const typeId = goldDetail?.type || (currency.includes(':') ? currency.split(':')[1] : (isGold ? 'GRAM_24' : 'SILVER_999'));
+        const type = getGoldType(typeId);
+
+        if (type) {
+            if (type.category === 'BILEZIK' || type.category === 'TAKI') {
+                let detail = '';
+                if (goldDetail?.carat) detail += `${goldDetail.carat} Ayar `;
+                if (goldDetail?.weightPerUnit) detail += `${goldDetail.weightPerUnit} Gram `;
+
+                let subLabel = '';
+                if (goldDetail?.subTypeLabel) {
+                    const modelList = type.category === 'BILEZIK' ? BILEZIK_MODELS : TAKI_TYPES;
+                    const model = modelList.find(m => m.id === goldDetail.subTypeLabel);
+                    subLabel = model?.label || goldDetail.subTypeLabel;
+                }
+
+                detail += `${subLabel} ${type.label}`;
+                return `${verbal} Adet ${detail.replace(/\s+/g, ' ').trim()}`;
+            }
+            if (type.category === 'SIKKE') {
+                return `${verbal} Adet ${type.label}`;
+            }
+            return `${verbal} Gram ${type.label}`;
+        }
+        return `${verbal} Gram ${isGold ? 'Altın' : 'Gümüş'}`;
+    }
 
     const currencyNames: Record<string, string> = {
         'TRY': 'Türk Lirası',
         'USD': 'Amerikan Doları',
         'EUR': 'Euro',
-        'GOLD': 'Gram Altın'
+        'GBP': 'İngiliz Sterlini',
+        'CHF': 'İsviçre Frangı',
+        'SAR': 'Suudi Arabistan Riyali',
+        'CAD': 'Kanada Doları',
+        'AUD': 'Avustralya Doları',
+        'JPY': 'Japon Yeni',
+        'SILVER': 'Gümüş'
     };
 
-    return `${verbal} ${currencyNames[currency] || currency}`;
+    const currencyLabel = currencyNames[currency] || currency;
+    return `${verbal} ${currencyLabel}`;
 };

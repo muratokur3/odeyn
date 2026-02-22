@@ -1,4 +1,4 @@
-import type { PaymentLog } from '../types';
+import type { PaymentLog, GoldDetail } from '../types';
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
@@ -16,12 +16,13 @@ import { Avatar } from './Avatar';
 interface HistoryListProps {
     logs: PaymentLog[];
     currency: string;
+    goldDetail?: GoldDetail;
     isLender: boolean;
     debtId: string;
     otherPartyId?: string;
 }
 
-export const HistoryList: React.FC<HistoryListProps> = ({ logs, currency, isLender, debtId, otherPartyId }) => {
+export const HistoryList: React.FC<HistoryListProps> = ({ logs, currency, goldDetail, isLender, debtId, otherPartyId }) => {
     const { showAlert, showConfirm } = useModal();
     const { user } = useAuth();
     const [openRowId, setOpenRowId] = useState<string | null>(null);
@@ -139,7 +140,7 @@ export const HistoryList: React.FC<HistoryListProps> = ({ logs, currency, isLend
                                                     "font-semibold",
                                                     log.status === 'REJECTED' ? "text-gray-400 line-through" : "text-green-600"
                                                 )}>
-                                                    +{formatCurrency(log.amountPaid, currency)}
+                                                    +{formatCurrency(log.amountPaid, currency, goldDetail)}
                                                 </p>
                                             )}
                                         </div>
