@@ -49,7 +49,7 @@ export const isTransactionEditable = (createdAt: Timestamp | Date | number | str
 
 // --- Activity Feed Helpers ---
 
-async function updateContactActivity(actorId: string, targetId: string, message: string) {
+export async function updateContactActivity(actorId: string, targetId: string, message: string) {
     if (!actorId || !targetId) return;
 
     const timestamp = serverTimestamp();

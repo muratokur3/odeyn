@@ -55,7 +55,6 @@ export const PersonStream = () => {
         return (localStorage.getItem(`tabMode_${id}`) as TabMode) || 'TOTAL';
     });
     const carouselRef = useRef<HTMLDivElement>(null);
-    const isScrollingRef = useRef(false);
     const [targetUserObject, setTargetUserObject] = useState<User | Contact | null>(null);
     const [contactId, setContactId] = useState<string | null>(null);
     const [resolvedUid, setResolvedUid] = useState<string | null>(null);
@@ -192,7 +191,9 @@ export const PersonStream = () => {
             else if ('phoneNumber' in targetUserObject) phone = targetUserObject.phoneNumber || phone;
         }
 
-        let { displayName, status } = resolveName(id || '', name, phone);
+        const resolution = resolveName(id || '', name, phone);
+        let displayName = resolution.displayName;
+        const status = resolution.status;
 
         // --- 3. DASHBOARD-CONSISTENT ULTIMATE FALLBACK ---
         const isPhoneFormat = displayName.replace(/\s/g, '').replace(/\+/g, '').length >= 10 && !isNaN(Number(displayName.replace(/\s/g, '').replace(/\+/g, '')));
@@ -367,16 +368,10 @@ export const PersonStream = () => {
             el.removeEventListener('scroll', handleScroll);
             if (scrollTimer) clearTimeout(scrollTimer);
         };
-    }, [carouselRef.current, id]);
+    }, [id]);
 
     // Kartlar render edildikten sonra scrollTo işlemini tetikle
-    const [cardCount, setCardCount] = useState(0);
-    useEffect(() => {
-        const el = carouselRef.current;
-        if (!el) return;
-        const cards = el.querySelectorAll('[data-mode]');
-        setCardCount(cards.length);
-    });
+    const cardCount = 3; // TOTAL, LEDGER, INSTALLMENT
 
     useEffect(() => {
         const el = carouselRef.current;
