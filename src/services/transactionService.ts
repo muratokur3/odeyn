@@ -28,6 +28,7 @@ import {
 import { db } from './firebase';
 import type { Transaction, TransactionDirection, Debt } from '../types';
 import { isTransactionEditable, updateContactActivity } from './db';
+import { notificationService } from './notificationService';
 
 import { cleanPhone as cleanPhoneNumber } from '../utils/phoneUtils';
 
@@ -192,6 +193,30 @@ export const addLedgerTransaction = async (
     }
 
     const docRef = await addDoc(txRef, newTx);
+
+    // Add notification
+    try {
+        const ledgerSnap = await getDoc(doc(db, 'debts', ledgerId));
+        if (ledgerSnap.exists()) {
+            const data = ledgerSnap.data() as Debt;
+            const otherId = data.participants.find(p => p !== userId);
+            const actorName = userId === data.lenderId ? data.lenderName : data.borrowerName;
+
+            if (otherId) {
+                await notificationService.addNotification({
+                    userId: otherId,
+                    actorId: userId,
+                    type: 'PAYMENT_MADE', // Use payment type for ledger transactions for simplicity
+                    message: `${actorName} cari hesaba ${amount} ${currency} işlem ekledi.`,
+                    amount,
+                    currency,
+                    debtId: ledgerId
+                });
+            }
+        }
+    } catch (notifError) {
+        console.warn("Notification failed after ledger transaction:", notifError);
+    }
 
     // Update ledger's remainingAmount based on direction
     // Note: We need to update the balance on the ledger document

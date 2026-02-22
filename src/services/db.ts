@@ -20,6 +20,7 @@ import { db } from './firebase';
 import type { Debt, DebtStatus, PaymentLog, User, Contact, Installment } from '../types';
 import { cleanPhone as cleanPhoneNumber, isValidPhone } from '../utils/phoneUtils';
 import { checkBlockStatus } from './blockService';
+import { notificationService } from './notificationService';
 
 // --- Helper Functions ---
 
@@ -390,6 +391,23 @@ export const createDebt = async (
 
     const docRef = await addDoc(collection(db, 'debts'), debtData);
 
+    // Create notification
+    const otherPartyId = currentUserId === borrowerId ? lenderId : borrowerId;
+    const isLender = currentUserId === lenderId;
+    const isLedger = debtData.type === 'LEDGER';
+
+    await notificationService.addNotification({
+        userId: otherPartyId,
+        actorId: currentUserId,
+        type: 'DEBT_CREATED',
+        message: isLedger
+            ? `${isLender ? borrowerName : lenderName} ile yeni cari hesap oluşturuldu.`
+            : `${isLender ? borrowerName : lenderName} tarafından ${amount} ${currency} borç kaydı oluşturuldu.`,
+        amount: isLedger ? undefined : amount,
+        currency,
+        debtId: docRef.id
+    });
+
     const batch = writeBatch(db); // Firestore batch for logs
 
     // Log 1: Creation
@@ -503,6 +521,18 @@ export const updateDebtHardReset = async (
 
             // 6. Update Main Doc
             transaction.update(debtRef, docUpdates);
+
+            // Notification for hard reset (edit)
+            const otherPartyId = currentUserId === currentData.borrowerId ? currentData.lenderId : currentData.borrowerId;
+            const actorName = currentUserId === currentData.lenderId ? currentData.lenderName : currentData.borrowerName;
+
+            notificationService.addNotification({
+                userId: otherPartyId,
+                actorId: currentUserId,
+                type: 'DEBT_EDITED',
+                message: `${actorName} kaydı güncelledi.`,
+                debtId: debtId
+            });
 
             // 7. Add "Reset" Log
             const resetLogRef = doc(collection(db, `debts/${debtId}/logs`));
@@ -627,6 +657,20 @@ export const makePayment = async (
             }
         });
 
+        // Notification for payment
+        const otherPartyId = performedBy === debtData.borrowerId ? debtData.lenderId : debtData.borrowerId;
+        const actorName = performedBy === debtData.lenderId ? debtData.lenderName : debtData.borrowerName;
+
+        notificationService.addNotification({
+            userId: otherPartyId,
+            actorId: performedBy,
+            type: 'PAYMENT_MADE',
+            message: `${actorName} ödeme yaptı.`,
+            amount: efAmount,
+            currency: debtData.currency,
+            debtId: debtId
+        });
+
         // Add payment log
         const logRef = doc(collection(db, `debts/${debtId}/logs`));
         transaction.set(logRef, {
@@ -689,6 +733,20 @@ export const respondToDebtRequest = async (debtId: string, status: 'ACTIVE' | 'R
         }
 
         transaction.update(debtRef, updates);
+
+        // Notification for rejection/approval
+        const otherPartyId = performedBy === debtData.borrowerId ? debtData.lenderId : debtData.borrowerId;
+        const actorName = performedBy === debtData.lenderId ? debtData.lenderName : debtData.borrowerName;
+
+        notificationService.addNotification({
+            userId: otherPartyId,
+            actorId: performedBy,
+            type: status === 'ACTIVE' ? 'DEBT_CREATED' : 'DEBT_REJECTED',
+            message: status === 'ACTIVE'
+                ? `${actorName} borç kaydını onayladı.`
+                : `${actorName} borç kaydını reddetti.`,
+            debtId: debtId
+        });
 
         // Add log
         const logRef = doc(collection(db, `debts/${debtId}/logs`));
@@ -1468,6 +1526,20 @@ export const updateDebt = async (debtId: string, data: Partial<Debt>, actorId?: 
             }
 
             transaction.update(debtRef, updates);
+
+            // Notification for generic update
+            const otherPartyId = (actorId || 'system') === currentDebt.borrowerId ? currentDebt.lenderId : currentDebt.borrowerId;
+            const actorName = actorId === currentDebt.lenderId ? currentDebt.lenderName : currentDebt.borrowerName;
+
+            if (actorId) {
+                notificationService.addNotification({
+                    userId: otherPartyId,
+                    actorId: actorId,
+                    type: 'DEBT_EDITED',
+                    message: `${actorName} kaydı güncelledi.`,
+                    debtId: debtId
+                });
+            }
 
             // 3. Activity Feed (Fire and forget outside transaction if possible, or just log)
             if (actorId) {
