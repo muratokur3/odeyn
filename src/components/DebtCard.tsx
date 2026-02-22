@@ -192,11 +192,11 @@ export const DebtCard: React.FC<DebtCardProps> = ({
                                     "text-base font-bold leading-none",
                                     isPaid ? "text-text-secondary line-through" : (isLender ? "text-purple-700 dark:text-purple-400" : "text-orange-700 dark:text-orange-400")
                                 )}>
-                                    {formatCurrency(debt.remainingAmount, debt.currency)}
+                                    {formatCurrency(debt.remainingAmount, debt.currency, debt.goldDetail)}
                                 </span>
                                 {debt.originalAmount && debt.originalAmount !== debt.remainingAmount && (
                                     <span className="text-[9px] text-text-tertiary">
-                                        / {formatCurrency(debt.originalAmount, debt.currency)}
+                                        / {formatCurrency(debt.originalAmount, debt.currency, debt.goldDetail)}
                                     </span>
                                 )}
                             </div>
@@ -210,7 +210,7 @@ export const DebtCard: React.FC<DebtCardProps> = ({
                                 <div className="flex items-center gap-1 text-[9px] font-bold text-orange-600 dark:text-orange-400 uppercase tracking-tight mt-1">
                                     <div className="w-1.5 h-1.5 rounded-full bg-orange-500 animate-pulse" />
                                     VADE: {format(nextInst.dueDate.toDate(), 'd MMM', { locale: tr })}
-                                    <span className="opacity-60 ml-0.5">({formatCurrency(nextInst.amount, debt.currency)})</span>
+                                    <span className="opacity-60 ml-0.5">({formatCurrency(nextInst.amount, debt.currency, debt.goldDetail)})</span>
                                 </div>
                             ) : debt.dueDate && (
                                 <div className="flex items-center gap-1 text-[9px] font-bold text-orange-600 dark:text-orange-400 uppercase tracking-tight mt-1">
@@ -259,7 +259,7 @@ export const DebtCard: React.FC<DebtCardProps> = ({
                                     "font-bold text-gray-900 dark:text-white truncate flex items-center gap-2 text-lg",
                                     (disabled || isRejectedByReceiver) && "line-through text-gray-500"
                                 )}>
-                                    {debt.note || `${formatCurrency(debt.originalAmount || debt.remainingAmount, debt.currency)} Borç Kaydı`}
+                                    {debt.note || `${formatCurrency(debt.originalAmount || debt.remainingAmount, debt.currency, debt.goldDetail)} Borç Kaydı`}
                                 </h3>
                                 <div className="flex items-center gap-2 mt-1">
                                     <span className={clsx(
@@ -287,11 +287,11 @@ export const DebtCard: React.FC<DebtCardProps> = ({
                                     isPaid || isRejectedByReceiver ? "text-gray-400 line-through" : (isLender ? "text-purple-700 dark:text-purple-400" : "text-orange-700 dark:text-orange-400"),
                                     disabled && "opacity-50"
                                 )}>
-                                    {formatCurrency(debt.remainingAmount, debt.currency)}
+                                    {formatCurrency(debt.remainingAmount, debt.currency, debt.goldDetail)}
                                 </div>
                                 {debt.originalAmount && debt.originalAmount !== debt.remainingAmount && (
                                     <div className="text-[10px] text-text-tertiary">
-                                        Toplam: {formatCurrency(debt.originalAmount, debt.currency)}
+                                        Toplam: {formatCurrency(debt.originalAmount, debt.currency, debt.goldDetail)}
                                     </div>
                                 )}
                                 {debt.dueDate && (

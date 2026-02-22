@@ -4,6 +4,7 @@
  */
 
 import type { Transaction, Debt } from '../types';
+import { formatCurrency } from './format';
 
 export type CurrencyBalances = Map<string, number>;
 
@@ -51,7 +52,10 @@ export const calculateStreamBalance = (
     const balances = new Map<string, CurrencySummary>();
     
     transactions.forEach(tx => {
-        const currency = tx.currency || 'TRY';
+        let currency = tx.currency || 'TRY';
+        if (currency === 'GOLD' && tx.goldDetail?.type) {
+            currency = `GOLD:${tx.goldDetail.type}`;
+        }
         if (!balances.has(currency)) {
             balances.set(currency, { net: 0, receivables: 0, payables: 0 });
         }
@@ -99,7 +103,10 @@ export const calculateDebtsBalance = (
             return;
         }
         
-        const currency = debt.currency || 'TRY';
+        let currency = debt.currency || 'TRY';
+        if (currency === 'GOLD' && debt.goldDetail?.type) {
+            currency = `GOLD:${debt.goldDetail.type}`;
+        }
         if (!balances.has(currency)) {
             balances.set(currency, { net: 0, receivables: 0, payables: 0 });
         }
@@ -158,21 +165,14 @@ export const formatCurrencyAmount = (
     currency: string,
     showSign: boolean = true
 ): string => {
-    const absAmount = Math.abs(amount);
-    const symbol = getCurrencySymbol(currency);
-    
-    // Format with Turkish locale for thousands separator
-    const formattedNumber = new Intl.NumberFormat('tr-TR', {
-        minimumFractionDigits: 2,
-        maximumFractionDigits: 2,
-    }).format(absAmount);
+    const formatted = formatCurrency(Math.abs(amount), currency);
     
     if (showSign && amount !== 0) {
         const sign = amount > 0 ? '+' : '-';
-        return `${symbol} ${sign}${formattedNumber}`;
+        return `${sign}${formatted}`;
     }
     
-    return `${symbol} ${formattedNumber}`;
+    return formatted;
 };
 
 /**

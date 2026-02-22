@@ -25,7 +25,6 @@ import { FeedbackWidget } from '../components/FeedbackWidget';
 import { PaymentModal } from '../components/PaymentModal';
 
 // Types
-// Types
 interface ContactSummary {
     id: string; // The unique identifier for the contact (User ID or Phone Number)
     name: string;
@@ -171,7 +170,10 @@ export const Dashboard = () => {
         }
 
         dashboardDebts.forEach(d => {
-            const currency = d.currency || 'TRY';
+            let currency = d.currency || 'TRY';
+            if (currency === 'GOLD' && d.goldDetail?.type) {
+                currency = `GOLD:${d.goldDetail.type}`;
+            }
             currencies.add(currency);
 
             if (!totalsByCurrency[currency]) {
@@ -330,7 +332,13 @@ export const Dashboard = () => {
             if (selectedCurrency === 'ALL') {
                 // Calculate total converted to TRY
                 data.balances.forEach((amt, curr) => {
-                    displayBalance += convertToTRY(amt, curr, rates!);
+                    // Extract base currency and sub-type for gold
+                    const isGold = curr.startsWith('GOLD:');
+                    const baseCurr = isGold ? 'GOLD' : curr;
+                    const goldType = isGold ? curr.split(':')[1] : undefined;
+                    const goldDetail = goldType ? { type: goldType } : undefined;
+
+                    displayBalance += convertToTRY(amt, baseCurr, rates!, undefined, goldDetail);
                 });
                 displayCurrency = 'TRY';
             } else {
@@ -359,9 +367,14 @@ export const Dashboard = () => {
         const grandTotalInTRY = { receivables: 0, payables: 0, net: 0, currency: 'TRY' };
         Object.values(totalsByCurrency).forEach(t => {
             // Rates guaranteed not null
-            grandTotalInTRY.receivables += convertToTRY(t.receivables, t.currency, rates!);
-            grandTotalInTRY.payables += convertToTRY(t.payables, t.currency, rates!);
-            grandTotalInTRY.net += convertToTRY(t.net, t.currency, rates!);
+            const isGold = t.currency.startsWith('GOLD:');
+            const baseCurr = isGold ? 'GOLD' : t.currency;
+            const goldType = isGold ? t.currency.split(':')[1] : undefined;
+            const goldDetail = goldType ? { type: goldType } : undefined;
+
+            grandTotalInTRY.receivables += convertToTRY(t.receivables, baseCurr, rates!, undefined, goldDetail);
+            grandTotalInTRY.payables += convertToTRY(t.payables, baseCurr, rates!, undefined, goldDetail);
+            grandTotalInTRY.net += convertToTRY(t.net, baseCurr, rates!, undefined, goldDetail);
         });
 
         return {
@@ -577,6 +590,7 @@ export const Dashboard = () => {
                     }}
                     maxAmount={quickPayDebt.remainingAmount}
                     currency={quickPayDebt.currency}
+                    goldDetail={quickPayDebt.goldDetail}
                 />
             )}
 
@@ -617,15 +631,20 @@ export const Dashboard = () => {
                             const isNetPositive = total.net >= 0;
                             const isToggled = toggledCards[total.currency];
 
-                            const net = (isToggled && rates) ? convertToTRY(total.net, total.currency, rates) : total.net;
-                            const receivables = (isToggled && rates) ? convertToTRY(total.receivables, total.currency, rates) : total.receivables;
-                            const payables = (isToggled && rates) ? convertToTRY(total.payables, total.currency, rates) : total.payables;
+                            const isGold = total.currency.startsWith('GOLD:');
+                            const baseCurr = isGold ? 'GOLD' : total.currency;
+                            const goldType = isGold ? total.currency.split(':')[1] : undefined;
+                            const goldDetail = goldType ? { type: goldType } : undefined;
+
+                            const net = (isToggled && rates) ? convertToTRY(total.net, baseCurr, rates, undefined, goldDetail) : total.net;
+                            const receivables = (isToggled && rates) ? convertToTRY(total.receivables, baseCurr, rates, undefined, goldDetail) : total.receivables;
+                            const payables = (isToggled && rates) ? convertToTRY(total.payables, baseCurr, rates, undefined, goldDetail) : total.payables;
 
                             return (
                                 <SummaryCard
                                     key={total.currency}
                                     data-currency={total.currency}
-                                    title={`Net Varlık (${total.currency})`}
+                                    title={total.currency.startsWith('GOLD:') ? `Altın (${total.currency.split(':')[1]})` : `Net Varlık (${total.currency})`}
                                     currency={total.currency}
                                     net={net}
                                     receivables={receivables}

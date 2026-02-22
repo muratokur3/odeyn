@@ -244,7 +244,9 @@ export const createDebt = async (
     installments?: Installment[],
     canBorrowerAddPayment?: boolean,
     // requestApproval removed
-    initialPayment: number = 0
+    initialPayment: number = 0,
+    goldDetail?: Debt['goldDetail'],
+    customExchangeRate?: number
 ) => {
     const isLending = type === 'LENDING';
 
@@ -372,6 +374,8 @@ export const createDebt = async (
         ...(installments && { installments }),
         ...(canBorrowerAddPayment && { canBorrowerAddPayment }),
         ...(contactPhone && { lockedPhoneNumber: contactPhone }), // Always lock phone number if available
+        ...(goldDetail && { goldDetail }),
+        ...(customExchangeRate && { customExchangeRate }),
         // New Fields
         ...(isMuted && { isMuted: true }),
         auditMeta: { // ✅ Added Audit Log

@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { X } from 'lucide-react';
 import { formatCurrency, formatAmountToWords } from '../utils/format';
 import { AmountInput } from './AmountInput';
+import type { GoldDetail } from '../types';
 
 interface PaymentModalProps {
     isOpen: boolean;
@@ -9,12 +10,13 @@ interface PaymentModalProps {
     onSubmit: (amount: number, note: string) => Promise<void>;
     maxAmount: number;
     currency: string;
+    goldDetail?: GoldDetail;
     initialAmount?: number;
     initialNote?: string;
 }
 
 export const PaymentModal: React.FC<PaymentModalProps> = ({
-    isOpen, onClose, onSubmit, maxAmount, currency, initialAmount, initialNote
+    isOpen, onClose, onSubmit, maxAmount, currency, goldDetail, initialAmount, initialNote
 }) => {
     const [amount, setAmount] = useState('');
     const [note, setNote] = useState('');
@@ -67,11 +69,11 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
                         />
                         {amount && (
                             <p className="text-[10px] text-text-secondary italic text-left animate-in fade-in slide-in-from-top-1 px-1 mt-0.5">
-                                {formatAmountToWords(amount, currency)}
+                                {formatAmountToWords(amount, currency, goldDetail)}
                             </p>
                         )}
                         <p className="text-xs text-text-secondary mt-1">
-                            Kalan: {formatCurrency(maxAmount, currency)}
+                            Kalan: {formatCurrency(maxAmount, currency, goldDetail)}
                         </p>
                     </div>
 

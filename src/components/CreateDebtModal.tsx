@@ -15,6 +15,7 @@ import { AmountInput } from './AmountInput';
 import { Timestamp } from 'firebase/firestore';
 import clsx from 'clsx';
 import { useModal } from '../context/ModalContext';
+import { GOLD_TYPES, GOLD_CARATS } from '../utils/goldConstants';
 
 interface CreateDebtModalProps {
     isOpen: boolean;
@@ -86,6 +87,13 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
     // New Fields
     const [type, setType] = useState<'LENDING' | 'BORROWING'>('LENDING');
     const [currency, setCurrency] = useState('TRY');
+
+    // Gold State
+    const [goldType, setGoldType] = useState<string>('GRAM');
+    const [goldCarat, setGoldCarat] = useState<number>(24);
+    const [goldWeight, setGoldWeight] = useState<string>('');
+    const [goldQuantity, setGoldQuantity] = useState<string>('');
+
     const [note, setNote] = useState('');
     const [dueDate, setDueDate] = useState('');
     const [showDetails, setShowDetails] = useState(false);
@@ -133,6 +141,14 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                 setNote(initialData.note || '');
                 setPhoneNumber(initialData.lockedPhoneNumber || targetId); // Use locked phone if available
                 setBorrowerName(targetName);
+
+                // Gold prefill
+                if (initialData.currency === 'GOLD' && initialData.goldDetail) {
+                    setGoldType(initialData.goldDetail.type);
+                    setGoldCarat(initialData.goldDetail.carat || 24);
+                    setGoldWeight(initialData.goldDetail.weight?.toString() || '');
+                    setGoldQuantity(initialData.goldDetail.quantity?.toString() || '');
+                }
 
                 // If targetId is a UID (User) and we don't have a locked phone, fetch accurate phone from User Profile
                 if (!initialData.lockedPhoneNumber && targetId.length > 20) {
@@ -362,6 +378,7 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
 
         const numAmount = parseFloat(amount);
         const numDownPayment = parseFloat(downPayment) || 0;
+        const customRate = useManualRate ? parseFloat(manualRate) : undefined;
 
         if (isNaN(numAmount) || numAmount <= 0) return;
         if (numDownPayment >= numAmount) {
@@ -400,6 +417,18 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
 
         setLoading(true);
         try {
+            let goldDetail: Debt['goldDetail'] | undefined;
+            if (currency === 'GOLD') {
+                const typeData = GOLD_TYPES.find(t => t.id === goldType);
+                goldDetail = {
+                    type: goldType as any,
+                    label: typeData?.label || goldType,
+                    carat: typeData?.hasCarat ? goldCarat : undefined,
+                    weight: typeData?.hasWeight ? parseFloat(goldWeight) : undefined,
+                    quantity: typeData?.hasQuantity ? parseFloat(goldQuantity) : undefined
+                };
+            }
+
             let generatedInstallments: Installment[] | undefined;
             if (isInstallment && installmentCount > 1) {
                 generatedInstallments = [];
@@ -421,23 +450,6 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
 
             // --- EDIT MODE LOGIC ---
             if (editMode && initialData) {
-                // For editing, we reuse the existing participants from initialData usually.
-                // But we allow updating note, amount, installments.
-                // We do NOT allow changing the person for now (complex validation),
-                // but if we did, we'd need to re-validate block status etc.
-                // We assume person is same.
-
-                // Construct Update Object
-                // If it's becoming a transaction (Stream) vs File (Debt)
-                // "Hard Reset" treats everything as a Debt Document Update.
-                // Even simple transactions are stored as Debt docs in this architecture
-                // (except Ledger specialized ones? No, createDebt covers both usually if we look at db.ts?
-                // Ah, createDebt creates a debt doc. Ledger is different service?
-                // The existing code has `getOrCreateLedger`...
-                // If the original item was a Ledger Transaction, `initialData` probably won't be a `Debt` object?
-                // Or we unify them.
-                // If initialData is passed, it implies it's a Debt object (from Firestore 'debts').
-
                 await updateDebtHardReset(
                     initialData.id,
                     user.uid,
@@ -445,10 +457,11 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                         originalAmount: numAmount,
                         currency,
                         note,
+                        goldDetail,
+                        customExchangeRate: customRate,
                         ...(dueDate ? { dueDate: Timestamp.fromDate(new Date(dueDate)) } : { dueDate: undefined }),
                         ...(generatedInstallments ? { installments: generatedInstallments } : { installments: undefined }),
                         canBorrowerAddPayment,
-                        // Update status logic handled in service based on remaining
                     },
                     numDownPayment
                 );
@@ -474,7 +487,9 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                     dueDate ? new Date(dueDate) : undefined,
                     generatedInstallments,
                     canBorrowerAddPayment,
-                    numDownPayment
+                    numDownPayment,
+                    goldDetail,
+                    customRate
                 );
             } else {
                 // NORMAL FLOW (Ledger Transaction) -> Uses Ledger system
@@ -493,7 +508,9 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                     numAmount,
                     direction,
                     note,
-                    currency
+                    currency,
+                    goldDetail,
+                    customRate
                 );
             }
 
@@ -584,38 +601,6 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                             </button>
                         </div>
 
-
-                        {/* Sync Banner - Hide in Edit Mode */}
-                        {!editMode && step === 'SEARCH' && isSupported && !userInfo?.settings?.contactSyncEnabled && !userInfo?.settings?.suppressSyncSuggestion && (
-                            <div className="mb-4 p-3 bg-gradient-to-r from-indigo-50 to-purple-50 dark:from-indigo-900/20 dark:to-purple-900/20 rounded-xl border border-indigo-100 dark:border-indigo-800 flex flex-col gap-2 animate-in fade-in slide-in-from-top-2">
-                                <div className="flex items-center gap-2">
-                                    <div className="p-1.5 bg-indigo-100 dark:bg-indigo-900/40 rounded-full text-indigo-600 dark:text-indigo-400">
-                                        <RefreshCw size={16} className={isSyncing ? "animate-spin" : ""} />
-                                    </div>
-                                    <p className="text-sm text-indigo-900 dark:text-indigo-200 font-medium">
-                                        Arkadaşlarını kolayca bulmak için rehberini eşle.
-                                    </p>
-                                </div>
-                                <div className="flex gap-2 pl-9">
-                                    <button
-                                        type="button"
-                                        onClick={syncContacts}
-                                        disabled={isSyncing}
-                                        className="text-xs font-bold bg-indigo-600 text-white px-3 py-1.5 rounded-lg hover:bg-indigo-700 transition-colors disabled:opacity-50"
-                                    >
-                                        {isSyncing ? 'Eşleniyor...' : 'Eşle'}
-                                    </button>
-                                    <button
-                                        type="button"
-                                        onClick={dismissSuggestion}
-                                        disabled={isSyncing}
-                                        className="text-xs font-medium text-indigo-600 dark:text-indigo-400 px-2 py-1.5 hover:bg-indigo-100 dark:hover:bg-indigo-800/30 rounded-lg transition-colors"
-                                    >
-                                        Bir Daha Sorma
-                                    </button>
-                                </div>
-                            </div>
-                        )}
 
                         {/* Flow Control */}
                         {isResolvingInitial ? (
@@ -743,12 +728,84 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                                         <option value="TRY">₺</option>
                                         <option value="USD">$</option>
                                         <option value="EUR">€</option>
+                                        <option value="GOLD">Altın</option>
                                     </select>
                                 </div>
                             </div>
+
+                            {/* Gold Sub-selection */}
+                            {currency === 'GOLD' && (
+                                <div className="p-4 bg-amber-50 dark:bg-amber-900/10 rounded-xl border border-amber-200 dark:border-amber-800 space-y-3 animate-in fade-in slide-in-from-top-2">
+                                    <div className="flex items-center gap-2 mb-1">
+                                        <div className="w-2 h-2 rounded-full bg-amber-500 animate-pulse" />
+                                        <span className="text-xs font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wider">Altın Detayları</span>
+                                    </div>
+
+                                    <div>
+                                        <label className="block text-[10px] font-bold text-amber-700 dark:text-amber-400 mb-1 uppercase">Altın Türü</label>
+                                        <select
+                                            value={goldType}
+                                            onChange={(e) => setGoldType(e.target.value)}
+                                            className="w-full px-3 py-2 rounded-lg border border-amber-200 dark:border-amber-800 bg-white dark:bg-slate-800 text-sm font-semibold text-text-primary focus:ring-2 focus:ring-amber-500 outline-none transition-all"
+                                        >
+                                            {GOLD_TYPES.map(t => (
+                                                <option key={t.id} value={t.id}>{t.label}</option>
+                                            ))}
+                                        </select>
+                                    </div>
+
+                                    <div className="grid grid-cols-2 gap-3">
+                                        {GOLD_TYPES.find(t => t.id === goldType)?.hasCarat && (
+                                            <div>
+                                                <label className="block text-[10px] font-bold text-amber-700 dark:text-amber-400 mb-1 uppercase">Ayar</label>
+                                                <select
+                                                    value={goldCarat}
+                                                    onChange={(e) => setGoldCarat(Number(e.target.value))}
+                                                    className="w-full px-3 py-2 rounded-lg border border-amber-200 dark:border-amber-800 bg-white dark:bg-slate-800 text-sm font-semibold text-text-primary focus:ring-2 focus:ring-amber-500 outline-none transition-all"
+                                                >
+                                                    {GOLD_CARATS.map(c => (
+                                                        <option key={c.value} value={c.value}>{c.label}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        )}
+                                        {GOLD_TYPES.find(t => t.id === goldType)?.hasWeight && (
+                                            <div className={clsx(!GOLD_TYPES.find(t => t.id === goldType)?.hasCarat && "col-span-2")}>
+                                                <label className="block text-[10px] font-bold text-amber-700 dark:text-amber-400 mb-1 uppercase">Gram</label>
+                                                <input
+                                                    type="number"
+                                                    value={goldWeight}
+                                                    onChange={(e) => {
+                                                        setGoldWeight(e.target.value);
+                                                        setAmount(e.target.value); // Sync with main amount for consistency
+                                                    }}
+                                                    placeholder="Örn: 10.5"
+                                                    step="0.01"
+                                                    className="w-full px-3 py-2 rounded-lg border border-amber-200 dark:border-amber-800 bg-white dark:bg-slate-800 text-sm font-bold text-text-primary focus:ring-2 focus:ring-amber-500 outline-none transition-all"
+                                                />
+                                            </div>
+                                        )}
+                                        {GOLD_TYPES.find(t => t.id === goldType)?.hasQuantity && (
+                                            <div className="col-span-2">
+                                                <label className="block text-[10px] font-bold text-amber-700 dark:text-amber-400 mb-1 uppercase">Adet</label>
+                                                <input
+                                                    type="number"
+                                                    value={goldQuantity}
+                                                    onChange={(e) => {
+                                                        setGoldQuantity(e.target.value);
+                                                        setAmount(e.target.value); // Sync with main amount
+                                                    }}
+                                                    placeholder="Örn: 2"
+                                                    className="w-full px-3 py-2 rounded-lg border border-amber-200 dark:border-amber-800 bg-white dark:bg-slate-800 text-sm font-bold text-text-primary focus:ring-2 focus:ring-amber-500 outline-none transition-all"
+                                                />
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            )}
                             {amount && (
                                 <p className="text-[10px] text-text-secondary italic text-left animate-in fade-in slide-in-from-top-1 px-1 mt-0.5">
-                                    {formatAmountToWords(amount, currency)}
+                                    {formatAmountToWords(amount, currency, currency === 'GOLD' ? { type: goldType as any, label: '' } : undefined)}
                                 </p>
                             )}
                         </div>
@@ -765,7 +822,9 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                                 </div>
                                 {useManualRate && (
                                     <div className="flex items-center gap-2">
-                                        <span className="text-sm text-text-secondary">1 {currency} =</span>
+                                        <span className="text-sm text-text-secondary">
+                                            1 {currency === 'GOLD' ? (GOLD_TYPES.find(t => t.id === goldType)?.label || 'Altın') : currency} =
+                                        </span>
                                         <input
                                             type="number"
                                             value={manualRate}

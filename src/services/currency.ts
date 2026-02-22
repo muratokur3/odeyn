@@ -1,3 +1,5 @@
+import { calculateGoldToGram24K } from '../utils/goldConstants';
+
 export interface CurrencyRates {
     date: string;
     usd: Record<string, number>;
@@ -82,7 +84,8 @@ export const convertToTRY = (
     amount: number, 
     currency: string, 
     rates: CurrencyRates | null, 
-    customRates?: Record<string, number>
+    customRates?: Record<string, number>,
+    goldDetail?: any
 ): number => {
     if (currency === 'TRY') return amount;
     
@@ -106,7 +109,18 @@ export const convertToTRY = (
         if (xauRate) {
             const pricePerOzInUsd = 1 / xauRate;
             const pricePerGramInUsd = pricePerOzInUsd / 31.1034768;
-            amountInUsd = amount * pricePerGramInUsd;
+
+            let effectiveGrams = amount;
+            if (goldDetail) {
+                effectiveGrams = calculateGoldToGram24K(
+                    goldDetail.type,
+                    amount,
+                    goldDetail.carat,
+                    goldDetail.weight
+                );
+            }
+
+            amountInUsd = effectiveGrams * pricePerGramInUsd;
         }
     } else {
         const rate = rates.usd[currency.toLowerCase()];
