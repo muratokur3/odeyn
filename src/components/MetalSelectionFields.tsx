@@ -82,7 +82,34 @@ export const MetalSelectionFields: React.FC<MetalSelectionFieldsProps> = ({
                     </select>
                 </div>
 
-                {goldCategory !== 'BILEZIK' && goldCategory !== 'TAKI' && (
+                {/* Model / Tür Selection */}
+                { (goldCategory === 'BILEZIK' || goldCategory === 'TAKI') ? (
+                    <div>
+                        <label className={clsx(
+                            "block text-[10px] font-bold mb-1 uppercase tracking-tight",
+                            isGold ? "text-amber-700 dark:text-amber-400" : "text-slate-600 dark:text-slate-400"
+                        )}>
+                            Model / Detay
+                        </label>
+                        <select
+                            value={goldSubType}
+                            onChange={(e) => {
+                                setGoldSubType(e.target.value);
+                                const model = (goldCategory === 'BILEZIK' ? BILEZIK_MODELS : TAKI_TYPES).find(m => m.id === e.target.value);
+                                if (model?.fixedCarat) setGoldCustomCarat(model.fixedCarat);
+                            }}
+                            className={clsx(
+                                "w-full px-3 py-2.5 rounded-lg border bg-white dark:bg-slate-800 text-sm font-semibold text-text-primary outline-none transition-all",
+                                isGold ? "border-amber-200 dark:border-amber-800 focus:ring-2 focus:ring-amber-500" : "border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-slate-500"
+                            )}
+                        >
+                            <option value="">Seçiniz...</option>
+                            {(goldCategory === 'BILEZIK' ? BILEZIK_MODELS : TAKI_TYPES).map(m => (
+                                <option key={m.id} value={m.id}>{m.label}</option>
+                            ))}
+                        </select>
+                    </div>
+                ) : (
                     <div>
                         <label className={clsx(
                             "block text-[10px] font-bold mb-1 uppercase tracking-tight",
@@ -106,57 +133,11 @@ export const MetalSelectionFields: React.FC<MetalSelectionFieldsProps> = ({
                 )}
             </div>
 
+            {/* Ayar & Gram Row for BILEZIK and TAKI */}
             {(goldCategory === 'BILEZIK' || goldCategory === 'TAKI') && (
-                <div className="space-y-3 animate-in zoom-in-95 duration-200">
-                    <div className="grid grid-cols-2 gap-3">
-                        <div>
-                            <label className={clsx(
-                                "block text-[10px] font-bold mb-1 uppercase tracking-tight",
-                                isGold ? "text-amber-700 dark:text-amber-400" : "text-slate-600 dark:text-slate-400"
-                            )}>
-                                Model / Detay
-                            </label>
-                            <select
-                                value={goldSubType}
-                                onChange={(e) => {
-                                    setGoldSubType(e.target.value);
-                                    const model = (goldCategory === 'BILEZIK' ? BILEZIK_MODELS : TAKI_TYPES).find(m => m.id === e.target.value);
-                                    if (model?.fixedCarat) setGoldCustomCarat(model.fixedCarat);
-                                }}
-                                className={clsx(
-                                    "w-full px-3 py-2.5 rounded-lg border bg-white dark:bg-slate-800 text-sm font-semibold text-text-primary outline-none transition-all",
-                                    isGold ? "border-amber-200 dark:border-amber-800 focus:ring-2 focus:ring-amber-500" : "border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-slate-500"
-                                )}
-                            >
-                                <option value="">Seçiniz...</option>
-                                {(goldCategory === 'BILEZIK' ? BILEZIK_MODELS : TAKI_TYPES).map(m => (
-                                    <option key={m.id} value={m.id}>{m.label}</option>
-                                ))}
-                            </select>
-                        </div>
-                        <div>
-                            <label className={clsx(
-                                "block text-[10px] font-bold mb-1 uppercase tracking-tight",
-                                isGold ? "text-amber-700 dark:text-amber-400" : "text-slate-600 dark:text-slate-400"
-                            )}>
-                                Birim Gram
-                            </label>
-                            <input
-                                type="text"
-                                inputMode="decimal"
-                                value={goldWeightPerUnit}
-                                onChange={(e) => setGoldWeightPerUnit(e.target.value)}
-                                placeholder="Örn: 20"
-                                className={clsx(
-                                    "w-full px-3 py-2.5 rounded-lg border bg-white dark:bg-slate-800 text-sm font-bold text-text-primary outline-none transition-all",
-                                    isGold ? "border-amber-200 dark:border-amber-800 focus:ring-2 focus:ring-amber-500" : "border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-slate-500"
-                                )}
-                            />
-                        </div>
-                    </div>
-
-                    {/* Carat selection only if not fixed by model and not a fixed-carat type */}
-                    {!getGoldType(goldTypeId)?.fixedCarat && !(goldCategory === 'BILEZIK' && BILEZIK_MODELS.find(m => m.id === goldSubType)?.fixedCarat) && (
+                <div className="grid grid-cols-2 gap-3 animate-in slide-in-from-top-1">
+                    {/* Carat selection - only if not fixed */}
+                    {!getGoldType(goldTypeId)?.fixedCarat && !(goldCategory === 'BILEZIK' && BILEZIK_MODELS.find(m => m.id === goldSubType)?.fixedCarat) ? (
                         <div>
                             <label className={clsx(
                                 "block text-[10px] font-bold mb-1 uppercase tracking-tight",
@@ -177,7 +158,35 @@ export const MetalSelectionFields: React.FC<MetalSelectionFieldsProps> = ({
                                 ))}
                             </select>
                         </div>
+                    ) : (
+                        <div className="flex items-end">
+                            <div className={clsx(
+                                "w-full px-3 py-2.5 rounded-lg border text-xs font-semibold opacity-50 bg-white/50 dark:bg-slate-800/50",
+                                isGold ? "border-amber-200 dark:border-amber-800" : "border-slate-200 dark:border-slate-800"
+                            )}>
+                                Sabit Ayar
+                            </div>
+                        </div>
                     )}
+                    <div>
+                        <label className={clsx(
+                            "block text-[10px] font-bold mb-1 uppercase tracking-tight",
+                            isGold ? "text-amber-700 dark:text-amber-400" : "text-slate-600 dark:text-slate-400"
+                        )}>
+                            Birim Gram
+                        </label>
+                        <input
+                            type="text"
+                            inputMode="decimal"
+                            value={goldWeightPerUnit}
+                            onChange={(e) => setGoldWeightPerUnit(e.target.value)}
+                            placeholder="Örn: 20"
+                            className={clsx(
+                                "w-full px-3 py-2.5 rounded-lg border bg-white dark:bg-slate-800 text-sm font-bold text-text-primary outline-none transition-all",
+                                isGold ? "border-amber-200 dark:border-amber-800 focus:ring-2 focus:ring-amber-500" : "border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-slate-500"
+                            )}
+                        />
+                    </div>
                 </div>
             )}
         </div>
