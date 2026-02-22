@@ -288,24 +288,9 @@ export const QuickTransactionModal: React.FC<QuickTransactionModalProps> = ({
                         </div>
 
                         {/* Amount & Currency */}
-                        <div className="flex gap-3">
-                            <div className="flex-1">
-                                <label className="block text-sm font-medium text-text-secondary mb-2">
-                                    {currency === 'GOLD' ? (getGoldType(goldTypeId)?.category === 'GRAM' ? 'Gram' : 'Adet') : 'Tutar'}
-                                </label>
-                                <input
-                                    type="text"
-                                    inputMode="decimal"
-                                    value={amount}
-                                    onChange={(e) => setAmount(e.target.value)}
-                                    placeholder="0"
-                                    className="w-full px-4 py-4 text-3xl font-bold text-center rounded-xl border border-slate-200 dark:border-slate-700 bg-background text-text-primary focus:ring-2 focus:ring-primary outline-none"
-                                    required
-                                    autoFocus
-                                />
-                            </div>
-                            <div className="w-24 flex flex-col">
-                                <label className="block text-sm font-medium text-text-secondary mb-2">Birim</label>
+                        <div className="flex gap-4">
+                            <div className="w-[42%] flex flex-col">
+                                <label className="block text-sm font-medium text-text-secondary mb-2">Döviz</label>
                                 <select
                                     value={currency}
                                     onChange={(e) => {
@@ -319,12 +304,27 @@ export const QuickTransactionModal: React.FC<QuickTransactionModalProps> = ({
                                             setGoldTypeId('GRAM_24');
                                         }
                                     }}
-                                    className="w-full px-2 py-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-background text-text-primary focus:ring-2 focus:ring-primary outline-none font-bold h-full text-xs"
+                                    className="w-full px-3 py-4 rounded-xl border border-slate-200 dark:border-slate-700 bg-background text-text-primary focus:ring-2 focus:ring-primary outline-none font-bold h-[74px] text-sm"
                                 >
                                     {CURRENCIES.map(c => (
-                                        <option key={c.code} value={c.code}>{c.symbol} {c.code}</option>
+                                        <option key={c.code} value={c.code}>{c.symbol} {c.label}</option>
                                     ))}
                                 </select>
+                            </div>
+                            <div className="flex-1">
+                                <label className="block text-sm font-medium text-text-secondary mb-2">
+                                    {currency === 'GOLD' ? (getGoldType(goldTypeId)?.category === 'GRAM' ? 'Gram' : 'Adet') : 'Tutar'}
+                                </label>
+                                <input
+                                    type="text"
+                                    inputMode="decimal"
+                                    value={amount}
+                                    onChange={(e) => setAmount(e.target.value)}
+                                    placeholder="0"
+                                    className="w-full px-4 py-4 text-3xl font-bold text-center rounded-xl border border-slate-200 dark:border-slate-700 bg-background text-text-primary focus:ring-2 focus:ring-primary outline-none h-[74px]"
+                                    required
+                                    autoFocus
+                                />
                             </div>
                         </div>
                         {amount && (

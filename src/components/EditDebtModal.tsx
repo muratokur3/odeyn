@@ -171,17 +171,8 @@ export const EditDebtModal: React.FC<EditDebtModalProps> = ({ isOpen, onClose, d
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="space-y-1">
-                        <div className="flex items-start gap-3">
-                            <div className="flex-1">
-                                <AmountInput
-                                    label={currency === 'GOLD' ? (getGoldType(goldTypeId)?.category === 'GRAM' ? 'Gram' : 'Adet') : 'Tutar'}
-                                    value={amount}
-                                    onChange={setAmount}
-                                    disabled={hasPayments}
-                                    required
-                                />
-                            </div>
-                            <div className="w-1/3">
+                        <div className="flex items-start gap-4">
+                            <div className="w-[42%]">
                                 <label className="block text-sm font-medium text-text-secondary mb-1">Döviz</label>
                                 <select
                                     value={currency}
@@ -197,12 +188,21 @@ export const EditDebtModal: React.FC<EditDebtModalProps> = ({ isOpen, onClose, d
                                         }
                                     }}
                                     disabled={hasPayments}
-                                    className="w-full px-2 py-2.5 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary focus:ring-2 focus:ring-blue-900/50 outline-none transition-all font-bold text-xs disabled:opacity-50 disabled:cursor-not-allowed h-[46px]"
+                                    className="w-full px-3 py-2.5 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary focus:ring-2 focus:ring-blue-900/50 outline-none transition-all font-bold text-sm disabled:opacity-50 disabled:cursor-not-allowed h-[46px]"
                                 >
                                     {CURRENCIES.map(c => (
-                                        <option key={c.code} value={c.code}>{c.symbol} {c.code}</option>
+                                        <option key={c.code} value={c.code}>{c.symbol} {c.label}</option>
                                     ))}
                                 </select>
+                            </div>
+                            <div className="flex-1">
+                                <AmountInput
+                                    label={currency === 'GOLD' ? (getGoldType(goldTypeId)?.category === 'GRAM' ? 'Gram' : 'Adet') : 'Tutar'}
+                                    value={amount}
+                                    onChange={setAmount}
+                                    disabled={hasPayments}
+                                    required
+                                />
                             </div>
                         </div>
                         {amount && (

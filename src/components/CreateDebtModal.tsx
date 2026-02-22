@@ -762,40 +762,40 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
 
 
                         <div className="space-y-1">
-                            <div className="flex items-start gap-3">
-                                <div className="flex-1">
-                                    <AmountInput
-                                        label={currency === 'GOLD' ? (getGoldType(goldTypeId)?.category === 'GRAM' ? 'Gram' : 'Adet') : 'Tutar'}
-                                        value={amount}
-                                        onChange={setAmount}
-                                        disabled={isTargetBlocked}
-                                        required
-                                    />
-                                </div>
-                                <div className="w-24">
-                                    <label className="block text-sm font-medium text-text-secondary mb-1">Döviz</label>
-                                    <select
-                                        value={currency}
-                                        onChange={(e) => {
-                                            const newCurr = e.target.value;
-                                            setCurrency(newCurr);
-                                            if (newCurr === 'SILVER') {
-                                                setGoldCategory('SILVER');
-                                                setGoldTypeId('SILVER_999');
-                                            } else if (newCurr === 'GOLD') {
-                                                setGoldCategory('GRAM');
-                                                setGoldTypeId('GRAM_24');
-                                            }
-                                        }}
-                                        disabled={isTargetBlocked}
-                                        className="w-full px-3 py-2.5 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary focus:ring-2 focus:ring-blue-900/50 outline-none transition-all font-bold text-sm disabled:opacity-50 disabled:cursor-not-allowed h-[46px]"
-                                    >
-                                        {CURRENCIES.map(c => (
-                                            <option key={c.code} value={c.code}>{c.symbol} {c.label}</option>
-                                        ))}
-                                    </select>
-                                </div>
+                        <div className="flex items-start gap-4">
+                            <div className="w-[42%]">
+                                <label className="block text-sm font-medium text-text-secondary mb-1">Döviz</label>
+                                <select
+                                    value={currency}
+                                    onChange={(e) => {
+                                        const newCurr = e.target.value;
+                                        setCurrency(newCurr);
+                                        if (newCurr === 'SILVER') {
+                                            setGoldCategory('SILVER');
+                                            setGoldTypeId('SILVER_999');
+                                        } else if (newCurr === 'GOLD') {
+                                            setGoldCategory('GRAM');
+                                            setGoldTypeId('GRAM_24');
+                                        }
+                                    }}
+                                    disabled={isTargetBlocked}
+                                    className="w-full px-3 py-2.5 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary focus:ring-2 focus:ring-blue-900/50 outline-none transition-all font-bold text-sm disabled:opacity-50 disabled:cursor-not-allowed h-[46px]"
+                                >
+                                    {CURRENCIES.map(c => (
+                                        <option key={c.code} value={c.code}>{c.symbol} {c.label}</option>
+                                    ))}
+                                </select>
                             </div>
+                            <div className="flex-1">
+                                <AmountInput
+                                    label={currency === 'GOLD' ? (getGoldType(goldTypeId)?.category === 'GRAM' ? 'Gram' : 'Adet') : 'Tutar'}
+                                    value={amount}
+                                    onChange={setAmount}
+                                    disabled={isTargetBlocked}
+                                    required
+                                />
+                            </div>
+                        </div>
 
                             {/* Metal Sub-selection */}
                             {(currency === 'GOLD' || currency === 'SILVER') && (

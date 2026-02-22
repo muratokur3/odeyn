@@ -2,17 +2,17 @@ import type { GoldDetail } from '../types';
 import { getGoldType, BILEZIK_MODELS, TAKI_TYPES } from './goldConstants';
 
 export const CURRENCIES = [
-    { code: 'TRY', symbol: '₺', label: 'TRY (Türk Lirası)' },
-    { code: 'USD', symbol: '$', label: 'USD (Amerikan Doları)' },
-    { code: 'EUR', symbol: '€', label: 'EUR (Euro)' },
-    { code: 'GOLD', symbol: 'GA', label: 'GOLD (Altın)' },
-    { code: 'SILVER', symbol: 'GM', label: 'SILVER (Gümüş)' },
-    { code: 'GBP', symbol: '£', label: 'GBP (İngiliz Sterlini)' },
-    { code: 'CHF', symbol: 'Fr', label: 'CHF (İsviçre Frangı)' },
-    { code: 'SAR', symbol: 'SR', label: 'SAR (Suudi Arabistan Riyali)' },
-    { code: 'CAD', symbol: '$', label: 'CAD (Kanada Doları)' },
-    { code: 'AUD', symbol: '$', label: 'AUD (Avustralya Doları)' },
-    { code: 'JPY', symbol: '¥', label: 'JPY (Japon Yeni)' },
+    { code: 'TRY', symbol: '₺', label: 'LİRA' },
+    { code: 'USD', symbol: '$', label: 'DOLAR' },
+    { code: 'EUR', symbol: '€', label: 'EURO' },
+    { code: 'GOLD', symbol: 'GA', label: 'ALTIN' },
+    { code: 'SILVER', symbol: 'GM', label: 'GÜMÜŞ' },
+    { code: 'GBP', symbol: '£', label: 'STERLİN' },
+    { code: 'CHF', symbol: 'Fr', label: 'FRANK' },
+    { code: 'SAR', symbol: 'SR', label: 'RİYAL' },
+    { code: 'CAD', symbol: '$', label: 'K. DOLARI' },
+    { code: 'AUD', symbol: '$', label: 'A. DOLARI' },
+    { code: 'JPY', symbol: '¥', label: 'YEN' },
 ] as const;
 
 export const formatCurrency = (amount: number | undefined | null, currency: string, goldDetail?: GoldDetail) => {
