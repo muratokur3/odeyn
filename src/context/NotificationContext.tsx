@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useState, useEffect, useCallback } from 'react';
+import React, { createContext, useContext, useState, useEffect, useCallback, useRef } from 'react';
 import { useNotifications, type Notification } from '../hooks/useNotifications';
 import { type ToastNotification } from '../components/NotificationToast';
 
@@ -38,6 +38,20 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [currentToast, setCurrentToast] = useState<ToastNotification | null>(null);
+    const toastTimerRef = useRef<any>(null);
+
+    // Auto-dismiss toast
+    useEffect(() => {
+        if (currentToast) {
+            if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+            toastTimerRef.current = setTimeout(() => {
+                setCurrentToast(null);
+            }, currentToast.duration || 5000);
+        }
+        return () => {
+            if (toastTimerRef.current) clearTimeout(toastTimerRef.current);
+        };
+    }, [currentToast]);
 
     // Persistent tracking of toasted IDs to avoid repeats
     const [toastedIds, setToastedIds] = useState<Set<string>>(() => {

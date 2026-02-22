@@ -195,7 +195,7 @@ export const addLedgerTransaction = async (
 
     // Update ledger's remainingAmount based on direction
     // Note: We need to update the balance on the ledger document
-    await updateLedgerBalance(ledgerId, userId);
+    await updateLedgerBalance(ledgerId, userId, amount, direction);
 
     // Update Activity Feed
     try {
@@ -317,7 +317,12 @@ export const deleteLedgerTransaction = async (
 /**
  * Update ledger's remainingAmount based on all transactions
  */
-const updateLedgerBalance = async (ledgerId: string, actorId?: string): Promise<void> => {
+const updateLedgerBalance = async (
+    ledgerId: string,
+    actorId?: string,
+    lastAmount?: number,
+    lastDirection?: TransactionDirection
+): Promise<void> => {
     const txRef = getLedgerTransactionsRef(ledgerId);
     const snapshot = await getDocs(txRef);
 
@@ -354,6 +359,8 @@ const updateLedgerBalance = async (ledgerId: string, actorId?: string): Promise<
     const updates: Record<string, unknown> = {
         remainingAmount: balance,
         updatedAt: serverTimestamp(),
+        ...(lastAmount !== undefined && { lastTransactionAmount: lastAmount }),
+        ...(lastDirection && { lastTransactionDirection: lastDirection })
     };
 
     if (actorId) {

@@ -116,6 +116,8 @@ export interface Debt {
     type?: DebtType; // Default: 'ONE_TIME', 'LEDGER' for shared stream
 
     // Blueprint v1 Fields
+    lastTransactionAmount?: number;
+    lastTransactionDirection?: TransactionDirection;
     editHistory?: AmountHistory[];
     customExchangeRate?: number;
     archivedAt?: Timestamp;

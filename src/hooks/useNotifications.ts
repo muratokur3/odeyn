@@ -76,27 +76,32 @@ export const useNotifications = () => {
 
                 // Show if unread OR if created in last 24 hours
                 if (!isRead || (hoursSinceCreation >= 0 && hoursSinceCreation < 24)) {
+                    const isLedger = debt.type === 'LEDGER';
                     if (isLender) {
                         notifs.push({
                             id: notifId,
                             type: 'DEBT_CREATED',
-                            message: `${debt.borrowerName} ile ${debt.originalAmount} ${debt.currency} borç kaydedildi.`,
+                            message: isLedger
+                                ? `${debt.borrowerName} ile cari hesap oluşturuldu.`
+                                : `${debt.borrowerName} ile ${debt.originalAmount} ${debt.currency} borç kaydedildi.`,
                             date: debt.createdAt.toDate(),
                             debtId: debt.id,
                             read: isRead,
                             actorId: debt.createdBy,
-                            amount: debt.originalAmount
+                            amount: isLedger ? undefined : debt.originalAmount
                         });
                     } else if (isBorrower) {
                         notifs.push({
                             id: notifId,
                             type: 'DEBT_CREATED',
-                            message: `${debt.lenderName} tarafından ${debt.originalAmount} ${debt.currency} borç kaydı oluşturuldu.`,
+                            message: isLedger
+                                ? `${debt.lenderName} sizinle cari hesap oluşturdu.`
+                                : `${debt.lenderName} tarafından ${debt.originalAmount} ${debt.currency} borç kaydı oluşturuldu.`,
                             date: debt.createdAt.toDate(),
                             debtId: debt.id,
                             read: isRead,
                             actorId: debt.createdBy,
-                            amount: debt.originalAmount
+                            amount: isLedger ? undefined : debt.originalAmount
                         });
                     }
                 }
@@ -121,7 +126,11 @@ export const useNotifications = () => {
                         const otherPartyName = isLender ? debt.borrowerName : debt.lenderName;
 
                         if (debt.type === 'LEDGER') {
-                            message = `${otherPartyName} cari hesaba işlem ekledi.`;
+                            const amt = debt.lastTransactionAmount;
+                            const curr = debt.currency || 'TRY';
+                            message = amt
+                                ? `${otherPartyName} cari hesaba ${amt} ${curr} işlem ekledi.`
+                                : `${otherPartyName} cari hesaba işlem ekledi.`;
                             type = 'PAYMENT_MADE';
                         } else if (debt.status === 'REJECTED' || debt.status === 'REJECTED_BY_RECEIVER' || debt.status === 'DISPUTED') {
                             type = 'DEBT_REJECTED';
