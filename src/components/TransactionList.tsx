@@ -166,7 +166,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
 
                     const content = (
                         <div className={clsx(
-                            "flex items-end gap-1",
+                            "flex items-end gap-3 px-1 py-1 w-full",
                             isMine ? "flex-row-reverse" : "flex-row"
                         )}>
                             {/* Avatar */}
@@ -175,7 +175,7 @@ export const TransactionList: React.FC<TransactionListProps> = ({
                                 photoURL={!isMine && targetUser && 'photoURL' in targetUser ? targetUser.photoURL : undefined}
                                 name={!isMine && targetUser ? ('displayName' in targetUser ? targetUser.displayName : targetUser.name) : 'Ben'}
                                 size="sm"
-                                className="w-5 h-5 flex-shrink-0 mb-0.5"
+                                className="w-5 h-5 sm:w-6 sm:h-6 flex-shrink-0 mb-0.5"
                                 status={!isMine ? (targetUser && ('uid' in targetUser || ('linkedUserId' in targetUser && targetUser.linkedUserId)) ? 'system' : 'contact') : 'none'}
                             />
 
