@@ -27,7 +27,7 @@ import {
 } from 'firebase/firestore';
 import { db } from './firebase';
 import type { Transaction, TransactionDirection, Debt } from '../types';
-import { isTransactionEditable } from './db';
+import { isTransactionEditable, updateContactActivity } from './db';
 
 import { cleanPhone as cleanPhoneNumber } from '../utils/phoneUtils';
 
@@ -197,6 +197,20 @@ export const addLedgerTransaction = async (
     // Note: We need to update the balance on the ledger document
     await updateLedgerBalance(ledgerId, userId);
 
+    // Update Activity Feed
+    try {
+        const ledgerSnap = await getDoc(doc(db, 'debts', ledgerId));
+        if (ledgerSnap.exists()) {
+            const data = ledgerSnap.data() as Debt;
+            const otherId = data.participants.find(p => p !== userId);
+            if (otherId) {
+                updateContactActivity(userId, otherId, 'İşlem eklendi');
+            }
+        }
+    } catch (activityError) {
+        console.warn("Activity feed update failed after ledger transaction:", activityError);
+    }
+
     return docRef.id;
 };
 
@@ -272,6 +286,20 @@ export const deleteLedgerTransaction = async (
         }
 
         await deleteDoc(txDoc);
+
+        // Update Activity Feed
+        try {
+            const ledgerSnap = await getDoc(doc(db, 'debts', ledgerId));
+            if (ledgerSnap.exists()) {
+                const data = ledgerSnap.data() as Debt;
+                const otherId = data.participants.find(p => p !== actorId);
+                if (otherId) {
+                    updateContactActivity(actorId, otherId, 'İşlem silindi');
+                }
+            }
+        } catch (activityError) {
+            console.warn("Activity feed update failed after ledger deletion:", activityError);
+        }
 
         // Recalculate balance (non-blocking)
         try {

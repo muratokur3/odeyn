@@ -206,14 +206,23 @@ export const Dashboard = () => {
 
             // Global Totals
             if (shouldCountReceivable || shouldCountPayable) {
-                // Determine direction based on role
-                if (isLender && shouldCountReceivable) {
-                    totalsByCurrency[currency].receivables += d.remainingAmount;
-                    totalsByCurrency[currency].net += d.remainingAmount;
-                } else if (!isLender && shouldCountPayable) {
-                    totalsByCurrency[currency].payables += d.remainingAmount;
-                    totalsByCurrency[currency].net -= d.remainingAmount;
+                // Determine balance from MY perspective
+                // Special Debt (ONE_TIME/INSTALLMENT) remainingAmount is always positive.
+                // Ledger remainingAmount can be negative (lender owes borrower).
+                const isLedger = d.type === 'LEDGER';
+                const effectiveBalance = isLender ? d.remainingAmount : -d.remainingAmount;
+
+                if (effectiveBalance > 0) {
+                    // They owe me (Receivable)
+                    totalsByCurrency[currency].receivables += effectiveBalance;
+                    totalsByCurrency[currency].net += effectiveBalance;
+                } else if (effectiveBalance < 0) {
+                    // I owe them (Payable)
+                    const absVal = Math.abs(effectiveBalance);
+                    totalsByCurrency[currency].payables += absVal;
+                    totalsByCurrency[currency].net -= absVal;
                 }
+                // If 0, net/rec/pay don't change
             }
 
             // Contact Summaries (Same logic for individual balances)
@@ -304,12 +313,9 @@ export const Dashboard = () => {
             }
 
             // Update Contact Balance per currency
+            const effectiveBalance = isLender ? d.remainingAmount : -d.remainingAmount;
             const currentBalance = contact.balances.get(currency) || 0;
-            if (isLender && shouldCountReceivable) {
-                contact.balances.set(currency, currentBalance + d.remainingAmount);
-            } else if (!isLender && shouldCountPayable) {
-                contact.balances.set(currency, currentBalance - d.remainingAmount);
-            }
+            contact.balances.set(currency, currentBalance + effectiveBalance);
         });
 
         // 2. Convert Map to List & Filter
