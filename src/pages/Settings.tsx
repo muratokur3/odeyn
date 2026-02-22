@@ -85,18 +85,6 @@ export const Settings = () => {
         }
     };
 
-    const [contactAccessEnabled, setContactAccessEnabled] = useState(() => {
-        const savedContacts = localStorage.getItem('contact_access_enabled');
-        return savedContacts !== null ? JSON.parse(savedContacts) : true;
-    });
-
-    // Removed useEffect for loading contact_access_enabled as it's now handled in initial state
-
-    const handleContactAccessToggle = (val: boolean) => {
-        setContactAccessEnabled(val);
-        localStorage.setItem('contact_access_enabled', JSON.stringify(val));
-    };
-
     const handleLogout = async () => {
         const confirmed = await showConfirm("Çıkış Yap", "Hesabınızdan çıkış yapmak istediğinize emin misiniz?", "warning");
         if (confirmed) {
@@ -166,12 +154,6 @@ export const Settings = () => {
                             title="Rehber Senkronizasyonu"
                             description="Kişileri eşleştirmek için rehber periyodik olarak taransın."
                             action={<Toggle checked={syncContacts} onChange={(v) => toggleSetting('syncContacts', v, setSyncContacts)} />}
-                        />
-                        <SettingsRow
-                            icon={Users}
-                            title="Rehber Erişimi"
-                            description="Rehberden kişi içe aktarma özelliğini aç/kapat."
-                            action={<Toggle checked={contactAccessEnabled} onChange={handleContactAccessToggle} />}
                         />
                     </div>
 
