@@ -1,7 +1,7 @@
 import React from 'react';
 import { X, Bell, Calendar, ArrowRight, Trash2, Eye, CheckCircle2 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import type { Notification } from '../hooks/useNotifications';
+import type { Notification } from '../services/notificationService';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import clsx from 'clsx';
@@ -28,14 +28,16 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
 }) => {
     const navigate = useNavigate();
 
-    const unreadCount = notifications.filter(n => !n.read).length;
+    const unreadCount = notifications.filter(n => !n.isRead).length;
 
     const handleNotificationClick = (notif: Notification) => {
-        if (!notif.read && onMarkAsRead) {
+        if (!notif.isRead && onMarkAsRead) {
             onMarkAsRead(notif.id);
         }
         setTimeout(() => {
-            navigate(`/debt/${notif.debtId}`);
+            if (notif.debtId) {
+                navigate(`/debt/${notif.debtId}`);
+            }
             onClose();
         }, 150);
     };
@@ -105,12 +107,12 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                                 onClick={() => handleNotificationClick(notif)}
                                 className={clsx(
                                     "p-4 rounded-2xl border transition-all active:scale-[0.98] cursor-pointer group relative",
-                                    notif.read
+                                    notif.isRead
                                         ? "bg-surface border-transparent opacity-60"
                                         : "bg-primary/5 border-primary/10 shadow-sm shadow-primary/5"
                                 )}
                             >
-                                {!notif.read && (
+                                {!notif.isRead && (
                                     <div className="absolute top-4 left-2 w-1.5 h-1.5 bg-primary rounded-full" />
                                 )}
 
@@ -134,13 +136,13 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                                     </div>
                                     <span className="text-[10px] text-text-secondary flex items-center gap-1 font-medium opacity-60">
                                         <Calendar size={10} />
-                                        {format(notif.date, 'd MMMM', { locale: tr })}
+                                        {notif.createdAt?.toDate ? format(notif.createdAt.toDate(), 'd MMMM', { locale: tr }) : ''}
                                     </span>
                                 </div>
 
                                 <p className={clsx(
                                     "text-sm mb-3 ml-1 leading-relaxed",
-                                    notif.read ? "text-text-secondary" : "text-text-primary font-semibold"
+                                    notif.isRead ? "text-text-secondary" : "text-text-primary font-semibold"
                                 )}>
                                     {notif.message}
                                 </p>
@@ -151,7 +153,7 @@ export const NotificationsModal: React.FC<NotificationsModalProps> = ({
                                     </div>
 
                                     <div className="flex gap-1">
-                                        {!notif.read && (
+                                        {!notif.isRead && (
                                             <button
                                                 onClick={(e) => handleMarkAsRead(e, notif)}
                                                 className="p-2 hover:bg-primary/10 rounded-xl transition-colors text-primary"

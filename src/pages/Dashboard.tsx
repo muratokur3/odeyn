@@ -55,7 +55,7 @@ export const Dashboard = () => {
         selectedCurrencyRef.current = selectedCurrency;
     }, [selectedCurrency]);
 
-    const { unreadCount, openModal } = useNotificationContext();
+    const { unreadCount, setShowModal } = useNotificationContext();
     const { contactsMap } = useContacts(); // Get contacts map
     const { resolveName } = useContactName();
     const [editingDebt, setEditingDebt] = useState<Debt | null>(null);
@@ -514,7 +514,7 @@ export const Dashboard = () => {
                         )}
                     </button>
                     <button
-                        onClick={openModal}
+                        onClick={() => setShowModal(true)}
                         className="p-2.5 bg-gray-100 dark:bg-slate-700 rounded-full relative hover:bg-gray-200 transition-colors"
                         aria-label="Bildirimler"
                     >

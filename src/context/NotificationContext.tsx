@@ -2,8 +2,8 @@ import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useNotifications } from '../hooks/useNotifications';
 import { useAuth } from '../hooks/useAuth';
 import { notificationService, type Notification } from '../services/notificationService';
-import NotificationToast from '../components/NotificationToast';
-import NotificationsModal from '../components/NotificationsModal';
+import { NotificationToast } from '../components/NotificationToast';
+import { NotificationsModal } from '../components/NotificationsModal';
 
 interface NotificationContextType {
     notifications: Notification[];
@@ -29,13 +29,12 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     // Toast logic: Show toast for new, unshown notifications
     useEffect(() => {
         if (notifications.length > 0) {
+            // Find the first unread and unshown notification
             const unshown = notifications.find(n => !n.isShown && !n.isRead);
             if (unshown && (!activeToast || activeToast.id !== unshown.id)) {
                 setActiveToast(unshown);
                 // Mark as shown in DB after a short delay to allow toast to appear
-                setTimeout(() => {
-                    notificationService.markAsShown(unshown.id);
-                }, 2000);
+                notificationService.markAsShown(unshown.id);
             }
         }
     }, [notifications, activeToast]);
@@ -72,15 +71,18 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
             clearAll
         }}>
             {children}
-            {activeToast && (
-                <NotificationToast
-                    notification={activeToast}
-                    onClose={() => setActiveToast(null)}
-                />
-            )}
+            <NotificationToast
+                notification={activeToast}
+                onClose={() => setActiveToast(null)}
+            />
             <NotificationsModal
                 isOpen={showModal}
                 onClose={() => setShowModal(false)}
+                notifications={notifications}
+                onMarkAsRead={markAsRead}
+                onDelete={deleteNotification}
+                onMarkAllAsRead={markAllAsRead}
+                onClearAll={clearAll}
             />
         </NotificationContext.Provider>
     );
