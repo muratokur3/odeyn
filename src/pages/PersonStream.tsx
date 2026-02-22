@@ -370,13 +370,7 @@ export const PersonStream = () => {
     }, [carouselRef.current, id]);
 
     // Kartlar render edildikten sonra scrollTo işlemini tetikle
-    const [cardCount, setCardCount] = useState(0);
-    useEffect(() => {
-        const el = carouselRef.current;
-        if (!el) return;
-        const cards = el.querySelectorAll('[data-mode]');
-        setCardCount(cards.length);
-    });
+    const cardCount = 3; // TOTAL, LEDGER, INSTALLMENT
 
     useEffect(() => {
         const el = carouselRef.current;

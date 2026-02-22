@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useCallback } from 'react';
+import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useDebts } from '../hooks/useDebts';
 import { useContacts } from '../hooks/useContacts';
 import { useAuth } from '../hooks/useAuth';
@@ -15,7 +15,7 @@ import { PendingPaymentsModal } from '../components/PendingPaymentsModal';
 
 import { useTheme } from '../context/ThemeContext';
 import { fetchRates, convertToTRY, type CurrencyRates } from '../services/currency';
-import type { Debt } from '../types';
+import type { Debt, User } from '../types';
 import { SummaryCard } from '../components/SummaryCard';
 import { EditDebtModal } from '../components/EditDebtModal';
 import { updateDebt, addPayment, claimLegacyDebts } from '../services/db';
@@ -43,7 +43,19 @@ export const Dashboard = () => {
     const { dashboardDebts, loading } = useDebts();
     const { user } = useAuth();
     const { identifiers, isMe } = useUserIdentifiers();
+
     const navigate = useNavigate();
+
+    // Carousel & Filter State
+    const [selectedCurrency, setSelectedCurrency] = useState<'ALL' | string>('ALL');
+    const carouselRef = useRef<HTMLDivElement>(null);
+    const lastUpdateSourceRef = useRef<'SCROLL' | 'CLICK' | null>(null);
+    const isFirstLoadRef = useRef(true);
+    const selectedCurrencyRef = useRef(selectedCurrency);
+
+    useEffect(() => {
+        selectedCurrencyRef.current = selectedCurrency;
+    }, [selectedCurrency]);
 
     const [showNotifications, setShowNotifications] = useState(false);
     const { notifications, markAsRead, deleteNotification, clearAllNotifications } = useNotifications();
@@ -68,7 +80,7 @@ export const Dashboard = () => {
         if (user?.uid && phone) {
             // 1. Claim Legacy Debts (Multi-format)
             // Note: Firestore real-time listeners will automatically update when debts are claimed
-            claimLegacyDebts(user.uid, phone)
+            claimLegacyDebts(user.uid, phone as string)
                 .then(count => {
                     if (count > 0) {
                         console.log(`[GhostUser] ${count} legacy debts claimed and will appear automatically.`);
@@ -77,7 +89,7 @@ export const Dashboard = () => {
                 .catch(err => console.error("Ghost User background claim failed:", err));
 
             // 2. Normalize Address Book (One-time background fix)
-            import('../services/db').then(m => m.normalizeAllUserContacts(user.uid));
+            import('../services/db').then(m => m.normalizeAllUserContacts(user.uid as string));
         }
     }, [user?.uid, user?.primaryPhoneNumber, user?.phoneNumber]);
 
@@ -138,7 +150,7 @@ export const Dashboard = () => {
             name: string;
             source: 'contact' | 'user' | 'phone';
             status: 'contact' | 'system' | 'none'; // Add status
-            balance: number; // Net balance in base currency (TRY)
+            balances: Map<string, number>; // Net balances per currency
             lastActivity: Date;
             lastSnippet: string;
             linkedUserId?: string;
@@ -244,7 +256,7 @@ export const Dashboard = () => {
                     name: displayName,
                     source: resolution.source, // Store the source
                     status: resolution.status, // Store the status
-                    balance: 0,
+                    balances: new Map<string, number>(),
                     lastActivity: activityDate,
                     lastSnippet: snippet,
                     linkedUserId: resolution.linkedUserId,
@@ -291,28 +303,41 @@ export const Dashboard = () => {
                 }
             }
 
-            // Update Contact Balance (Always converted to TRY for unified list)
-            // Rates is guaranteed not null here due to top check
-            const amountInTRY = convertToTRY(d.remainingAmount, currency, rates!);
+            // Update Contact Balance per currency
+            const currentBalance = contact.balances.get(currency) || 0;
             if (isLender && shouldCountReceivable) {
-                contact.balance += amountInTRY;
+                contact.balances.set(currency, currentBalance + d.remainingAmount);
             } else if (!isLender && shouldCountPayable) {
-                contact.balance -= amountInTRY;
+                contact.balances.set(currency, currentBalance - d.remainingAmount);
             }
         });
 
         // 2. Convert Map to List & Filter
         const mapEntries = Array.from(contactMap.entries());
         const summaries = mapEntries.map(([id, data]) => {
+            let displayBalance = 0;
+            let displayCurrency = 'TRY';
+
+            if (selectedCurrency === 'ALL') {
+                // Calculate total converted to TRY
+                data.balances.forEach((amt, curr) => {
+                    displayBalance += convertToTRY(amt, curr, rates!);
+                });
+                displayCurrency = 'TRY';
+            } else {
+                // Show specific currency balance
+                displayBalance = data.balances.get(selectedCurrency) || 0;
+                displayCurrency = selectedCurrency;
+            }
+
             return {
                 id,
                 name: data.name,
-                netBalance: data.balance,
-                currency: 'TRY', // Contact list is unified in TRY
+                netBalance: displayBalance,
+                currency: displayCurrency,
                 lastActivity: data.lastActivity,
-                lastActionSnippet: data.lastSnippet,
-                status: data.status, // Use status from stored data
-                // photoURL: undefined 
+                lastActionSnippet: data.lastSnippet, // lastActionSnippet is what ContactRow expects
+                status: data.status,
                 linkedUserId: data.linkedUserId,
                 hasUnreadActivity: data.hasUnreadActivity
             } as ContactSummary;
@@ -337,7 +362,7 @@ export const Dashboard = () => {
             grandTotalInTRY
         };
 
-    }, [dashboardDebts, user, rates, resolveName, contactsMap]);
+    }, [dashboardDebts, user, rates, resolveName, contactsMap, selectedCurrency, identifiers.length, isMe]);
 
     // Stable now for render phase (React Purity)
     const [renderNow] = useState(() => Date.now());
@@ -390,6 +415,83 @@ export const Dashboard = () => {
     const toggleCardCurrency = (currency: string) => {
         setToggledCards(prev => ({ ...prev, [currency]: !prev[currency] }));
     };
+
+    // ===========================================================================
+    // CAROUSEL SCROLL SYNC
+    // ===========================================================================
+    useEffect(() => {
+        const el = carouselRef.current;
+        if (!el) return;
+
+        let scrollTimer: ReturnType<typeof setTimeout> | null = null;
+
+        const detectActiveCard = () => {
+            const containerCenter = el.scrollLeft + el.offsetWidth / 2;
+            const cards = el.querySelectorAll('[data-currency]');
+            let closestCard: Element | null = null;
+            let closestDist = Infinity;
+
+            cards.forEach(card => {
+                const cardEl = card as HTMLElement;
+                const cardCenter = cardEl.offsetLeft + cardEl.offsetWidth / 2;
+                const dist = Math.abs(cardCenter - containerCenter);
+                if (dist < closestDist) {
+                    closestDist = dist;
+                    closestCard = card;
+                }
+            });
+
+            if (closestCard) {
+                const currency = (closestCard as HTMLElement).getAttribute('data-currency');
+                if (currency && currency !== selectedCurrencyRef.current) {
+                    lastUpdateSourceRef.current = 'SCROLL';
+                    setSelectedCurrency(currency);
+                }
+            }
+        };
+
+        const handleScroll = () => {
+            if (scrollTimer) clearTimeout(scrollTimer);
+            scrollTimer = setTimeout(detectActiveCard, 150);
+        };
+
+        el.addEventListener('scroll', handleScroll, { passive: true });
+        return () => {
+            el.removeEventListener('scroll', handleScroll);
+            if (scrollTimer) clearTimeout(scrollTimer);
+        };
+    }, [carouselRef.current]);
+
+    const cardCount = useMemoResult.availableCurrencies.length + 1;
+
+    // Auto-scroll to selected card
+    useEffect(() => {
+        const el = carouselRef.current;
+        if (!el || lastUpdateSourceRef.current === 'SCROLL') {
+            lastUpdateSourceRef.current = null;
+            return;
+        }
+
+        const cards = el.querySelectorAll('[data-currency]');
+        const cardArray = Array.from(cards);
+        const targetIndex = cardArray.findIndex(c => c.getAttribute('data-currency') === selectedCurrency);
+
+        if (targetIndex !== -1) {
+            const targetCard = cardArray[targetIndex] as HTMLElement;
+            let targetScroll = targetCard.offsetLeft - (el.offsetWidth - targetCard.offsetWidth) / 2;
+            const maxScroll = el.scrollWidth - el.offsetWidth;
+            targetScroll = Math.max(0, Math.min(targetScroll, maxScroll > 0 ? maxScroll : 0));
+
+            const isFirst = isFirstLoadRef.current;
+            isFirstLoadRef.current = false;
+
+            el.scrollTo({
+                left: targetScroll,
+                behavior: isFirst ? 'auto' : 'smooth'
+            });
+        }
+        lastUpdateSourceRef.current = null;
+    }, [selectedCurrency, cardCount]);
 
     // Stable click handler for ContactRow to prevent re-renders
     const handleContactClick = useCallback((id: string, contactData: { name: string, linkedUserId?: string }) => {
@@ -461,7 +563,7 @@ export const Dashboard = () => {
                     onClose={() => setQuickPayDebt(null)}
                     onSubmit={async (amount, note) => {
                         if (quickPayDebt && user) {
-                            await addPayment(quickPayDebt.id, amount, note, user.uid);
+                            await addPayment(quickPayDebt.id, amount, note, user.uid as string);
                         }
                     }}
                     maxAmount={quickPayDebt.remainingAmount}
@@ -472,52 +574,70 @@ export const Dashboard = () => {
             {/* Main Content */}
             <main className="px-4 py-6 max-w-5xl mx-auto">
 
-                {/* 2. Top Totals */}
-                <div className="flex gap-4 mb-8 overflow-x-auto pb-4 scrollbar-hide">
-                    {/* HERO CARDS - HORIZONTAL SCROLL */}
-                    {/* Scroll Container */}
-                    <div className="flex gap-4 overflow-x-auto pb-6 px-4 snap-x snap-mandatory scrollbar-hide pt-4">
+                {/* 2. Top Totals - Carousel style from PersonStream */}
+                <div
+                    ref={carouselRef}
+                    className="flex gap-4 overflow-x-auto pb-8 pt-4 px-4 snap-x snap-mandatory scrollbar-hide bg-surface/50 border-b border-border mb-6"
+                    style={{ scrollPadding: '0 2rem', touchAction: 'pan-x' }}
+                >
+                    {/* Left Spacer for centering first card */}
+                    <div className="shrink-0 w-[8vw] sm:w-[15vw]" />
 
-                        {/* 1. FIXED GRAND TOTAL CARD (Net Assets in TRY) */}
-                        <SummaryCard
-                            title="Toplam Varlık"
-                            currency="TRY"
-                            net={grandTotalInTRY.net}
-                            receivables={grandTotalInTRY.receivables}
-                            payables={grandTotalInTRY.payables}
-                            variant="auto"
-                        />
+                    {/* 1. FIXED GRAND TOTAL CARD (Net Assets in TRY) */}
+                    <SummaryCard
+                        data-currency="ALL"
+                        title="Toplam Varlık"
+                        currency="TRY"
+                        net={grandTotalInTRY.net}
+                        receivables={grandTotalInTRY.receivables}
+                        payables={grandTotalInTRY.payables}
+                        variant="auto"
+                        className="!w-[300px] sm:!w-[340px] cursor-pointer"
+                        isActive={selectedCurrency === 'ALL'}
+                        largeText={true}
+                        onClick={() => {
+                            lastUpdateSourceRef.current = 'CLICK';
+                            setSelectedCurrency('ALL');
+                        }}
+                    />
 
-                        {/* 2. DYNAMIC CURRENCY CARDS */}
-                        {Object.values(totalsByCurrency)
-                            .sort((a, b) => (a.currency === 'TRY' ? -1 : b.currency === 'TRY' ? 1 : 0))
-                            .map((total) => {
-                                const isNetPositive = total.net >= 0;
-                                const isToggled = toggledCards[total.currency];
+                    {/* 2. DYNAMIC CURRENCY CARDS */}
+                    {Object.values(totalsByCurrency)
+                        .sort((a, b) => (a.currency === 'TRY' ? -1 : b.currency === 'TRY' ? 1 : 0))
+                        .map((total) => {
+                            const isNetPositive = total.net >= 0;
+                            const isToggled = toggledCards[total.currency];
 
-                                const net = (isToggled && rates) ? convertToTRY(total.net, total.currency, rates) : total.net;
-                                const receivables = (isToggled && rates) ? convertToTRY(total.receivables, total.currency, rates) : total.receivables;
-                                const payables = (isToggled && rates) ? convertToTRY(total.payables, total.currency, rates) : total.payables;
+                            const net = (isToggled && rates) ? convertToTRY(total.net, total.currency, rates) : total.net;
+                            const receivables = (isToggled && rates) ? convertToTRY(total.receivables, total.currency, rates) : total.receivables;
+                            const payables = (isToggled && rates) ? convertToTRY(total.payables, total.currency, rates) : total.payables;
 
-                                return (
-                                    <SummaryCard
-                                        key={total.currency}
-                                        title={`Net Varlık (${total.currency})`}
-                                        currency={total.currency}
-                                        net={net}
-                                        receivables={receivables}
-                                        payables={payables}
-                                        isToggled={isToggled}
-                                        onToggle={() => toggleCardCurrency(total.currency)}
-                                        showToggle={total.currency !== 'TRY'}
-                                        variant={isNetPositive ? 'emerald' : 'rose'}
-                                    />
-                                );
-                            })
-                        }
-                        {/* Padding element for right-side peek if needed, but padding on container handles it usually */}
-                        <div className="w-2 shrink-0"></div>
-                    </div>
+                            return (
+                                <SummaryCard
+                                    key={total.currency}
+                                    data-currency={total.currency}
+                                    title={`Net Varlık (${total.currency})`}
+                                    currency={total.currency}
+                                    net={net}
+                                    receivables={receivables}
+                                    payables={payables}
+                                    isToggled={isToggled}
+                                    onToggle={() => toggleCardCurrency(total.currency)}
+                                    showToggle={total.currency !== 'TRY'}
+                                    variant={isNetPositive ? 'emerald' : 'rose'}
+                                    className="!w-[300px] sm:!w-[340px] cursor-pointer"
+                                    isActive={selectedCurrency === total.currency}
+                                    largeText={true}
+                                    onClick={() => {
+                                        lastUpdateSourceRef.current = 'CLICK';
+                                        setSelectedCurrency(total.currency);
+                                    }}
+                                />
+                            );
+                        })
+                    }
+                    {/* Right Spacer for centering last card */}
+                    <div className="shrink-0 w-[8vw] sm:w-[15vw]" />
                 </div>
 
                 {/* CONTACT SUMMARY LIST */}
