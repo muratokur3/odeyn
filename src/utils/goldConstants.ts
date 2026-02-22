@@ -5,24 +5,38 @@ export interface GoldTypeDefinition {
   multiplier: number; // 24 Ayar karşılığı gram çarpanı
   category: 'GRAM' | 'SIKKE' | 'BILEZIK' | 'TAKI';
   defaultCarat?: number;
+  fixedCarat?: boolean; // If true, carat selection is hidden/fixed
+}
+
+export const GOLD_CATEGORIES = [
+  { id: 'GRAM', label: 'Gram Altın' },
+  { id: 'SIKKE', label: 'Fiziki Altın' },
+  { id: 'BILEZIK', label: 'Bilezik' },
+  { id: 'TAKI', label: 'Takı' },
+] as const;
+
+export interface GoldModelDefinition {
+  id: string;
+  label: string;
+  fixedCarat?: number;
 }
 
 export const GOLD_TYPES: GoldTypeDefinition[] = [
   // GRAMLAR
-  { id: 'GRAM_24', label: '24 Ayar Gram', multiplier: 1, category: 'GRAM', defaultCarat: 24 },
-  { id: 'GRAM_22', label: '22 Ayar Gram', multiplier: 0.9166, category: 'GRAM', defaultCarat: 22 },
-  { id: 'GRAM_18', label: '18 Ayar Gram', multiplier: 0.750, category: 'GRAM', defaultCarat: 18 },
-  { id: 'GRAM_14', label: '14 Ayar Gram', multiplier: 0.5833, category: 'GRAM', defaultCarat: 14 },
+  { id: 'GRAM_24', label: '24 Ayar', multiplier: 1, category: 'GRAM', defaultCarat: 24, fixedCarat: true },
+  { id: 'GRAM_22', label: '22 Ayar', multiplier: 0.9166, category: 'GRAM', defaultCarat: 22, fixedCarat: true },
+  { id: 'GRAM_18', label: '18 Ayar', multiplier: 0.750, category: 'GRAM', defaultCarat: 18, fixedCarat: true },
+  { id: 'GRAM_14', label: '14 Ayar', multiplier: 0.5833, category: 'GRAM', defaultCarat: 14, fixedCarat: true },
 
   // SİKKELER (Adet bazlı)
-  { id: 'CEYREK', label: 'Çeyrek Altın', multiplier: 1.6065, category: 'SIKKE', defaultCarat: 22 },
-  { id: 'YARIM', label: 'Yarım Altın', multiplier: 3.213, category: 'SIKKE', defaultCarat: 22 },
-  { id: 'TAM', label: 'Tam Altın', multiplier: 6.426, category: 'SIKKE', defaultCarat: 22 },
-  { id: 'ATA', label: 'Ata Altın', multiplier: 6.608, category: 'SIKKE', defaultCarat: 22 },
-  { id: 'CUMHURIYET', label: 'Cumhuriyet Altını', multiplier: 6.608, category: 'SIKKE', defaultCarat: 22 },
-  { id: 'GREMSE', label: 'Gremse Altın', multiplier: 16.065, category: 'SIKKE', defaultCarat: 22 },
-  { id: 'RESAT', label: 'Reşat Altın', multiplier: 6.608, category: 'SIKKE', defaultCarat: 22 },
-  { id: 'BESLI', label: 'Beşi Bir Arada', multiplier: 33.04, category: 'SIKKE', defaultCarat: 22 },
+  { id: 'CEYREK', label: 'Çeyrek Altın', multiplier: 1.6065, category: 'SIKKE', defaultCarat: 22, fixedCarat: true },
+  { id: 'YARIM', label: 'Yarım Altın', multiplier: 3.213, category: 'SIKKE', defaultCarat: 22, fixedCarat: true },
+  { id: 'TAM', label: 'Tam Altın', multiplier: 6.426, category: 'SIKKE', defaultCarat: 22, fixedCarat: true },
+  { id: 'ATA', label: 'Ata Altın', multiplier: 6.608, category: 'SIKKE', defaultCarat: 22, fixedCarat: true },
+  { id: 'CUMHURIYET', label: 'Cumhuriyet Altını', multiplier: 6.608, category: 'SIKKE', defaultCarat: 22, fixedCarat: true },
+  { id: 'GREMSE', label: 'Gremse Altın', multiplier: 16.065, category: 'SIKKE', defaultCarat: 22, fixedCarat: true },
+  { id: 'RESAT', label: 'Reşat Altın', multiplier: 6.608, category: 'SIKKE', defaultCarat: 22, fixedCarat: true },
+  { id: 'BESLI', label: 'Beşi Bir Arada', multiplier: 33.04, category: 'SIKKE', defaultCarat: 22, fixedCarat: true },
 
   // BİLEZİKLER
   { id: 'BILEZIK_22', label: '22 Ayar Bilezik', multiplier: 0.9166, category: 'BILEZIK', defaultCarat: 22 },
@@ -34,23 +48,33 @@ export const GOLD_TYPES: GoldTypeDefinition[] = [
   { id: 'TAKI_8', label: '8 Ayar Takı', multiplier: 0.3333, category: 'TAKI', defaultCarat: 8 },
 ];
 
-export const BILEZIK_MODELS = [
-  'Ajda',
-  'Adana Burması',
-  'Trabzon Hasırı',
-  'Mega',
-  'Şarnel',
-  'İşçilikli',
-  'Düz/Hediyelik'
+export const BILEZIK_MODELS: GoldModelDefinition[] = [
+  { id: 'Ajda', label: 'Ajda', fixedCarat: 22 },
+  { id: 'Adana Burması', label: 'Adana Burması', fixedCarat: 22 },
+  { id: 'Trabzon Hasırı', label: 'Trabzon Hasırı' },
+  { id: 'Mega', label: 'Mega' },
+  { id: 'Şarnel', label: 'Şarnel' },
+  { id: 'İşçilikli', label: 'İşçilikli' },
+  { id: 'Düz/Hediyelik', label: 'Düz/Hediyelik' },
+  { id: 'Diğer', label: 'Diğer' }
 ];
 
-export const TAKI_TYPES = [
-  'Kolye',
-  'Küpe',
-  'Yüzük',
-  'Set',
-  'Zincir',
-  'Kelepçe'
+export const TAKI_TYPES: GoldModelDefinition[] = [
+  { id: 'Kolye', label: 'Kolye' },
+  { id: 'Küpe', label: 'Küpe' },
+  { id: 'Yüzük', label: 'Yüzük' },
+  { id: 'Set', label: 'Set' },
+  { id: 'Zincir', label: 'Zincir' },
+  { id: 'Kelepçe', label: 'Kelepçe' },
+  { id: 'Diğer', label: 'Diğer' }
+];
+
+export const GOLD_CARATS = [
+  { value: 24, label: '24 Ayar' },
+  { value: 22, label: '22 Ayar' },
+  { value: 18, label: '18 Ayar' },
+  { value: 14, label: '14 Ayar' },
+  { value: 8, label: '8 Ayar' },
 ];
 
 export const getGoldType = (id: string) => GOLD_TYPES.find(t => t.id === id);

@@ -15,7 +15,13 @@ import { AmountInput } from './AmountInput';
 import { Timestamp } from 'firebase/firestore';
 import clsx from 'clsx';
 import { useModal } from '../context/ModalContext';
-import { GOLD_TYPES, BILEZIK_MODELS, TAKI_TYPES, getGoldType } from '../utils/goldConstants';
+import { GOLD_TYPES, GOLD_CATEGORIES, BILEZIK_MODELS, TAKI_TYPES, GOLD_CARATS, getGoldType } from '../utils/goldConstants';
+
+// Helper to prevent NaN in Firestore
+const safeParseFloat = (val: string | number): number | undefined => {
+    const num = typeof val === 'string' ? parseFloat(val.replace(',', '.')) : val;
+    return (num !== null && num !== undefined && !isNaN(num) && isFinite(num)) ? num : undefined;
+};
 
 interface CreateDebtModalProps {
     isOpen: boolean;
@@ -89,9 +95,11 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
     const [currency, setCurrency] = useState('TRY');
 
     // Gold State
+    const [goldCategory, setGoldCategory] = useState<string>('GRAM');
     const [goldTypeId, setGoldTypeId] = useState<string>('GRAM_24');
     const [goldSubType, setGoldSubType] = useState<string>('');
     const [goldWeightPerUnit, setGoldWeightPerUnit] = useState<string>('');
+    const [goldCustomCarat, setGoldCustomCarat] = useState<number>(22);
 
     const [note, setNote] = useState('');
     const [dueDate, setDueDate] = useState('');
@@ -143,9 +151,14 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
 
                 // Gold prefill
                 if (initialData.currency === 'GOLD' && initialData.goldDetail) {
+                    const type = getGoldType(initialData.goldDetail.type);
+                    if (type) {
+                        setGoldCategory(type.category);
+                    }
                     setGoldTypeId(initialData.goldDetail.type);
                     setGoldSubType(initialData.goldDetail.subTypeLabel || '');
                     setGoldWeightPerUnit(initialData.goldDetail.weightPerUnit?.toString() || '');
+                    setGoldCustomCarat(initialData.goldDetail.carat || 22);
                 }
 
                 // If targetId is a UID (User) and we don't have a locked phone, fetch accurate phone from User Profile
@@ -374,11 +387,14 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
             return;
         }
 
-        const numAmount = parseFloat(amount);
-        const numDownPayment = parseFloat(downPayment) || 0;
-        const customRate = useManualRate ? parseFloat(manualRate) : undefined;
+        const numAmount = safeParseFloat(amount) || 0;
+        const numDownPayment = safeParseFloat(downPayment) || 0;
+        const customRate = useManualRate ? safeParseFloat(manualRate) : undefined;
 
-        if (isNaN(numAmount) || numAmount <= 0) return;
+        if (numAmount <= 0) {
+            showAlert("Hata", "Lütfen geçerli bir tutar girin.", "error");
+            return;
+        }
         if (numDownPayment >= numAmount) {
             showAlert("Hata", "Peşinat tutarı toplam tutardan büyük veya eşit olamaz.", "error");
             return;
@@ -418,12 +434,14 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
             let goldDetail: Debt['goldDetail'] | undefined;
             if (currency === 'GOLD') {
                 const typeData = getGoldType(goldTypeId);
+                const selectedModel = (goldCategory === 'BILEZIK' ? BILEZIK_MODELS : TAKI_TYPES).find(m => m.id === goldSubType);
+
                 goldDetail = {
                     type: goldTypeId,
                     label: typeData?.label || goldTypeId,
                     subTypeLabel: goldSubType || undefined,
-                    carat: typeData?.defaultCarat,
-                    weightPerUnit: parseFloat(goldWeightPerUnit) || undefined,
+                    carat: selectedModel?.fixedCarat || (typeData?.fixedCarat ? typeData.defaultCarat : goldCustomCarat),
+                    weightPerUnit: safeParseFloat(goldWeightPerUnit),
                 };
             }
 
@@ -761,46 +779,89 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                                         <span className="text-xs font-bold text-amber-800 dark:text-amber-300 uppercase tracking-wider">Altın Seçimi</span>
                                     </div>
 
-                                    <div>
-                                        <label className="block text-[10px] font-bold text-amber-700 dark:text-amber-400 mb-1 uppercase tracking-tight">Altın Türü / Ayar</label>
-                                        <select
-                                            value={goldTypeId}
-                                            onChange={(e) => setGoldTypeId(e.target.value)}
-                                            className="w-full px-3 py-2.5 rounded-lg border border-amber-200 dark:border-amber-800 bg-white dark:bg-slate-800 text-sm font-bold text-text-primary focus:ring-2 focus:ring-amber-500 outline-none transition-all"
-                                        >
-                                            {GOLD_TYPES.map(t => (
-                                                <option key={t.id} value={t.id}>{t.label}</option>
-                                            ))}
-                                        </select>
+                                    <div className="grid grid-cols-2 gap-3">
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-amber-700 dark:text-amber-400 mb-1 uppercase tracking-tight">Altın Grubu</label>
+                                            <select
+                                                value={goldCategory}
+                                                onChange={(e) => {
+                                                    const cat = e.target.value;
+                                                    setGoldCategory(cat);
+                                                    // Set default type for category
+                                                    const firstType = GOLD_TYPES.find(t => t.category === cat);
+                                                    if (firstType) setGoldTypeId(firstType.id);
+                                                    setGoldSubType('');
+                                                }}
+                                                className="w-full px-3 py-2.5 rounded-lg border border-amber-200 dark:border-amber-800 bg-white dark:bg-slate-800 text-sm font-bold text-text-primary focus:ring-2 focus:ring-amber-500 outline-none transition-all"
+                                            >
+                                                {GOLD_CATEGORIES.map(c => (
+                                                    <option key={c.id} value={c.id}>{c.label}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div>
+                                            <label className="block text-[10px] font-bold text-amber-700 dark:text-amber-400 mb-1 uppercase tracking-tight">Altın Türü</label>
+                                            <select
+                                                value={goldTypeId}
+                                                onChange={(e) => setGoldTypeId(e.target.value)}
+                                                className="w-full px-3 py-2.5 rounded-lg border border-amber-200 dark:border-amber-800 bg-white dark:bg-slate-800 text-sm font-bold text-text-primary focus:ring-2 focus:ring-amber-500 outline-none transition-all"
+                                            >
+                                                {GOLD_TYPES.filter(t => t.category === goldCategory).map(t => (
+                                                    <option key={t.id} value={t.id}>{t.label}</option>
+                                                ))}
+                                            </select>
+                                        </div>
                                     </div>
 
-                                    {(getGoldType(goldTypeId)?.category === 'BILEZIK' || getGoldType(goldTypeId)?.category === 'TAKI') && (
-                                        <div className="grid grid-cols-2 gap-3 animate-in zoom-in-95 duration-200">
-                                            <div>
-                                                <label className="block text-[10px] font-bold text-amber-700 dark:text-amber-400 mb-1 uppercase tracking-tight">Model / Detay</label>
-                                                <select
-                                                    value={goldSubType}
-                                                    onChange={(e) => setGoldSubType(e.target.value)}
-                                                    className="w-full px-3 py-2 rounded-lg border border-amber-200 dark:border-amber-800 bg-white dark:bg-slate-800 text-sm font-semibold text-text-primary focus:ring-2 focus:ring-amber-500 outline-none transition-all"
-                                                >
-                                                    <option value="">Seçiniz...</option>
-                                                    {(getGoldType(goldTypeId)?.category === 'BILEZIK' ? BILEZIK_MODELS : TAKI_TYPES).map(m => (
-                                                        <option key={m} value={m}>{m}</option>
-                                                    ))}
-                                                    <option value="Diğer">Diğer</option>
-                                                </select>
+                                    {(goldCategory === 'BILEZIK' || goldCategory === 'TAKI') && (
+                                        <div className="space-y-3 animate-in zoom-in-95 duration-200">
+                                            <div className="grid grid-cols-2 gap-3">
+                                                <div>
+                                                    <label className="block text-[10px] font-bold text-amber-700 dark:text-amber-400 mb-1 uppercase tracking-tight">Model / Detay</label>
+                                                    <select
+                                                        value={goldSubType}
+                                                        onChange={(e) => {
+                                                            setGoldSubType(e.target.value);
+                                                            const model = (goldCategory === 'BILEZIK' ? BILEZIK_MODELS : TAKI_TYPES).find(m => m.id === e.target.value);
+                                                            if (model?.fixedCarat) setGoldCustomCarat(model.fixedCarat);
+                                                        }}
+                                                        className="w-full px-3 py-2.5 rounded-lg border border-amber-200 dark:border-amber-800 bg-white dark:bg-slate-800 text-sm font-semibold text-text-primary focus:ring-2 focus:ring-amber-500 outline-none transition-all"
+                                                    >
+                                                        <option value="">Seçiniz...</option>
+                                                        {(goldCategory === 'BILEZIK' ? BILEZIK_MODELS : TAKI_TYPES).map(m => (
+                                                            <option key={m.id} value={m.id}>{m.label}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                                <div>
+                                                    <label className="block text-[10px] font-bold text-amber-700 dark:text-amber-400 mb-1 uppercase tracking-tight">Birim Gram</label>
+                                                    <input
+                                                        type="text"
+                                                        inputMode="decimal"
+                                                        value={goldWeightPerUnit}
+                                                        onChange={(e) => setGoldWeightPerUnit(e.target.value)}
+                                                        placeholder="Örn: 20"
+                                                        className="w-full px-3 py-2.5 rounded-lg border border-amber-200 dark:border-amber-800 bg-white dark:bg-slate-800 text-sm font-bold text-text-primary focus:ring-2 focus:ring-amber-500 outline-none transition-all"
+                                                    />
+                                                </div>
                                             </div>
-                                            <div>
-                                                <label className="block text-[10px] font-bold text-amber-700 dark:text-amber-400 mb-1 uppercase tracking-tight">Birim Gram</label>
-                                                <input
-                                                    type="number"
-                                                    value={goldWeightPerUnit}
-                                                    onChange={(e) => setGoldWeightPerUnit(e.target.value)}
-                                                    placeholder="Örn: 20"
-                                                    step="0.01"
-                                                    className="w-full px-3 py-2 rounded-lg border border-amber-200 dark:border-amber-800 bg-white dark:bg-slate-800 text-sm font-bold text-text-primary focus:ring-2 focus:ring-amber-500 outline-none transition-all"
-                                                />
-                                            </div>
+
+                                            {/* Carat selection only if not fixed by model and not a fixed-carat type */}
+                                            {!getGoldType(goldTypeId)?.fixedCarat && !(goldCategory === 'BILEZIK' && BILEZIK_MODELS.find(m => m.id === goldSubType)?.fixedCarat) && (
+                                                <div>
+                                                    <label className="block text-[10px] font-bold text-amber-700 dark:text-amber-400 mb-1 uppercase tracking-tight">Ayar</label>
+                                                    <select
+                                                        value={goldCustomCarat}
+                                                        onChange={(e) => setGoldCustomCarat(Number(e.target.value))}
+                                                        className="w-full px-3 py-2.5 rounded-lg border border-amber-200 dark:border-amber-800 bg-white dark:bg-slate-800 text-sm font-bold text-text-primary focus:ring-2 focus:ring-amber-500 outline-none transition-all"
+                                                    >
+                                                        {GOLD_CARATS.map(c => (
+                                                            <option key={c.value} value={c.value}>{c.label}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                            )}
                                         </div>
                                     )}
                                 </div>
@@ -811,7 +872,8 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                                         type: goldTypeId,
                                         label: getGoldType(goldTypeId)?.label || '',
                                         subTypeLabel: goldSubType,
-                                        weightPerUnit: parseFloat(goldWeightPerUnit)
+                                        weightPerUnit: safeParseFloat(goldWeightPerUnit),
+                                        carat: (goldCategory === 'BILEZIK' ? BILEZIK_MODELS : TAKI_TYPES).find(m => m.id === goldSubType)?.fixedCarat || (getGoldType(goldTypeId)?.fixedCarat ? getGoldType(goldTypeId)?.defaultCarat : goldCustomCarat)
                                     } : undefined)}
                                 </p>
                             )}
@@ -945,11 +1007,11 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                                                 <div className="p-2 bg-blue-100 dark:bg-blue-900/30 rounded-lg">
                                                     <p className="text-xs text-blue-800 dark:text-blue-200 flex justify-between">
                                                         <span>Kalan Tutar:</span>
-                                                        <span className="font-bold">{formatCurrency(parseFloat(amount || '0') - (parseFloat(downPayment) || 0), currency)}</span>
+                                                        <span className="font-bold">{formatCurrency((safeParseFloat(amount) || 0) - (safeParseFloat(downPayment) || 0), currency)}</span>
                                                     </p>
                                                     <p className="text-xs text-blue-800 dark:text-blue-200 flex justify-between mt-1">
                                                         <span>Aylık Taksit:</span>
-                                                        <span className="font-bold">{formatCurrency(((parseFloat(amount || '0') - (parseFloat(downPayment) || 0)) / installmentCount) || 0, currency)}</span>
+                                                        <span className="font-bold">{formatCurrency(((safeParseFloat(amount) || 0) - (safeParseFloat(downPayment) || 0)) / installmentCount || 0, currency)}</span>
                                                     </p>
                                                 </div>
                                             </div>

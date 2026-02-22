@@ -4,6 +4,12 @@ import { formatCurrency, formatAmountToWords } from '../utils/format';
 import { AmountInput } from './AmountInput';
 import type { GoldDetail } from '../types';
 
+// Helper to prevent NaN in Firestore
+const safeParseFloat = (val: string | number): number | undefined => {
+    const num = typeof val === 'string' ? parseFloat(val.replace(',', '.')) : val;
+    return (num !== null && num !== undefined && !isNaN(num) && isFinite(num)) ? num : undefined;
+};
+
 interface PaymentModalProps {
     isOpen: boolean;
     onClose: () => void;
@@ -33,8 +39,8 @@ export const PaymentModal: React.FC<PaymentModalProps> = ({
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
-        const numAmount = parseFloat(amount);
-        if (isNaN(numAmount) || numAmount <= 0 || numAmount > maxAmount) return;
+        const numAmount = safeParseFloat(amount);
+        if (numAmount === undefined || numAmount <= 0 || numAmount > maxAmount) return;
 
         setLoading(true);
         try {

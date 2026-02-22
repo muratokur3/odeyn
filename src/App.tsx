@@ -29,6 +29,7 @@ import { ThemeProvider } from './context/ThemeContext';
 import { ModalProvider } from './context/ModalContext';
 
 import { ContactProvider } from './context/ContactContext';
+import { CreateDebtModal } from './components/CreateDebtModal';
 
 function App() {
   return (

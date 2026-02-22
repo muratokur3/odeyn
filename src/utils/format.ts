@@ -1,5 +1,5 @@
 import type { GoldDetail } from '../types';
-import { getGoldType } from './goldConstants';
+import { getGoldType, BILEZIK_MODELS, TAKI_TYPES } from './goldConstants';
 
 export const formatCurrency = (amount: number | undefined | null, currency: string, goldDetail?: GoldDetail) => {
     const validAmount = amount ?? 0;
@@ -16,9 +16,16 @@ export const formatCurrency = (amount: number | undefined | null, currency: stri
                 let label = `${validAmount.toLocaleString('tr-TR')} Adet`;
                 if (goldDetail?.carat) label += ` ${goldDetail.carat} Ayar`;
                 if (goldDetail?.weightPerUnit) label += ` ${goldDetail.weightPerUnit} Gr`;
-                label += ` ${type.label}`;
-                if (goldDetail?.subTypeLabel) label += ` (${goldDetail.subTypeLabel})`;
-                return label;
+
+                let subLabel = '';
+                if (goldDetail?.subTypeLabel) {
+                    const modelList = type.category === 'BILEZIK' ? BILEZIK_MODELS : TAKI_TYPES;
+                    const model = modelList.find(m => m.id === goldDetail.subTypeLabel);
+                    subLabel = model?.label || goldDetail.subTypeLabel;
+                }
+
+                label += ` ${subLabel} ${type.label}`;
+                return label.replace(/\s+/g, ' ').trim();
             }
             return `${validAmount.toLocaleString('tr-TR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} Gr ${type.label}`;
         }
@@ -133,9 +140,16 @@ export const formatAmountToWords = (amount: number | string, currency: string, g
                 let detail = '';
                 if (goldDetail?.carat) detail += `${goldDetail.carat} Ayar `;
                 if (goldDetail?.weightPerUnit) detail += `${goldDetail.weightPerUnit} Gram `;
-                detail += type.label;
-                if (goldDetail?.subTypeLabel) detail += ` (${goldDetail.subTypeLabel})`;
-                return `${verbal} Adet ${detail}`;
+
+                let subLabel = '';
+                if (goldDetail?.subTypeLabel) {
+                    const modelList = type.category === 'BILEZIK' ? BILEZIK_MODELS : TAKI_TYPES;
+                    const model = modelList.find(m => m.id === goldDetail.subTypeLabel);
+                    subLabel = model?.label || goldDetail.subTypeLabel;
+                }
+
+                detail += `${subLabel} ${type.label}`;
+                return `${verbal} Adet ${detail.replace(/\s+/g, ' ').trim()}`;
             }
             if (type.category === 'SIKKE') {
                 return `${verbal} Adet ${type.label}`;
