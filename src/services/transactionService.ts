@@ -28,6 +28,7 @@ import {
 import { db } from './firebase';
 import type { Transaction, TransactionDirection, Debt } from '../types';
 import { isTransactionEditable, updateContactActivity } from './db';
+import { notificationService } from './notificationService';
 
 import { cleanPhone as cleanPhoneNumber } from '../utils/phoneUtils';
 
@@ -197,9 +198,35 @@ export const addLedgerTransaction = async (
 
     const docRef = await addDoc(txRef, newTx);
 
+    // Add notification
+    try {
+        const ledgerSnap = await getDoc(doc(db, 'debts', ledgerId));
+        if (ledgerSnap.exists()) {
+            const data = ledgerSnap.data() as Debt;
+            const otherId = data.participants.find(p => p !== userId);
+
+            // Resolve actor name - we should use the name of the person adding the transaction
+            const actorName = userId === data.lenderId ? data.lenderName : data.borrowerName;
+
+            if (otherId && otherId.length > 20) {
+                notificationService.addNotification({
+                    userId: otherId,
+                    actorId: userId,
+                    type: 'PAYMENT_MADE', // Use payment type for ledger transactions for simplicity
+                    message: `${actorName} cari hesaba ${amount} ${currency} işlem ekledi.`,
+                    amount,
+                    currency,
+                    debtId: ledgerId
+                }).catch(err => console.warn("Ledger notification failed:", err));
+            }
+        }
+    } catch (notifError) {
+        console.warn("Notification failed after ledger transaction:", notifError);
+    }
+
     // Update ledger's remainingAmount based on direction
     // Note: We need to update the balance on the ledger document
-    await updateLedgerBalance(ledgerId, userId);
+    await updateLedgerBalance(ledgerId, userId, amount, direction);
 
     // Update Activity Feed
     try {
@@ -321,7 +348,12 @@ export const deleteLedgerTransaction = async (
 /**
  * Update ledger's remainingAmount based on all transactions
  */
-const updateLedgerBalance = async (ledgerId: string, actorId?: string): Promise<void> => {
+const updateLedgerBalance = async (
+    ledgerId: string,
+    actorId?: string,
+    lastAmount?: number,
+    lastDirection?: TransactionDirection
+): Promise<void> => {
     const txRef = getLedgerTransactionsRef(ledgerId);
     const snapshot = await getDocs(txRef);
 
@@ -358,6 +390,8 @@ const updateLedgerBalance = async (ledgerId: string, actorId?: string): Promise<
     const updates: Record<string, unknown> = {
         remainingAmount: balance,
         updatedAt: serverTimestamp(),
+        ...(lastAmount !== undefined && { lastTransactionAmount: lastAmount }),
+        ...(lastDirection && { lastTransactionDirection: lastDirection })
     };
 
     if (actorId) {

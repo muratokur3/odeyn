@@ -4,9 +4,7 @@ import { useContacts } from '../hooks/useContacts';
 import { useAuth } from '../hooks/useAuth';
 import { useContactName } from '../hooks/useContactName';
 import { ContactRow } from '../components/ContactRow';
-import { NotificationsModal } from '../components/NotificationsModal';
-import { NotificationToast, type ToastNotification } from '../components/NotificationToast';
-import { useNotifications } from '../hooks/useNotifications';
+import { useNotificationContext } from '../context/NotificationContext';
 import { useUserIdentifiers } from '../hooks/useUserIdentifiers';
 import { useNavigate } from 'react-router-dom';
 import { Wallet, Bell, Sun, Moon, CalendarClock } from 'lucide-react';
@@ -57,14 +55,11 @@ export const Dashboard = () => {
         selectedCurrencyRef.current = selectedCurrency;
     }, [selectedCurrency]);
 
-    const [showNotifications, setShowNotifications] = useState(false);
-    const { notifications, markAsRead, deleteNotification, clearAllNotifications } = useNotifications();
+    const { unreadCount, setShowModal } = useNotificationContext();
     const { contactsMap } = useContacts(); // Get contacts map
     const { resolveName } = useContactName();
     const [editingDebt, setEditingDebt] = useState<Debt | null>(null);
     const [quickPayDebt, setQuickPayDebt] = useState<Debt | null>(null);
-    const [toast, setToast] = useState<ToastNotification | null>(null);
-    const [lastNotificationId, setLastNotificationId] = useState<string | null>(null);
     const [showUpcomingPayments, setShowUpcomingPayments] = useState(false);
 
     // State
@@ -93,37 +88,6 @@ export const Dashboard = () => {
         }
     }, [user?.uid, user?.primaryPhoneNumber, user?.phoneNumber]);
 
-    // Toast notification for any new unread notifications
-    useEffect(() => {
-        if (notifications.length === 0) return;
-
-        const newestNotif = notifications[0];
-
-        // Show toast for any new unread notification (regardless of type)
-        if (
-            !newestNotif.read &&
-            newestNotif.id !== lastNotificationId
-        ) {
-            setLastNotificationId(newestNotif.id);
-
-            const titles: Record<string, string> = {
-                'DEBT_CREATED': 'Yeni Borç Kaydı',
-                'PAYMENT_MADE': 'Ödeme Alındı',
-                'DEBT_REJECTED': 'İşlem Reddedildi',
-                'DEBT_EDITED': 'Kayıt Güncellendi',
-                'DUE_SOON': 'Ödeme Hatırlatması',
-                'INSTALLMENT_DUE': 'Taksit Hatırlatması'
-            };
-
-            setToast({
-                id: newestNotif.id,
-                title: titles[newestNotif.type] || 'Bildirim',
-                message: newestNotif.message,
-                type: 'info',
-                duration: 5000
-            });
-        }
-    }, [notifications, lastNotificationId]);
 
 
 
@@ -582,14 +546,14 @@ export const Dashboard = () => {
                         )}
                     </button>
                     <button
-                        onClick={() => setShowNotifications(true)}
+                        onClick={() => setShowModal(true)}
                         className="p-2.5 bg-gray-100 dark:bg-slate-700 rounded-full relative hover:bg-gray-200 transition-colors"
                         aria-label="Bildirimler"
                     >
                         <Bell size={18} />
-                        {notifications.some(n => !n.read) && (
+                        {unreadCount > 0 && (
                             <span className="absolute top-1 right-1 min-w-[18px] h-[18px] bg-red-500 text-white text-[10px] font-bold rounded-full flex items-center justify-center border-2 border-white dark:border-slate-800 px-1">
-                                {notifications.filter(n => !n.read).length}
+                                {unreadCount}
                             </span>
                         )}
                     </button>
@@ -722,20 +686,6 @@ export const Dashboard = () => {
                     )}
                 </div>
             </main>
-
-            <NotificationToast
-                notification={toast}
-                onClose={() => setToast(null)}
-            />
-
-            <NotificationsModal
-                isOpen={showNotifications}
-                onClose={() => setShowNotifications(false)}
-                notifications={notifications}
-                onMarkAsRead={markAsRead}
-                onDelete={deleteNotification}
-                onClearAll={clearAllNotifications}
-            />
 
             <PendingPaymentsModal
                 isOpen={showUpcomingPayments}

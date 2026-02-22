@@ -20,6 +20,7 @@ import { db } from './firebase';
 import type { Debt, DebtStatus, PaymentLog, User, Contact, Installment } from '../types';
 import { cleanPhone as cleanPhoneNumber, isValidPhone } from '../utils/phoneUtils';
 import { checkBlockStatus } from './blockService';
+import { notificationService } from './notificationService';
 
 // --- Helper Functions ---
 
@@ -369,6 +370,7 @@ export const createDebt = async (
         participants: [lenderId, borrowerId],
         createdAt: serverTimestamp(),
         createdBy: currentUserId,
+        type: (installments && installments.length > 0) ? 'INSTALLMENT' : 'ONE_TIME',
         ...(dueDate && { dueDate: Timestamp.fromDate(dueDate) }),
         ...(note && { note }),
         ...(installments && { installments }),
@@ -393,6 +395,26 @@ export const createDebt = async (
     // Actually, let's keep it simple as implemented before.
 
     const docRef = await addDoc(collection(db, 'debts'), debtData);
+
+    // Create notification
+    const otherPartyId = currentUserId === borrowerId ? lenderId : borrowerId;
+    const isLedger = debtData.type === 'LEDGER';
+
+    // Recipient is the other party. Actor is Me.
+    // If other party has no UID, we don't send notification.
+    if (otherPartyId && otherPartyId.length > 20) {
+        notificationService.addNotification({
+            userId: otherPartyId,
+            actorId: currentUserId,
+            type: 'DEBT_CREATED',
+            message: isLedger
+                ? `${currentUserName} sizinle yeni cari hesap oluşturdu.`
+                : `${currentUserName} tarafından ${amount} ${currency} borç kaydı oluşturuldu.`,
+            amount: isLedger ? undefined : amount,
+            currency,
+            debtId: docRef.id
+        }).catch(err => console.warn("Initial debt notification failed:", err));
+    }
 
     const batch = writeBatch(db); // Firestore batch for logs
 
@@ -507,6 +529,20 @@ export const updateDebtHardReset = async (
 
             // 6. Update Main Doc
             transaction.update(debtRef, docUpdates);
+
+            // Notification for hard reset (edit)
+            const otherPartyId = currentUserId === currentData.borrowerId ? currentData.lenderId : currentData.borrowerId;
+            const actorName = currentUserId === currentData.lenderId ? currentData.lenderName : currentData.borrowerName;
+
+            if (otherPartyId && otherPartyId.length > 20) {
+                notificationService.addNotification({
+                    userId: otherPartyId,
+                    actorId: currentUserId,
+                    type: 'DEBT_EDITED',
+                    message: `${actorName} kaydı güncelledi.`,
+                    debtId: debtId
+                }).catch(err => console.warn("Edit notification failed:", err));
+            }
 
             // 7. Add "Reset" Log
             const resetLogRef = doc(collection(db, `debts/${debtId}/logs`));
@@ -631,6 +667,26 @@ export const makePayment = async (
             }
         });
 
+        // Notification for payment
+        const otherPartyId = performedBy === debtData.borrowerId ? debtData.lenderId : debtData.borrowerId;
+
+        // Accurate message: If Lender records payment, they approved it.
+        const isActorLender = performedBy === debtData.lenderId;
+        const actorName = isActorLender ? debtData.lenderName : debtData.borrowerName;
+        const msg = isActorLender ? `${actorName} ödemeyi kaydetti.` : `${actorName} ödeme yaptı.`;
+
+        if (otherPartyId && otherPartyId.length > 20) {
+            notificationService.addNotification({
+                userId: otherPartyId,
+                actorId: performedBy,
+                type: 'PAYMENT_MADE',
+                message: msg,
+                amount: efAmount,
+                currency: debtData.currency,
+                debtId: debtId
+            }).catch(err => console.warn("Payment notification failed:", err));
+        }
+
         // Add payment log
         const logRef = doc(collection(db, `debts/${debtId}/logs`));
         transaction.set(logRef, {
@@ -693,6 +749,22 @@ export const respondToDebtRequest = async (debtId: string, status: 'ACTIVE' | 'R
         }
 
         transaction.update(debtRef, updates);
+
+        // Notification for rejection/approval
+        const otherPartyId = performedBy === debtData.borrowerId ? debtData.lenderId : debtData.borrowerId;
+        const actorName = performedBy === debtData.lenderId ? debtData.lenderName : debtData.borrowerName;
+
+        if (otherPartyId && otherPartyId.length > 20) {
+            notificationService.addNotification({
+                userId: otherPartyId,
+                actorId: performedBy,
+                type: status === 'ACTIVE' ? 'DEBT_CREATED' : 'DEBT_REJECTED',
+                message: status === 'ACTIVE'
+                    ? `${actorName} borç kaydını onayladı.`
+                    : `${actorName} borç kaydını reddetti.`,
+                debtId: debtId
+            }).catch(err => console.warn("Response notification failed:", err));
+        }
 
         // Add log
         const logRef = doc(collection(db, `debts/${debtId}/logs`));
@@ -1257,6 +1329,17 @@ export const deleteDebt = async (debtId: string, currentUserId: string) => {
         updateContactActivity(currentUserId, otherId, 'Borç silindi (Geri alındı)')
             .catch(err => console.warn("Activity feed update failed (non-critical):", err));
 
+        // Notification
+        if (otherId && otherId.length > 20) {
+            notificationService.addNotification({
+                userId: otherId,
+                actorId: currentUserId,
+                type: 'DEBT_REJECTED',
+                message: `${currentUserId === data.lenderId ? data.lenderName : data.borrowerName} kaydı sildi.`,
+                debtId: debtId
+            }).catch(err => console.warn("Delete notification failed:", err));
+        }
+
         // Hard Delete
         await deleteDoc(debtRef);
 
@@ -1392,13 +1475,23 @@ export const forgiveDebt = async (debtId: string, currentUserId: string, note: s
             });
         });
 
-        // Activity Feed
+        // Activity Feed & Notification
         // Fetch debt to identify target (transaction doesn't return data)
         const dSnap = await getDoc(doc(db, 'debts', debtId));
         if (dSnap.exists()) {
             const d = dSnap.data() as Debt;
             const target = d.lenderId === currentUserId ? d.borrowerId : d.lenderId;
             updateContactActivity(currentUserId, target, 'Borç silindi/bağışlandı');
+
+            if (target && target.length > 20) {
+                notificationService.addNotification({
+                    userId: target,
+                    actorId: currentUserId,
+                    type: 'PAYMENT_MADE',
+                    message: `${d.lenderName} borcu sildi/hibe etti.`,
+                    debtId: debtId
+                }).catch(err => console.warn("Forgive notification failed:", err));
+            }
         }
 
     } catch (error) {
@@ -1472,6 +1565,20 @@ export const updateDebt = async (debtId: string, data: Partial<Debt>, actorId?: 
             }
 
             transaction.update(debtRef, updates);
+
+            // Notification for generic update
+            const otherPartyId = (actorId || 'system') === currentDebt.borrowerId ? currentDebt.lenderId : currentDebt.borrowerId;
+            const actorName = actorId === currentDebt.lenderId ? currentDebt.lenderName : currentDebt.borrowerName;
+
+            if (actorId && otherPartyId && otherPartyId.length > 20) {
+                notificationService.addNotification({
+                    userId: otherPartyId,
+                    actorId: actorId,
+                    type: 'DEBT_EDITED',
+                    message: `${actorName} kaydı güncelledi.`,
+                    debtId: debtId
+                }).catch(err => console.warn("Update notification failed:", err));
+            }
 
             // 3. Activity Feed (Fire and forget outside transaction if possible, or just log)
             if (actorId) {
