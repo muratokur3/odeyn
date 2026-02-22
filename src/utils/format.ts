@@ -63,6 +63,16 @@ export const parseAmount = (formattedValue: string): number => {
     const num = parseFloat(cleaned);
     return isNaN(num) ? 0 : num;
 };
+
+/**
+ * Safely parses a value to a number, returning undefined if invalid or NaN.
+ */
+export const safeParseFloat = (val: string | number | undefined | null): number | undefined => {
+    if (val === undefined || val === null) return undefined;
+    const num = typeof val === 'string' ? parseFloat(val.replace(',', '.')) : val;
+    return (num !== null && num !== undefined && !isNaN(num) && isFinite(num)) ? num : undefined;
+};
+
 /**
  * Converts a number to its Turkish verbal representation.
  * Purely local string manipulation, no external API calls.
