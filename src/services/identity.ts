@@ -120,7 +120,7 @@ export const resolveUserDisplay = async (
 
         return {
             displayName: contact.name,
-            secondaryText: systemUser ? `Uygulama Kullanıcısı: ${realName}` : displayPhone,
+            secondaryText: systemUser ? `Uygulama Kullanıcısı: ${realName}` : formatPhoneForDisplay(displayPhone),
             photoURL: systemUser?.photoURL,
             initials: getInitials(contact.name),
             isSystemUser: !!systemUser,
@@ -133,7 +133,7 @@ export const resolveUserDisplay = async (
     if (systemUser) {
         return {
             displayName: systemUser.displayName,
-            secondaryText: systemUser.phoneNumber,
+            secondaryText: formatPhoneForDisplay(systemUser.phoneNumber),
             photoURL: systemUser.photoURL,
             initials: getInitials(systemUser.displayName),
             isSystemUser: true,
@@ -156,7 +156,7 @@ export const resolveUserDisplay = async (
             const finalPhone = targetPhone || debtContext.lockedPhoneNumber || '';
             return {
                 displayName: snapshotName,
-                secondaryText: finalPhone,
+                secondaryText: formatPhoneForDisplay(finalPhone),
                 photoURL: undefined,
                 initials: getInitials(snapshotName),
                 isSystemUser: false,

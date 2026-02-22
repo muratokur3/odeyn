@@ -1,6 +1,7 @@
 import React from 'react';
 import { X } from 'lucide-react';
 import { Avatar } from './Avatar';
+import { formatPhoneForDisplay } from '../utils/phoneUtils';
 
 interface SelectedUserCardProps {
     name: string;
@@ -25,7 +26,7 @@ export const SelectedUserCard: React.FC<SelectedUserCardProps> = ({ name, phoneN
                         {name}
                     </p>
                     <p className="text-xs text-text-secondary">
-                        {phoneNumber}
+                        {formatPhoneForDisplay(phoneNumber)}
                     </p>
                 </div>
             </div>

@@ -1,6 +1,7 @@
 import { useState, useEffect } from 'react';
 import type { Contact } from '../types';
 import { Check, X, CheckCheck, XCircle } from 'lucide-react';
+import { formatPhoneForDisplay } from '../utils/phoneUtils';
 
 interface Conflict {
   newContact: Partial<Contact>;
@@ -56,7 +57,7 @@ export const ConflictResolutionModal = ({ conflicts, onResolve, onCancel }: Conf
                     {newContact.name}
                   </h3>
                   <p className="text-sm text-text-secondary font-mono mt-0.5">
-                    {newContact.phoneNumber}
+                    {formatPhoneForDisplay(newContact.phoneNumber || '')}
                   </p>
                 </div>
                 <div className="px-2 py-1 rounded bg-yellow-100 dark:bg-yellow-900/20 text-yellow-700 dark:text-yellow-400 text-xs font-bold uppercase tracking-wide">

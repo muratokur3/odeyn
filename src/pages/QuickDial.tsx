@@ -5,6 +5,7 @@ import { useAuth } from '../hooks/useAuth';
 import { searchUserByPhone, searchContacts, createDebt } from '../services/db';
 import { CreateDebtModal } from '../components/CreateDebtModal';
 import { Avatar } from '../components/Avatar';
+import { formatPhoneForDisplay } from '../utils/phoneUtils';
 import { clsx } from 'clsx';
 import type { User, Contact } from '../types';
 
@@ -18,24 +19,8 @@ export const QuickDial = () => {
 
     const [selectedUser, setSelectedUser] = useState<Contact | User | null>(null);
 
-    // Formatting Helper
-    function formattedPhone(phone: string) {
-        if (!phone) return '';
-        const raw = phone.replace(/\s/g, '');
-
-        // Handle Country Code
-        if (raw.startsWith('+')) {
-            return raw.replace(/(\+\d{2})(\d{3})(\d{3})(\d{2})(\d{2})/, '$1 $2 $3 $4 $5').trim();
-        }
-
-        // 0 ile başlıyorsa: xxxx xxx xx xx
-        if (raw.startsWith('0')) {
-            return raw.replace(/(\d{4})(\d{3})(\d{2})(\d{2})/, '$1 $2 $3 $4').trim();
-        }
-
-        // 0 değilse: xxx xxx xx xx
-        return raw.replace(/(\d{3})(\d{3})(\d{2})(\d{2})/, '$1 $2 $3 $4').trim();
-    }
+    // Formatting Helper - Use global utility
+    const formattedPhone = (phone: string) => formatPhoneForDisplay(phone);
 
     // Card Display Data
     // Merged Results

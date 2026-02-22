@@ -6,6 +6,7 @@ import { doc, getDoc, onSnapshot } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { unmuteUser } from '../services/db';
 import { Avatar } from '../components/Avatar';
+import { formatPhoneForDisplay } from '../utils/phoneUtils';
 import type { User } from '../types';
 import { useModal } from '../context/ModalContext';
 
@@ -147,7 +148,7 @@ export const MutedUsers = () => {
                                     />
                                     <div>
                                         <h3 className="font-semibold text-gray-900 dark:text-white">{mUser.displayName}</h3>
-                                        <p className="text-xs text-gray-500">{mUser.phoneNumber}</p>
+                                        <p className="text-xs text-gray-500">{mUser.phoneNumber ? formatPhoneForDisplay(mUser.phoneNumber) : ''}</p>
                                     </div>
                                 </div>
                                 <button
