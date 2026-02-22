@@ -36,9 +36,9 @@ function App() {
     <ThemeProvider>
       <ModalProvider>
         <ContactProvider>
-          <NotificationProvider>
-            <div className="w-full max-w-3xl mx-auto min-h-screen bg-background shadow-2xl relative border-x border-border">
-            <Router>
+          <div className="w-full max-w-3xl mx-auto min-h-screen bg-background shadow-2xl relative border-x border-border">
+          <Router>
+            <NotificationProvider>
               <Routes>
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Register />} />
@@ -64,9 +64,9 @@ function App() {
                   <Route path="/settings/muted" element={<MutedUsers />} />
                 </Route>
               </Routes>
-            </Router>
-            </div>
-          </NotificationProvider>
+            </NotificationProvider>
+          </Router>
+          </div>
         </ContactProvider>
       </ModalProvider>
     </ThemeProvider>

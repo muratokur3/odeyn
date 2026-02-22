@@ -27,22 +27,32 @@ export const useNotifications = () => {
 
         // Real-time listener for user's notifications
         const notificationsRef = collection(db, 'notifications');
+        // Note: Removed orderBy to avoid index requirement, sorting in memory
         const q = query(
             notificationsRef,
-            where('userId', '==', user.uid),
-            orderBy('createdAt', 'desc')
+            where('userId', '==', user.uid)
         );
 
         const unsubscribe = onSnapshot(q, (snapshot) => {
             const notifs: Notification[] = [];
             snapshot.forEach(doc => {
                 const data = doc.data();
-                notifs.push({
-                    id: doc.id,
-                    ...data,
-                    createdAt: data.createdAt as Timestamp
-                } as Notification);
+                if (data.createdAt) {
+                    notifs.push({
+                        id: doc.id,
+                        ...data,
+                        createdAt: data.createdAt as Timestamp
+                    } as Notification);
+                }
             });
+
+            // Sort in memory: newest first
+            notifs.sort((a, b) => {
+                const timeA = a.createdAt?.toMillis?.() || 0;
+                const timeB = b.createdAt?.toMillis?.() || 0;
+                return timeB - timeA;
+            });
+
             setNotifications(notifs);
             setLoading(false);
         }, (error) => {
