@@ -15,7 +15,7 @@ import { PendingPaymentsModal } from '../components/PendingPaymentsModal';
 
 import { useTheme } from '../context/ThemeContext';
 import { fetchRates, convertToTRY, type CurrencyRates } from '../services/currency';
-import type { Debt, User } from '../types';
+import type { Debt } from '../types';
 import { SummaryCard } from '../components/SummaryCard';
 import { EditDebtModal } from '../components/EditDebtModal';
 import { updateDebt, addPayment, claimLegacyDebts } from '../services/db';
@@ -209,7 +209,6 @@ export const Dashboard = () => {
                 // Determine balance from MY perspective
                 // Special Debt (ONE_TIME/INSTALLMENT) remainingAmount is always positive.
                 // Ledger remainingAmount can be negative (lender owes borrower).
-                const isLedger = d.type === 'LEDGER';
                 const effectiveBalance = isLender ? d.remainingAmount : -d.remainingAmount;
 
                 if (effectiveBalance > 0) {
@@ -466,7 +465,7 @@ export const Dashboard = () => {
             el.removeEventListener('scroll', handleScroll);
             if (scrollTimer) clearTimeout(scrollTimer);
         };
-    }, [carouselRef.current]);
+    }, []);
 
     const cardCount = useMemoResult.availableCurrencies.length + 1;
 

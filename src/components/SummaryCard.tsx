@@ -103,18 +103,18 @@ export const SummaryCard: React.FC<SummaryCardProps & React.HTMLAttributes<HTMLD
                         </div>
                     </div>
 
-                    <div className="flex gap-4 pt-4 mt-5 border-t border-white/10 sm:flex hidden">
+                    <div className="flex gap-4 pt-4 mt-5 border-t border-white/10">
                         <div className="flex-1">
-                            <p className="text-[10px] opacity-70 mb-0.5 font-medium uppercase tracking-wider">Verilen</p>
+                            <p className="text-[10px] opacity-70 mb-0.5 font-medium uppercase tracking-wider">Alacak</p>
                             <p className={clsx("font-bold tabular-nums truncate", largeText ? "text-lg" : "text-sm")}>
-                                +{formatCurrency(receivables, isToggled ? 'TRY' : currency)}
+                                {formatCurrency(receivables, isToggled ? 'TRY' : currency)}
                             </p>
                         </div>
                         <div className="w-px bg-white/10"></div>
                         <div className="flex-1">
-                            <p className="text-[10px] opacity-70 mb-0.5 font-medium uppercase tracking-wider">Alınan</p>
+                            <p className="text-[10px] opacity-70 mb-0.5 font-medium uppercase tracking-wider">Borç</p>
                             <p className={clsx("font-bold tabular-nums truncate", largeText ? "text-lg" : "text-sm")}>
-                                -{formatCurrency(payables, isToggled ? 'TRY' : currency)}
+                                {formatCurrency(payables, isToggled ? 'TRY' : currency)}
                             </p>
                         </div>
                     </div>
