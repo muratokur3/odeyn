@@ -456,9 +456,9 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                 goldDetail = {
                     type: goldTypeId,
                     label: typeData?.label || goldTypeId,
-                    subTypeLabel: goldSubType || undefined,
+                    ...(goldSubType && { subTypeLabel: goldSubType }),
                     carat: selectedModel?.fixedCarat || (typeData?.fixedCarat ? typeData.defaultCarat : goldCustomCarat),
-                    weightPerUnit: safeParseFloat(goldWeightPerUnit),
+                    ...(goldWeightPerUnit && { weightPerUnit: safeParseFloat(goldWeightPerUnit) }),
                 };
             }
 

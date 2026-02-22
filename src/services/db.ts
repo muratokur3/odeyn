@@ -20,6 +20,7 @@ import { db } from './firebase';
 import type { Debt, DebtStatus, PaymentLog, User, Contact, Installment } from '../types';
 import { cleanPhone as cleanPhoneNumber, isValidPhone } from '../utils/phoneUtils';
 import { checkBlockStatus } from './blockService';
+import { cleanObject, normalizeDebt } from '../utils/debtUtils';
 
 // --- Helper Functions ---
 
@@ -102,7 +103,11 @@ export async function updateContactActivity(actorId: string, targetId: string, m
             });
         }
     } catch (error) {
-        console.error("Error updating activity feed:", error);
+        if (error instanceof Error && error.message.includes('permissions')) {
+            console.warn("Activity feed update skipped (Missing Permission): Cannot update other user's contact record directly due to security rules.");
+        } else {
+            console.error("Error updating activity feed:", error);
+        }
     }
 }
 
@@ -386,13 +391,7 @@ export const createDebt = async (
         }
     };
 
-    // Use batch or transaction? 
-    // Simple addDoc is fine, but we need logs.
-    // Let's use runTransaction or just batch to be safe, but since createDebt was simple, 
-    // we can just stick to addDoc + subcollection adds. Atomic is better but for MVP...
-    // Actually, let's keep it simple as implemented before.
-
-    const docRef = await addDoc(collection(db, 'debts'), debtData);
+    const docRef = await addDoc(collection(db, 'debts'), cleanObject(debtData));
 
     const batch = writeBatch(db); // Firestore batch for logs
 
@@ -502,11 +501,8 @@ export const updateDebtHardReset = async (
                 }
             };
 
-            // Remove undefined values
-            Object.keys(docUpdates).forEach(key => docUpdates[key] === undefined && delete docUpdates[key]);
-
             // 6. Update Main Doc
-            transaction.update(debtRef, docUpdates);
+            transaction.update(debtRef, cleanObject(docUpdates));
 
             // 7. Add "Reset" Log
             const resetLogRef = doc(collection(db, `debts/${debtId}/logs`));
@@ -1017,10 +1013,7 @@ export const subscribeToUserDebts = (identifiers: string[], callback: (debts: De
     );
 
     return onSnapshot(q, (snapshot) => {
-        const debts = snapshot.docs.map(doc => ({
-            id: doc.id,
-            ...doc.data()
-        })) as Debt[];
+        const debts = snapshot.docs.map(doc => normalizeDebt(doc.id, doc.data()));
         callback(debts);
     });
 };
@@ -1042,7 +1035,7 @@ export const subscribeToDebtDetails = (debtId: string, callback: (debt: Debt | n
     const debtRef = doc(db, 'debts', debtId);
     return onSnapshot(debtRef, (docSnap) => {
         if (docSnap.exists()) {
-            callback({ id: docSnap.id, ...docSnap.data() } as Debt);
+            callback(normalizeDebt(docSnap.id, docSnap.data()));
         } else {
             callback(null);
         }

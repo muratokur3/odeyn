@@ -30,6 +30,7 @@ import type { Transaction, TransactionDirection, Debt } from '../types';
 import { isTransactionEditable, updateContactActivity } from './db';
 
 import { cleanPhone as cleanPhoneNumber } from '../utils/phoneUtils';
+import { cleanObject, normalizeDebt } from '../utils/debtUtils';
 
 // ============= LEDGER DOCUMENT OPERATIONS =============
 
@@ -102,7 +103,7 @@ export const subscribeLedger = (
 
     return onSnapshot(ledgerRef, (snapshot) => {
         if (snapshot.exists()) {
-            callback({ id: snapshot.id, ...snapshot.data() } as Debt);
+            callback(normalizeDebt(snapshot.id, snapshot.data()));
         } else {
             callback(null);
         }
@@ -181,8 +182,8 @@ export const addLedgerTransaction = async (
         createdAt: serverTimestamp(),
         createdBy: userId,
         type: 'SIMPLE',
-        goldDetail,
-        customExchangeRate,
+        ...(goldDetail && { goldDetail }),
+        ...(customExchangeRate && { customExchangeRate }),
         auditMeta: {
             actorId: userId,
             timestamp: serverTimestamp(),
@@ -195,7 +196,7 @@ export const addLedgerTransaction = async (
         newTx.description = description.trim();
     }
 
-    const docRef = await addDoc(txRef, newTx);
+    const docRef = await addDoc(txRef, cleanObject(newTx));
 
     // Update ledger's remainingAmount based on direction
     // Note: We need to update the balance on the ledger document
@@ -368,7 +369,7 @@ const updateLedgerBalance = async (ledgerId: string, actorId?: string): Promise<
         };
     }
 
-    await updateDoc(ledgerRef, updates);
+    await updateDoc(ledgerRef, cleanObject(updates));
 };
 
 /**
@@ -423,7 +424,7 @@ export const addTransaction = async (
         type: 'SIMPLE'
     };
 
-    const docRef = await addDoc(txRef, newTx);
+    const docRef = await addDoc(txRef, cleanObject(newTx));
     return docRef.id;
 };
 

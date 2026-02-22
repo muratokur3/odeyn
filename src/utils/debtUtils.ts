@@ -1,4 +1,4 @@
-import { Timestamp } from 'firebase/firestore';
+import { Timestamp, FieldValue } from 'firebase/firestore';
 import type { Debt } from '../types';
 
 /**
@@ -46,4 +46,30 @@ export const normalizeDebt = (docId: string, data: any): Debt => {
         ...data,
         createdAt
     } as Debt;
+};
+
+/**
+ * Recursively removes undefined values from an object or array.
+ * Essential for Firestore operations as it does not support undefined values.
+ */
+export const cleanObject = (obj: any): any => {
+    if (!obj || typeof obj !== 'object') return obj;
+    
+    // Don't clean Date, Firestore Timestamp or FieldValue (e.g. serverTimestamp)
+    if (obj instanceof Date || obj instanceof Timestamp || obj instanceof FieldValue) return obj;
+
+    if (Array.isArray(obj)) {
+        return obj.map(v => (v && typeof v === 'object' ? cleanObject(v) : v));
+    }
+
+    const newObj: any = {};
+    Object.keys(obj).forEach(key => {
+        const val = obj[key];
+        if (val !== undefined) {
+            newObj[key] = (val && typeof val === 'object' && !(val instanceof Date) && !(val instanceof Timestamp) && !(val instanceof FieldValue))
+                ? cleanObject(val)
+                : val;
+        }
+    });
+    return newObj;
 };

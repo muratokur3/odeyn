@@ -74,6 +74,10 @@ export const DebtsTab = ({ debts }: DebtsTabProps) => {
             const debtDate = d.createdAt?.toDate();
             if (!debtDate) return false;
             return debtDate >= startDate;
+        }).sort((a, b) => {
+            const timeA = a.createdAt?.toMillis?.() || 0;
+            const timeB = b.createdAt?.toMillis?.() || 0;
+            return timeB - timeA;
         });
     }, [filteredDebts, dateFilter, customDateRange]);
 
