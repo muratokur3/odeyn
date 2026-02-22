@@ -1,6 +1,6 @@
 import { db, auth } from './firebase';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
-import { updateProfile, updateEmail } from 'firebase/auth';
+import { updateProfile } from 'firebase/auth';
 
 export interface ProfileUpdateData {
     displayName?: string;
@@ -29,10 +29,6 @@ export const updateUserProfile = async (userId: string, data: ProfileUpdateData)
             });
         }
 
-        // 2. Update Auth Email (if changed)
-        if (data.email && data.email !== user.email) {
-            await updateEmail(user, data.email);
-        }
 
         // 3. Update Firestore User Document
         const userRef = doc(db, 'users', userId);

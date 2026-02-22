@@ -30,7 +30,9 @@ export interface User {
     taxOffice?: string;
     address?: string; // Simplified for UI
     createdAt: Timestamp;
+    /** @deprecated Removed in favor of pure Phone Auth */
     email?: string;
+    /** @deprecated Removed in favor of pure Phone Auth */
     recoveryEmail?: string;
     photoURL?: string;
     customExchangeRates?: Record<string, number>; // ✅ Moved to top level

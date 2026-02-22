@@ -104,7 +104,7 @@ export async function deleteUserAccount(userId: string): Promise<DeletionResult>
 export async function initiateAccountDeletion(userId: string): Promise<void> {
   // In production, this might:
   // 1. Mark account for deletion
-  // 2. Send confirmation email
+  // 2. Notify person via SMS/Push
   // 3. Wait 30 days
   // 4. Then call deleteUserAccount()
   

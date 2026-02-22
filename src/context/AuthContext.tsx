@@ -27,6 +27,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
         let unsubscribeBlocked: (() => void) | null = null;
 
         const unsubscribeAuth = onAuthStateChanged(auth, async (firebaseUser) => {
+            setLoading(true);
             // Clean up previous listeners
             if (unsubscribeSnapshot) {
                 unsubscribeSnapshot();

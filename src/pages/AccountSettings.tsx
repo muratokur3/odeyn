@@ -7,7 +7,6 @@ import { Avatar } from '../components/Avatar';
 import { useNavigate } from 'react-router-dom';
 import { useModal } from '../context/ModalContext';
 import ManagePhones from '../components/ManagePhones';
-import EmailManager from '../components/EmailManager';
 
 export const AccountSettings = () => {
     const { user } = useAuth();
@@ -146,8 +145,6 @@ export const AccountSettings = () => {
                         <SectionTitle title="İletişim Bilgileri" />
                         <div className="space-y-6">
                             <ManagePhones user={user} />
-                            <div className="h-px bg-gray-100 dark:bg-slate-800" />
-                            <EmailManager />
                         </div>
                     </div>
 
