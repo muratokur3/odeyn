@@ -1325,6 +1325,17 @@ export const deleteDebt = async (debtId: string, currentUserId: string) => {
         updateContactActivity(currentUserId, otherId, 'Borç silindi (Geri alındı)')
             .catch(err => console.warn("Activity feed update failed (non-critical):", err));
 
+        // Notification
+        if (otherId && otherId.length > 20) {
+            notificationService.addNotification({
+                userId: otherId,
+                actorId: currentUserId,
+                type: 'DEBT_REJECTED',
+                message: `${currentUserId === data.lenderId ? data.lenderName : data.borrowerName} kaydı sildi.`,
+                debtId: debtId
+            }).catch(err => console.warn("Delete notification failed:", err));
+        }
+
         // Hard Delete
         await deleteDoc(debtRef);
 
@@ -1460,13 +1471,23 @@ export const forgiveDebt = async (debtId: string, currentUserId: string, note: s
             });
         });
 
-        // Activity Feed
+        // Activity Feed & Notification
         // Fetch debt to identify target (transaction doesn't return data)
         const dSnap = await getDoc(doc(db, 'debts', debtId));
         if (dSnap.exists()) {
             const d = dSnap.data() as Debt;
             const target = d.lenderId === currentUserId ? d.borrowerId : d.lenderId;
             updateContactActivity(currentUserId, target, 'Borç silindi/bağışlandı');
+
+            if (target && target.length > 20) {
+                notificationService.addNotification({
+                    userId: target,
+                    actorId: currentUserId,
+                    type: 'PAYMENT_MADE',
+                    message: `${d.lenderName} borcu sildi/hibe etti.`,
+                    debtId: debtId
+                }).catch(err => console.warn("Forgive notification failed:", err));
+            }
         }
 
     } catch (error) {

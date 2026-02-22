@@ -16,8 +16,7 @@ export const useNotifications = () => {
     const [loading, setLoading] = useState(true);
 
     useEffect(() => {
-        if (!user) {
-            // Deferred clear to avoid render cycle errors
+        if (!user?.uid) {
             const timer = setTimeout(() => {
                 setNotifications([]);
                 setLoading(false);
@@ -25,55 +24,58 @@ export const useNotifications = () => {
             return () => clearTimeout(timer);
         }
 
-        setLoading(true);
-
         // Real-time listener for user's notifications
-        const notificationsRef = collection(db, 'notifications');
-        // No orderBy to avoid index requirement, sorting in memory
-        const q = query(
-            notificationsRef,
-            where('userId', '==', user.uid)
-        );
+        try {
+            const notificationsRef = collection(db, 'notifications');
+            // No orderBy to avoid index requirement, sorting in memory
+            const q = query(
+                notificationsRef,
+                where('userId', '==', user.uid)
+            );
 
-        const unsubscribe = onSnapshot(q, (snapshot) => {
-            const notifs: Notification[] = [];
+            const unsubscribe = onSnapshot(q, (snapshot) => {
+                const notifs: Notification[] = [];
 
-            snapshot.forEach(docSnap => {
-                const data = docSnap.data();
+                snapshot.forEach(docSnap => {
+                    const data = docSnap.data();
 
-                // Handle null createdAt (local snapshot) - use current time as placeholder
-                const createdAt = data.createdAt || Timestamp.now();
+                    // Handle null createdAt (local snapshot) - use current time as placeholder
+                    const createdAt = data.createdAt || Timestamp.now();
 
-                notifs.push({
-                    id: docSnap.id,
-                    userId: data.userId,
-                    actorId: data.actorId,
-                    type: data.type,
-                    message: data.message,
-                    amount: data.amount,
-                    currency: data.currency,
-                    debtId: data.debtId,
-                    isRead: data.isRead,
-                    isShown: data.isShown,
-                    createdAt: createdAt as Timestamp
-                } as Notification);
+                    notifs.push({
+                        id: docSnap.id,
+                        userId: data.userId,
+                        actorId: data.actorId,
+                        type: data.type,
+                        message: data.message,
+                        amount: data.amount,
+                        currency: data.currency,
+                        debtId: data.debtId,
+                        isRead: data.isRead,
+                        isShown: data.isShown,
+                        createdAt: createdAt as Timestamp
+                    } as Notification);
+                });
+
+                // Sort in memory: newest first
+                notifs.sort((a, b) => {
+                    const timeA = (a.createdAt && typeof a.createdAt.toMillis === 'function') ? a.createdAt.toMillis() : Date.now();
+                    const timeB = (b.createdAt && typeof b.createdAt.toMillis === 'function') ? b.createdAt.toMillis() : Date.now();
+                    return timeB - timeA;
+                });
+
+                setNotifications(notifs);
+                setLoading(false);
+            }, (error) => {
+                console.error('Failed to subscribe to notifications (Firestore Error):', error);
+                setLoading(false);
             });
 
-            // Sort in memory: newest first
-            notifs.sort((a, b) => {
-                const timeA = a.createdAt?.toMillis() || Date.now();
-                const timeB = b.createdAt?.toMillis() || Date.now();
-                return timeB - timeA;
-            });
-
-            setNotifications(notifs);
+            return () => unsubscribe();
+        } catch (err) {
+            console.error('Failed to initialize notification subscription:', err);
             setLoading(false);
-        }, (error) => {
-            console.error('Failed to subscribe to notifications:', error);
-            setLoading(false);
-        });
-
-        return () => unsubscribe();
+        }
     }, [user?.uid]); // Only re-run if UID changes
 
     // Methods are now handled via Service/Context, these are for backward compat if any

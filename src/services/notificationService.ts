@@ -46,14 +46,19 @@ export const notificationService = {
         debtId?: string;
     }) {
         // Validation: Must have recipient and sender, and they must be different
-        if (!params.userId || !params.actorId || params.userId === params.actorId) {
-            console.warn("Skipping notification: Invalid IDs", { userId: params.userId, actorId: params.actorId });
+        if (!params.userId || !params.actorId) {
+            console.warn("Skipping notification: Missing recipient or sender ID", params);
+            return;
+        }
+
+        if (params.userId === params.actorId) {
+            // Silently skip self-notifications (not an error but common scenario)
             return;
         }
 
         try {
             const notificationsRef = collection(db, 'notifications');
-            await addDoc(notificationsRef, {
+            const data = {
                 userId: params.userId,
                 actorId: params.actorId,
                 type: params.type,
@@ -64,9 +69,13 @@ export const notificationService = {
                 isRead: false,
                 isShown: false,
                 createdAt: serverTimestamp()
-            });
+            };
+
+            await addDoc(notificationsRef, data);
+            return true;
         } catch (error) {
             console.error('Failed to add notification to Firestore:', error);
+            return false;
         }
     },
 

@@ -58,9 +58,20 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 const userRef = doc(db, 'users', firebaseUser.uid);
                 unsubscribeSnapshot = onSnapshot(userRef, (docSnap) => {
                     if (docSnap.exists()) {
-                        setUser(docSnap.data() as User);
+                        const data = docSnap.data();
+                        setUser({
+                            ...data,
+                            uid: firebaseUser.uid,
+                            displayName: data.displayName || firebaseUser.displayName || 'Kullanıcı'
+                        } as User);
                     } else {
-                        setUser(null);
+                        // Doc might not exist yet, but we have the Firebase User
+                        setUser({
+                            uid: firebaseUser.uid,
+                            displayName: firebaseUser.displayName || 'Kullanıcı',
+                            phoneNumbers: firebaseUser.phoneNumber ? [firebaseUser.phoneNumber] : [],
+                            primaryPhoneNumber: firebaseUser.phoneNumber || ''
+                        } as User);
                     }
                     setLoading(false);
                 }, (error) => {
