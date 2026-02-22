@@ -5,14 +5,9 @@ export const CURRENCIES = [
     { code: 'TRY', symbol: '₺', label: 'LİRA' },
     { code: 'USD', symbol: '$', label: 'DOLAR' },
     { code: 'EUR', symbol: '€', label: 'EURO' },
+    { code: 'GBP', symbol: '£', label: 'STERLİN' },
     { code: 'GOLD', symbol: 'GA', label: 'ALTIN' },
     { code: 'SILVER', symbol: 'GM', label: 'GÜMÜŞ' },
-    { code: 'GBP', symbol: '£', label: 'STERLİN' },
-    { code: 'CHF', symbol: 'Fr', label: 'FRANK' },
-    { code: 'SAR', symbol: 'SR', label: 'RİYAL' },
-    { code: 'CAD', symbol: '$', label: 'K. DOLARI' },
-    { code: 'AUD', symbol: '$', label: 'A. DOLARI' },
-    { code: 'JPY', symbol: '¥', label: 'YEN' },
 ] as const;
 
 export const formatCurrency = (amount: number | undefined | null, currency: string, goldDetail?: GoldDetail) => {

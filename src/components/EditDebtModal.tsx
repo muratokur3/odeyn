@@ -171,8 +171,8 @@ export const EditDebtModal: React.FC<EditDebtModalProps> = ({ isOpen, onClose, d
 
                 <form onSubmit={handleSubmit} className="space-y-4">
                     <div className="space-y-1">
-                        <div className="flex items-start gap-4">
-                            <div className="w-[42%]">
+                        <div className="flex items-start gap-4 w-full">
+                            <div className="flex-[2] min-w-0">
                                 <label className="block text-sm font-medium text-text-secondary mb-1">Döviz</label>
                                 <select
                                     value={currency}
@@ -195,13 +195,15 @@ export const EditDebtModal: React.FC<EditDebtModalProps> = ({ isOpen, onClose, d
                                     ))}
                                 </select>
                             </div>
-                            <div className="flex-1">
+                            <div className="flex-[3] min-w-0">
                                 <AmountInput
                                     label={currency === 'GOLD' ? (getGoldType(goldTypeId)?.category === 'GRAM' ? 'Gram' : 'Adet') : 'Tutar'}
                                     value={amount}
                                     onChange={setAmount}
                                     disabled={hasPayments}
                                     required
+                                    allowDecimals={currency === 'SILVER' || (currency === 'GOLD' && getGoldType(goldTypeId)?.category === 'GRAM')}
+                                    hideCommaSuffix={currency === 'GOLD' && getGoldType(goldTypeId)?.category !== 'GRAM'}
                                 />
                             </div>
                         </div>

@@ -288,8 +288,8 @@ export const QuickTransactionModal: React.FC<QuickTransactionModalProps> = ({
                         </div>
 
                         {/* Amount & Currency */}
-                        <div className="flex gap-4">
-                            <div className="w-[42%] flex flex-col">
+                        <div className="flex gap-4 w-full">
+                            <div className="flex-[2] min-w-0 flex flex-col">
                                 <label className="block text-sm font-medium text-text-secondary mb-2">Döviz</label>
                                 <select
                                     value={currency}
@@ -311,20 +311,45 @@ export const QuickTransactionModal: React.FC<QuickTransactionModalProps> = ({
                                     ))}
                                 </select>
                             </div>
-                            <div className="flex-1">
+                            <div className="flex-[3] min-w-0">
                                 <label className="block text-sm font-medium text-text-secondary mb-2">
                                     {currency === 'GOLD' ? (getGoldType(goldTypeId)?.category === 'GRAM' ? 'Gram' : 'Adet') : 'Tutar'}
                                 </label>
-                                <input
-                                    type="text"
-                                    inputMode="decimal"
-                                    value={amount}
-                                    onChange={(e) => setAmount(e.target.value)}
-                                    placeholder="0"
-                                    className="w-full px-4 py-4 text-3xl font-bold text-center rounded-xl border border-slate-200 dark:border-slate-700 bg-background text-text-primary focus:ring-2 focus:ring-primary outline-none h-[74px]"
-                                    required
-                                    autoFocus
-                                />
+                                <div className="relative">
+                                    <input
+                                        type="text"
+                                        inputMode={ (currency === 'SILVER' || (currency === 'GOLD' && getGoldType(goldTypeId)?.category === 'GRAM')) ? "decimal" : "numeric" }
+                                        value={amount}
+                                        onChange={(e) => {
+                                            let raw = e.target.value;
+                                            const allowDecimals = currency === 'SILVER' || (currency === 'GOLD' && getGoldType(goldTypeId)?.category === 'GRAM');
+                                            
+                                            if (allowDecimals) {
+                                                raw = raw.replace('.', ',');
+                                                const cleaned = raw.replace(/[^\d,]/g, '');
+                                                const parts = cleaned.split(',');
+                                                let finalValue = parts[0];
+                                                if (parts.length > 1) {
+                                                    finalValue += ',' + parts[1].slice(0, 2);
+                                                }
+                                                setAmount(finalValue);
+                                            } else {
+                                                const digits = raw.replace(/\D/g, '');
+                                                setAmount(digits);
+                                            }
+                                        }}
+                                        placeholder="0"
+                                        className="w-full px-4 py-4 text-3xl font-bold text-center rounded-xl border border-slate-200 dark:border-slate-700 bg-background text-text-primary focus:ring-2 focus:ring-primary outline-none h-[74px]"
+                                        required
+                                        autoFocus
+                                    />
+                                    {currency !== 'GOLD' && currency !== 'SILVER' && (
+                                        <span className="absolute right-4 top-1/2 -translate-y-1/2 text-2xl font-bold text-text-secondary/40 pointer-events-none">,00</span>
+                                    )}
+                                    {currency === 'GOLD' && getGoldType(goldTypeId)?.category === 'GRAM' && (
+                                         <span className="absolute right-4 top-1/2 -translate-y-1/2 text-sm font-bold text-text-secondary/40 pointer-events-none"> GRAM</span>
+                                    )}
+                                </div>
                             </div>
                         </div>
                         {amount && (

@@ -105,7 +105,9 @@ export const MetalSelectionFields: React.FC<MetalSelectionFieldsProps> = ({
                         >
                             <option value="">Seçiniz...</option>
                             {(goldCategory === 'BILEZIK' ? BILEZIK_MODELS : TAKI_TYPES).map(m => (
-                                <option key={m.id} value={m.id}>{m.label}</option>
+                                <option key={m.id} value={m.id}>
+                                    {m.label} {m.fixedCarat ? `(${m.fixedCarat} Ayar)` : ''}
+                                </option>
                             ))}
                         </select>
                     </div>
@@ -137,37 +139,48 @@ export const MetalSelectionFields: React.FC<MetalSelectionFieldsProps> = ({
             {(goldCategory === 'BILEZIK' || goldCategory === 'TAKI') && (
                 <div className="grid grid-cols-2 gap-3 animate-in slide-in-from-top-1">
                     {/* Carat selection - only if not fixed */}
-                    {!getGoldType(goldTypeId)?.fixedCarat && !(goldCategory === 'BILEZIK' && BILEZIK_MODELS.find(m => m.id === goldSubType)?.fixedCarat) ? (
-                        <div>
-                            <label className={clsx(
-                                "block text-[10px] font-bold mb-1 uppercase tracking-tight",
-                                isGold ? "text-amber-700 dark:text-amber-400" : "text-slate-600 dark:text-slate-400"
-                            )}>
-                                Ayar
-                            </label>
-                            <select
-                                value={goldCustomCarat}
-                                onChange={(e) => setGoldCustomCarat(Number(e.target.value))}
-                                className={clsx(
-                                    "w-full px-3 py-2.5 rounded-lg border bg-white dark:bg-slate-800 text-sm font-bold text-text-primary outline-none transition-all",
-                                    isGold ? "border-amber-200 dark:border-amber-800 focus:ring-2 focus:ring-amber-500" : "border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-slate-500"
-                                )}
-                            >
-                                {GOLD_CARATS.map(c => (
-                                    <option key={c.value} value={c.value}>{c.label}</option>
-                                ))}
-                            </select>
-                        </div>
-                    ) : (
-                        <div className="flex items-end">
-                            <div className={clsx(
-                                "w-full px-3 py-2.5 rounded-lg border text-xs font-semibold opacity-50 bg-white/50 dark:bg-slate-800/50",
-                                isGold ? "border-amber-200 dark:border-amber-800" : "border-slate-200 dark:border-slate-800"
-                            )}>
-                                Sabit Ayar
+                    {(() => {
+                        const typeInfo = getGoldType(goldTypeId);
+                        const modelInfo = (goldCategory === 'BILEZIK' ? BILEZIK_MODELS : TAKI_TYPES).find(m => m.id === goldSubType);
+                        const fixedCarat = modelInfo?.fixedCarat || typeInfo?.fixedCarat ? (typeInfo?.fixedCarat ? typeInfo.defaultCarat : modelInfo?.fixedCarat) : null;
+                        
+                        if (!fixedCarat) {
+                            return (
+                                <div>
+                                    <label className={clsx(
+                                        "block text-[10px] font-bold mb-1 uppercase tracking-tight",
+                                        isGold ? "text-amber-700 dark:text-amber-400" : "text-slate-600 dark:text-slate-400"
+                                    )}>
+                                        Ayar
+                                    </label>
+                                    <select
+                                        value={goldCustomCarat}
+                                        onChange={(e) => setGoldCustomCarat(Number(e.target.value))}
+                                        className={clsx(
+                                            "w-full px-3 py-2.5 rounded-lg border bg-white dark:bg-slate-800 text-sm font-bold text-text-primary outline-none transition-all",
+                                            isGold ? "border-amber-200 dark:border-amber-800 focus:ring-2 focus:ring-amber-500" : "border-slate-200 dark:border-slate-800 focus:ring-2 focus:ring-slate-500"
+                                        )}
+                                    >
+                                        {GOLD_CARATS.map(c => (
+                                            <option key={c.value} value={c.value}>{c.label}</option>
+                                        ))}
+                                    </select>
+                                </div>
+                            );
+                        }
+
+                        return (
+                            <div className="flex items-end">
+                                <div className={clsx(
+                                    "w-full px-3 py-2.5 rounded-lg border text-[11px] font-bold opacity-60 bg-white/50 dark:bg-slate-800/50 flex items-center gap-1.5",
+                                    isGold ? "border-amber-200 dark:border-amber-800 text-amber-900 dark:text-amber-200" : "border-slate-200 dark:border-slate-800 text-slate-900 dark:text-slate-200"
+                                )}>
+                                    <div className={clsx("w-1.5 h-1.5 rounded-full", isGold ? "bg-amber-500" : "bg-slate-400")} />
+                                    Sabit Ayar ({fixedCarat} Ayar)
+                                </div>
                             </div>
-                        </div>
-                    )}
+                        );
+                    })()}
                     <div>
                         <label className={clsx(
                             "block text-[10px] font-bold mb-1 uppercase tracking-tight",
