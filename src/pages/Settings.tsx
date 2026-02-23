@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, UserX, ChevronRight, RefreshCw, Users, User, Moon, Sun, LogOut, Coins } from 'lucide-react';
+import { ArrowLeft, UserX, ChevronRight, RefreshCw, User, Moon, Sun, LogOut, Coins, Shield } from 'lucide-react';
 import { updateUserPreferences } from '../services/db';
 import { useAuth } from '../hooks/useAuth';
 import type { User as UserType } from '../types';
@@ -165,6 +165,17 @@ export const Settings = () => {
                             title="Engellenen Kullanıcılar"
                             description="Engellenmiş kişi listesini yönet."
                             onClick={() => navigate('/settings/blocked')}
+                        />
+                    </div>
+
+                    {/* Group E: Privacy */}
+                    <SectionHeader title="Veri ve Gizlilik" />
+                    <div className="bg-white dark:bg-slate-900 rounded-2xl shadow-sm border border-gray-100 dark:border-slate-800 overflow-hidden divide-y divide-gray-100 dark:divide-slate-800">
+                        <SettingsRow
+                            icon={Shield}
+                            title="Gizlilik ve Veri Yönetimi"
+                            description="Verileri dışa aktar, hesap silme ve gizlilik seçenekleri"
+                            onClick={() => navigate('/settings/privacy')}
                         />
                     </div>
 
