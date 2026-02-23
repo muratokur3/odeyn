@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { X, FileText, ChevronDown, ChevronUp, Search, Ban, RefreshCw, AlertTriangle } from 'lucide-react';
+import { X, FileText, ChevronDown, ChevronUp, Search, Ban, RefreshCw, AlertTriangle, Calendar } from 'lucide-react';
 import { Avatar } from './Avatar';
 import { SelectedUserCard } from './SelectedUserCard';
 
@@ -121,7 +121,7 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
     const [note, setNote] = useState('');
     const [dueDate, setDueDate] = useState('');
     const [showDetails, setShowDetails] = useState(false);
-    const [canBorrowerAddPayment, setCanBorrowerAddPayment] = useState(false);
+    const [canBorrowerAddPayment, setCanBorrowerAddPayment] = useState(true);
 
     // Installment State
     const [isInstallment, setIsInstallment] = useState(false);
@@ -203,9 +203,7 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                 if (initialData.dueDate) {
                     setDueDate(initialData.dueDate.toDate().toISOString().split('T')[0]);
                 }
-                if (initialData.canBorrowerAddPayment) {
-                    setCanBorrowerAddPayment(true);
-                }
+                setCanBorrowerAddPayment(!!initialData.canBorrowerAddPayment);
 
                 // Installments
                 if (initialData.installments && initialData.installments.length > 0) {
@@ -253,10 +251,10 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                 setStep('SEARCH');
             }
 
-            if (user?.preferences?.defaultAllowPaymentAddition) {
-                setCanBorrowerAddPayment(true);
+            if (user?.preferences?.defaultAllowPaymentAddition !== undefined) {
+                setCanBorrowerAddPayment(user.preferences.defaultAllowPaymentAddition);
             } else {
-                setCanBorrowerAddPayment(false);
+                setCanBorrowerAddPayment(true);
             }
             setDownPayment('');
         } else {
@@ -274,7 +272,7 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
             setShowDetails(false);
             setIsInstallment(false);
             setInstallmentCount(1);
-            setCanBorrowerAddPayment(false);
+            setCanBorrowerAddPayment(true);
             setDownPayment('');
             setStep('SEARCH');
             setIsResolvingInitial(false);
@@ -894,13 +892,19 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                                     {!isInstallment && (
                                         <div>
                                             <label className="block text-sm font-medium text-text-secondary mb-1">Vade Tarihi</label>
-                                            <input
-                                                type="date"
-                                                value={dueDate}
-                                                onChange={(e) => setDueDate(e.target.value)}
-                                                disabled={isTargetBlocked}
-                                                className="w-full px-4 py-3 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary focus:ring-2 focus:ring-blue-900/50 outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                                            />
+                                            <div className="relative">
+                                                <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+                                                    <Calendar size={18} className="text-gray-400" />
+                                                </div>
+                                                <input
+                                                    type="date"
+                                                    value={dueDate}
+                                                    onChange={(e) => setDueDate(e.target.value)}
+                                                    disabled={isTargetBlocked}
+                                                    placeholder="GG.AA.YYYY"
+                                                    className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary focus:ring-2 focus:ring-blue-900/50 outline-none transition-all disabled:opacity-50 disabled:cursor-not-allowed font-semibold text-base"
+                                                />
+                                            </div>
                                         </div>
                                     )}
 
@@ -915,8 +919,15 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                                                 checked={isInstallment}
                                                 onChange={(val) => {
                                                     setIsInstallment(val);
-                                                    if (val) setInstallmentCount(2);
-                                                    else setInstallmentCount(1);
+                                                    if (val) {
+                                                        setInstallmentCount(2);
+                                                        // Set default due date to 1 month from now
+                                                        const date = new Date();
+                                                        date.setMonth(date.getMonth() + 1);
+                                                        setDueDate(date.toISOString().split('T')[0]);
+                                                    } else {
+                                                        setInstallmentCount(1);
+                                                    }
                                                 }}
                                                 label=""
                                             />
@@ -946,12 +957,18 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                                                     </div>
                                                     <div className="flex-1">
                                                         <label className="block text-xs font-medium text-text-secondary mb-1">İlk Taksit Tarihi</label>
-                                                        <input
-                                                            type="date"
-                                                            value={dueDate}
-                                                            onChange={(e) => setDueDate(e.target.value)}
-                                                            className="w-full px-3 py-2 rounded-lg border border-slate-600 bg-surface/50 text-text-primary text-sm focus:border-primary outline-none"
-                                                        />
+                                                        <div className="relative">
+                                                            <div className="absolute inset-y-0 left-0 pl-2.5 flex items-center pointer-events-none">
+                                                                <Calendar size={14} className="text-gray-400" />
+                                                            </div>
+                                                            <input
+                                                                type="date"
+                                                                value={dueDate}
+                                                                onChange={(e) => setDueDate(e.target.value)}
+                                                                placeholder="GG.AA.YYYY"
+                                                                className="w-full pl-8 pr-3 py-2 rounded-lg border border-slate-600 bg-surface/50 text-text-primary text-base font-semibold focus:border-primary outline-none"
+                                                            />
+                                                        </div>
                                                     </div>
                                                 </div>
 
@@ -975,7 +992,9 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                                             "flex items-center justify-between p-4 rounded-xl border animate-in fade-in slide-in-from-top-2",
                                             "bg-purple-50 dark:bg-purple-900/20 border-purple-100 dark:border-purple-800"
                                         )}>
-                                            <span className="text-sm font-medium text-purple-900 dark:text-purple-100">Karşı taraf ödeme ekleyebilsin</span>
+                                            <span className="text-sm font-medium text-purple-900 dark:text-purple-100">
+                                                {borrowerName || 'Karşı taraf'} bu borç üzerinde ekleme veya ödeme girişi yapabilsin
+                                            </span>
                                             <Toggle
                                                 checked={canBorrowerAddPayment}
                                                 onChange={setCanBorrowerAddPayment}
