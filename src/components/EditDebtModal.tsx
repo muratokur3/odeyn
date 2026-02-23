@@ -153,8 +153,11 @@ export const EditDebtModal: React.FC<EditDebtModalProps> = ({ isOpen, onClose, d
     };
 
     return (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-            <div className="bg-surface rounded-2xl w-full max-w-sm p-6 shadow-xl animate-in fade-in zoom-in duration-200 border border-slate-700">
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
+            <div
+                onClick={(e) => e.stopPropagation()}
+                className="bg-surface rounded-2xl w-full max-w-sm p-6 shadow-xl animate-in fade-in zoom-in duration-200 border border-slate-700"
+            >
                 <div className="flex justify-between items-center mb-6">
                     <h2 className="text-xl font-bold text-text-primary">Borcu Düzenle</h2>
                     <button onClick={onClose} className="p-2 hover:bg-slate-700/50 rounded-full">

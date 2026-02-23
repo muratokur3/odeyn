@@ -209,8 +209,11 @@ export const ContactModal: React.FC<ContactModalProps> = ({
     if (!isOpen) return null;
 
     return (
-        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-            <div className="bg-surface p-6 rounded-2xl w-full max-w-md relative animate-in fade-in zoom-in duration-200 border border-slate-700">
+        <div className="fixed inset-0 z-[70] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
+            <div
+                onClick={(e) => e.stopPropagation()}
+                className="bg-surface p-6 rounded-2xl w-full max-w-md relative animate-in fade-in zoom-in duration-200 border border-slate-700"
+            >
                 <button
                     onClick={onClose}
                     className="absolute right-4 top-4 p-2 hover:bg-slate-700/50 rounded-full transition-colors"

@@ -447,8 +447,11 @@ export const Contacts = () => {
             />
 
             {showImportPreview && (
-                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-                    <div className="bg-surface p-6 rounded-2xl w-full max-w-md max-h-[80vh] flex flex-col relative">
+                <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={resetImportState}>
+                    <div
+                        onClick={(e) => e.stopPropagation()}
+                        className="bg-surface p-6 rounded-2xl w-full max-w-md max-h-[80vh] flex flex-col relative"
+                    >
                         <button
                             onClick={resetImportState}
                             className="absolute right-4 top-4 p-2 hover:bg-gray-100 dark:hover:bg-slate-800 rounded-full transition-colors"

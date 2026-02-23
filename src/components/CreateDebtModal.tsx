@@ -566,8 +566,10 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
     };
 
     return (
-        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm">
-            <div className={clsx(
+        <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm" onClick={onClose}>
+            <div
+                onClick={(e) => e.stopPropagation()}
+                className={clsx(
                 "bg-surface rounded-2xl w-full max-w-sm shadow-xl animate-in fade-in zoom-in duration-200 h-auto max-h-[90dvh] flex flex-col border-2 border-slate-700 transition-all shadow-lg"
             )}>
                 <div className="flex justify-between items-center p-6 pb-2 flex-none rounded-t-2xl">

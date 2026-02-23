@@ -78,8 +78,11 @@ export const PendingPaymentsModal: React.FC<PendingPaymentsModalProps> = ({ isOp
     };
 
     return (
-        <div className="fixed inset-0 z-[100] flex items-start justify-center p-4 pt-20 bg-black/60 backdrop-blur-md">
-            <div className="bg-surface rounded-2xl w-full max-w-md shadow-2xl animate-in fade-in slide-in-from-top-4 border border-border max-h-[85vh] flex flex-col">
+        <div className="fixed inset-0 z-[100] flex items-start justify-center p-4 pt-20 bg-black/60 backdrop-blur-md" onClick={onClose}>
+            <div
+                onClick={(e) => e.stopPropagation()}
+                className="bg-surface rounded-2xl w-full max-w-md shadow-2xl animate-in fade-in slide-in-from-top-4 border border-border max-h-[85vh] flex flex-col"
+            >
                 <div className="flex justify-between items-center p-5 border-b border-border">
                     <div className="flex items-center gap-2">
                         <div className="bg-blue-600/10 p-2 rounded-lg">
