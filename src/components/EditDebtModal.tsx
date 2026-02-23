@@ -279,7 +279,8 @@ export const EditDebtModal: React.FC<EditDebtModalProps> = ({ isOpen, onClose, d
                                 type="date"
                                 value={dueDate}
                                 onChange={(e) => setDueDate(e.target.value)}
-                                className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary focus:ring-2 focus:ring-blue-900/50 outline-none transition-all"
+                                placeholder="GG.AA.YYYY"
+                                className="w-full pl-10 pr-4 py-3 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary focus:ring-2 focus:ring-blue-900/50 outline-none transition-all font-semibold text-base"
                             />
                         </div>
                     </div>
