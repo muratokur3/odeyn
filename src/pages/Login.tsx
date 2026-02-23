@@ -124,10 +124,6 @@ export const Login = () => {
                     <p className="text-text-secondary">Güvenli ve Kolay Borç Takibi</p>
                 </div>
 
-                <div className="flex justify-center mb-4">
-                    {loading && <Loader2 className="animate-spin text-primary" size={32} />}
-                </div>
-
                 <div id="login-recaptcha"></div>
 
                 <div className="animate-in fade-in slide-in-from-bottom-4 duration-300">
@@ -166,13 +162,18 @@ export const Login = () => {
                             <div className="text-center">
                                 <ShieldCheck size={48} className="mx-auto text-primary mb-2 opacity-80" />
                                 <h2 className="text-xl font-bold text-text-primary">Kodu Doğrula</h2>
-                                <p className="text-text-secondary text-sm">
-                                    <span className="font-bold text-text-primary">{formatPhoneForDisplay(phone)}</span> numarasına gelen kodu girin.
-                                </p>
+                                <div className="text-text-secondary text-sm mt-2">
+                                    <div className="font-bold text-text-primary text-base mb-1">
+                                        {formatPhoneForDisplay(phone)}
+                                    </div>
+                                    <div>numarasına gelen kodu girin.</div>
+                                </div>
                             </div>
                             <form onSubmit={handleVerifySms} className="space-y-6">
                                 <input
-                                    type="text"
+                                    type="tel"
+                                    inputMode="numeric"
+                                    pattern="[0-9]*"
                                     value={otp}
                                     onChange={(e) => setOtp(e.target.value.replace(/\D/g, '').slice(0, 6))}
                                     className="w-full text-center text-3xl tracking-[0.5em] font-bold py-4 rounded-xl border border-slate-700 bg-background text-text-primary focus:border-primary outline-none transition-all"
