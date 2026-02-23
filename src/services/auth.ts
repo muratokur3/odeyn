@@ -114,6 +114,13 @@ export const logoutUser = async () => {
     await signOut(auth);
 };
 
+export const deleteAuthUser = async () => {
+    const user = auth.currentUser;
+    if (user) {
+        await user.delete();
+    }
+};
+
 /**
  * Helper to check if a user document exists (for recovery flow).
  */

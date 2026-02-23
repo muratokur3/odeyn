@@ -13,6 +13,7 @@ import { Layout } from './components/Layout';
 import { useAuth } from './hooks/useAuth';
 import { ActiveSessions } from './pages/ActiveSessions';
 import { AccountSettings } from './pages/AccountSettings';
+import { PrivacySettings } from './pages/PrivacySettings';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
@@ -61,6 +62,7 @@ function App() {
                   <Route path="/settings" element={<Settings />} />
                   <Route path="/settings/sessions" element={<ActiveSessions />} />
                   <Route path="/settings/blocked" element={<BlockedUsers />} />
+                  <Route path="/settings/privacy" element={<PrivacySettings />} />
                 </Route>
               </Routes>
               </NotificationProvider>
