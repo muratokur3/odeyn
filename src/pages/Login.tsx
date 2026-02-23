@@ -1,15 +1,16 @@
 import { useState, useRef, useEffect } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
-import { Loader2, MessageSquare, Lock, ArrowLeft, Check, ShieldCheck, User, ArrowRight } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
+import { Loader2, ShieldCheck, User, ArrowRight, Smartphone } from 'lucide-react';
 import { auth, db } from '../services/firebase';
 import { RecaptchaVerifier } from 'firebase/auth';
 import type { ConfirmationResult } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
-import { startPhoneLogin, ensureUserDocument, finalizeUserRegistration } from '../services/auth';
+import { startPhoneLogin, finalizeUserRegistration } from '../services/auth';
 import { useModal } from '../context/ModalContext';
 import { useAuth } from '../hooks/useAuth';
-import clsx from 'clsx';
 import { PhoneInput } from '../components/PhoneInput';
+import { formatPhoneForDisplay } from '../utils/phoneUtils';
+import { TermsOfServiceModal, PrivacyPolicyModal } from '../components/LegalModals';
 
 type Step = 'PHONE' | 'OTP' | 'DETAILS';
 
@@ -17,6 +18,10 @@ export const Login = () => {
     const navigate = useNavigate();
     const [loading, setLoading] = useState(false);
     const { showAlert } = useModal();
+
+    // Modals
+    const [isTermsOpen, setIsTermsOpen] = useState(false);
+    const [isPrivacyOpen, setIsPrivacyOpen] = useState(false);
 
     // Form Data
     const [phone, setPhone] = useState('');
@@ -129,8 +134,11 @@ export const Login = () => {
                     {step === 'PHONE' && (
                         <div className="space-y-6">
                             <div className="text-center">
-                                <h2 className="text-xl font-bold text-text-primary">Giriş Yap</h2>
-                                <p className="text-text-secondary text-sm">Telefon numaranızla hemen başlayın</p>
+                                <div className="w-16 h-16 bg-primary/10 rounded-2xl flex items-center justify-center mx-auto mb-4">
+                                    <Smartphone size={32} className="text-primary" />
+                                </div>
+                                <h2 className="text-2xl font-extrabold text-text-primary">Giriş Yap</h2>
+                                <p className="text-text-secondary text-sm mt-1">Telefon numaranızla hemen başlayın</p>
                             </div>
                             <form onSubmit={handleSendSms} className="space-y-6">
                                 <div className="space-y-2">
@@ -159,7 +167,7 @@ export const Login = () => {
                                 <ShieldCheck size={48} className="mx-auto text-primary mb-2 opacity-80" />
                                 <h2 className="text-xl font-bold text-text-primary">Kodu Doğrula</h2>
                                 <p className="text-text-secondary text-sm">
-                                    {phone} numarasına gelen kodu girin.
+                                    <span className="font-bold text-text-primary">{formatPhoneForDisplay(phone)}</span> numarasına gelen kodu girin.
                                 </p>
                             </div>
                             <form onSubmit={handleVerifySms} className="space-y-6">
@@ -228,10 +236,27 @@ export const Login = () => {
                     )}
                 </div>
 
-                <div className="mt-8 text-center text-xs text-text-secondary">
-                    Giriş yaparak kullanım koşullarını ve gizlilik politikasını kabul etmiş sayılırsınız.
+                <div className="mt-8 text-center text-[10px] leading-relaxed text-text-secondary px-4">
+                    Devam ederek{' '}
+                    <button
+                        onClick={() => setIsTermsOpen(true)}
+                        className="text-primary hover:underline font-medium"
+                    >
+                        Kullanım Koşullarını
+                    </button>
+                    {' '}ve{' '}
+                    <button
+                        onClick={() => setIsPrivacyOpen(true)}
+                        className="text-primary hover:underline font-medium"
+                    >
+                        Gizlilik Politikasını
+                    </button>
+                    {' '}kabul etmiş sayılırsınız.
                 </div>
             </div>
+
+            <TermsOfServiceModal isOpen={isTermsOpen} onClose={() => setIsTermsOpen(false)} />
+            <PrivacyPolicyModal isOpen={isPrivacyOpen} onClose={() => setIsPrivacyOpen(false)} />
         </div>
     );
 };
