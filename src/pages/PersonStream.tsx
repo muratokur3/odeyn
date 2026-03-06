@@ -18,7 +18,7 @@ import { TransactionList } from '../components/TransactionList';
 import { formatCurrency } from '../utils/format';
 import { getGoldType } from '../utils/goldConstants';
 import { calculateStreamBalance, calculateDebtsBalance, mergeBalances, type DetailedBalances } from '../utils/balanceAggregator';
-import { fetchRates, type CurrencyRates } from '../services/currency';
+import { fetchRates, fetchTurkishGoldRates, type CurrencyRates, type TurkishGoldRates } from '../services/currency';
 import { DebtsTab } from '../components/DebtsTab';
 import { DateFilterDropdown, type QuickFilterType } from '../components/DateFilterDropdown';
 import { CreateDebtModal } from '../components/CreateDebtModal';
@@ -216,9 +216,11 @@ export const PersonStream = () => {
     );
 
     const [rates, setRates] = useState<CurrencyRates | null>(null);
+    const [turkishGold, setTurkishGold] = useState<TurkishGoldRates | null>(null);
 
     useEffect(() => {
         fetchRates().then(setRates);
+        fetchTurkishGoldRates().then(setTurkishGold);
     }, []);
 
     // Helper: Infer debt type for old debts without type field
@@ -243,18 +245,18 @@ export const PersonStream = () => {
     // Calculate balances
     const streamBalance = useMemo(() => {
         if (!user) return new Map() as DetailedBalances;
-        return calculateStreamBalance(transactions, user.uid, rates);
-    }, [transactions, user, rates]);
+        return calculateStreamBalance(transactions, user.uid, rates, turkishGold);
+    }, [transactions, user, rates, turkishGold]);
 
     const normalDebtsBalance = useMemo(() => {
         if (!user) return new Map() as DetailedBalances;
-        return calculateDebtsBalance(normalDebts, user.uid, rates);
-    }, [normalDebts, user, rates]);
+        return calculateDebtsBalance(normalDebts, user.uid, rates, turkishGold);
+    }, [normalDebts, user, rates, turkishGold]);
 
     const installmentBalance = useMemo(() => {
         if (!user) return new Map() as DetailedBalances;
-        return calculateDebtsBalance(installmentDebts, user.uid, rates);
-    }, [installmentDebts, user, rates]);
+        return calculateDebtsBalance(installmentDebts, user.uid, rates, turkishGold);
+    }, [installmentDebts, user, rates, turkishGold]);
 
     const totalBalance = useMemo(() => {
         const merged1 = mergeBalances(streamBalance, normalDebtsBalance);

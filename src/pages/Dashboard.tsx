@@ -12,7 +12,7 @@ import { PendingPaymentsModal } from '../components/PendingPaymentsModal';
 
 
 import { useTheme } from '../context/ThemeContext';
-import { fetchRates, convertToTRY, convertPureMetalToTRY, type CurrencyRates } from '../services/currency';
+import { fetchRates, convertToTRY, convertPureMetalToTRY, fetchTurkishGoldRates, type CurrencyRates, type TurkishGoldRates } from '../services/currency';
 import type { Debt } from '../types';
 import { SummaryCard } from '../components/SummaryCard';
 import { EditDebtModal } from '../components/EditDebtModal';
@@ -64,9 +64,11 @@ export const Dashboard = () => {
 
     // State
     const [rates, setRates] = useState<CurrencyRates | null>(null);
+    const [turkishGold, setTurkishGold] = useState<TurkishGoldRates | null>(null);
 
     useEffect(() => {
         fetchRates().then(setRates);
+        fetchTurkishGoldRates().then(setTurkishGold);
     }, []);
 
     // GHOST USER PROTOCOL: Background Claiming & Normalization
@@ -200,7 +202,7 @@ export const Dashboard = () => {
                     : 0;
 
                 const customRates = d.customExchangeRate ? { [baseCurr]: d.customExchangeRate } : undefined;
-                const tryVal = convertToTRY(amount, baseCurr, rates!, customRates, goldDetail);
+                const tryVal = convertToTRY(amount, baseCurr, rates!, customRates, goldDetail, turkishGold);
 
                 if (shouldCountReceivable) {
                     totalsByCurrency[currency].receivables += amount;
@@ -348,7 +350,7 @@ export const Dashboard = () => {
                     const goldType = isGold ? curr.split(':')[1] : undefined;
                     const goldDetail = goldType ? { type: goldType } : undefined;
 
-                    displayBalance += convertToTRY(amt, baseCurr, rates!, undefined, goldDetail);
+                    displayBalance += convertToTRY(amt, baseCurr, rates!, undefined, goldDetail, turkishGold);
                 });
                 displayCurrency = 'TRY';
             } else {
@@ -635,13 +637,13 @@ export const Dashboard = () => {
                             const goldTypeData = goldType ? getGoldType(goldType) : undefined;
 
                             const net = (isToggled && rates)
-                                ? (isGold ? convertPureMetalToTRY(total.pureGoldNet, rates, 'GOLD') : convertToTRY(total.net, baseCurr, rates))
+                                ? (isGold ? convertPureMetalToTRY(total.pureGoldNet, rates, 'GOLD', turkishGold) : convertToTRY(total.net, baseCurr, rates))
                                 : total.net;
                             const receivables = (isToggled && rates)
-                                ? (isGold ? convertPureMetalToTRY(total.pureGoldReceivables, rates, 'GOLD') : convertToTRY(total.receivables, baseCurr, rates))
+                                ? (isGold ? convertPureMetalToTRY(total.pureGoldReceivables, rates, 'GOLD', turkishGold) : convertToTRY(total.receivables, baseCurr, rates))
                                 : total.receivables;
                             const payables = (isToggled && rates)
-                                ? (isGold ? convertPureMetalToTRY(total.pureGoldPayables, rates, 'GOLD') : convertToTRY(total.payables, baseCurr, rates))
+                                ? (isGold ? convertPureMetalToTRY(total.pureGoldPayables, rates, 'GOLD', turkishGold) : convertToTRY(total.payables, baseCurr, rates))
                                 : total.payables;
 
                             return (

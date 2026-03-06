@@ -6,7 +6,7 @@
 import type { Transaction, Debt } from '../types';
 import { formatCurrency } from './format';
 import { calculatePureMetalWeight } from './goldConstants';
-import { convertToTRY, type CurrencyRates } from '../services/currency';
+import { convertToTRY, type CurrencyRates, type TurkishGoldRates } from '../services/currency';
 
 export type CurrencyBalances = Map<string, number>;
 
@@ -56,7 +56,8 @@ export type DetailedBalances = Map<string, CurrencySummary>;
 export const calculateStreamBalance = (
     transactions: Transaction[],
     currentUserId: string,
-    rates?: CurrencyRates | null
+    rates?: CurrencyRates | null,
+    turkishGold?: TurkishGoldRates | null
 ): DetailedBalances => {
     const balances = new Map<string, CurrencySummary>();
     
@@ -82,7 +83,7 @@ export const calculateStreamBalance = (
             : 0;
 
         const customRates = tx.customExchangeRate ? { [baseCurr]: tx.customExchangeRate } : undefined;
-        const tryVal = rates ? convertToTRY(tx.amount, baseCurr, rates, customRates, tx.goldDetail) : 0;
+        const tryVal = rates ? convertToTRY(tx.amount, baseCurr, rates, customRates, tx.goldDetail, turkishGold) : 0;
 
         if (tx.createdBy === currentUserId) {
             if (tx.direction === 'OUTGOING') {
@@ -129,7 +130,8 @@ export const calculateStreamBalance = (
 export const calculateDebtsBalance = (
     debts: Debt[],
     currentUserId: string,
-    rates?: CurrencyRates | null
+    rates?: CurrencyRates | null,
+    turkishGold?: TurkishGoldRates | null
 ): DetailedBalances => {
     const balances = new Map<string, CurrencySummary>();
     
@@ -160,7 +162,7 @@ export const calculateDebtsBalance = (
             : 0;
 
         const customRates = debt.customExchangeRate ? { [baseCurr]: debt.customExchangeRate } : undefined;
-        const tryVal = rates ? convertToTRY(debt.remainingAmount, baseCurr, rates, customRates, debt.goldDetail) : 0;
+        const tryVal = rates ? convertToTRY(debt.remainingAmount, baseCurr, rates, customRates, debt.goldDetail, turkishGold) : 0;
 
         if (debt.lenderId === currentUserId) {
             // I'm the lender, they owe me
