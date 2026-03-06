@@ -4,14 +4,18 @@ import { sendFeedback } from '../services/feedback';
 import { Bug, Send, ChevronDown, ChevronUp, CheckCircle } from 'lucide-react';
 import clsx from 'clsx';
 import { motion, AnimatePresence } from 'framer-motion';
+import { useLocation } from 'react-router-dom';
+import { AlertModal } from './AlertModal';
 
 export const FeedbackWidget = () => {
     const { user } = useAuth();
+    const location = useLocation();
     const [isExpanded, setIsExpanded] = useState(false);
     const [title, setTitle] = useState('');
     const [description, setDescription] = useState('');
     const [isSubmitting, setIsSubmitting] = useState(false);
     const [isSuccess, setIsSuccess] = useState(false);
+    const [showSuccessModal, setShowSuccessModal] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     const handleSubmit = async (e: React.FormEvent) => {
@@ -26,20 +30,31 @@ export const FeedbackWidget = () => {
         setError(null);
 
         try {
+            // Robust data population with fallbacks as requested
+            const finalName = user.displayName || 'İsimsiz';
+            const finalPhone = user.phoneNumber || 'Telefon Yok';
+
             await sendFeedback(
                 user.uid,
-                user.displayName || 'İsimsiz Kullanıcı',
-                user.phoneNumber || 'Telefon Yok',
+                finalName,
+                finalPhone,
                 title,
-                description
+                description,
+                location.pathname
             );
+
+            // Handle Success
             setIsSuccess(true);
+            setShowSuccessModal(true);
             setTitle('');
             setDescription('');
+            setIsExpanded(false); // Close the form immediately on success
+
+            // Keep success indicator for a while
             setTimeout(() => {
                 setIsSuccess(false);
-                setIsExpanded(false);
-            }, 2000);
+            }, 5000);
+
         } catch (err) {
             console.error(err);
             setError('Bir hata oluştu. Lütfen tekrar deneyin.');
@@ -81,7 +96,7 @@ export const FeedbackWidget = () => {
 
                 {/* Expanded Form */}
                 <AnimatePresence>
-                    {isExpanded && !isSuccess && (
+                    {isExpanded && (
                         <motion.div
                             initial={{ height: 0, opacity: 0 }}
                             animate={{ height: 'auto', opacity: 1 }}
@@ -95,7 +110,7 @@ export const FeedbackWidget = () => {
                                     <p className="font-medium mb-1">Şu bilgilerle gönderilecek:</p>
                                     <div className="flex justify-between items-center">
                                         <span>{user.displayName || 'İsimsiz'}</span>
-                                        <span className="font-mono">{user.phoneNumber}</span>
+                                        <span className="font-mono">{user.phoneNumber || 'Telefon Yok'}</span>
                                     </div>
                                 </div>
 
@@ -162,6 +177,14 @@ export const FeedbackWidget = () => {
                     )}
                 </AnimatePresence>
             </div>
+
+            <AlertModal
+                isOpen={showSuccessModal}
+                onClose={() => setShowSuccessModal(false)}
+                type="success"
+                title="Teşekkürler!"
+                message="Geri bildiriminiz başarıyla iletildi. Uygulamayı geliştirmemize yardımcı olduğunuz için teşekkür ederiz."
+            />
         </div>
     );
 };
