@@ -211,7 +211,7 @@ export const PersonStream = () => {
     } = useLedger(
         user?.uid,
         user?.displayName,
-        id || undefined,
+        resolvedUid || id || undefined,
         personInfo.name
     );
 

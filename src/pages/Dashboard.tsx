@@ -239,17 +239,33 @@ export const Dashboard = () => {
                 displayName = fallbackName;
             }
 
-            // UNIFY CONTACTS: Use resolution.linkedUserId if available, otherwise use otherId.
-            // This ensures that debts associated with a phone number and a UID for the same person are grouped.
-            const unifiedContactId = resolution.linkedUserId || otherId;
+            // UNIFY CONTACTS: Build a canonical ID trying every possible identifier.
+            // Priority: contact's linkedUserId > resolved linkedUserId from name > otherId
+            // Also check if a phone-keyed entry already exists for the same person to avoid duplicates.
+            let unifiedContactId = resolution.linkedUserId || otherId;
+
+            // Secondary dedup: if we used phone as key but there's already a bucket under the linkedUserId, merge.
+            if (!contactMap.has(unifiedContactId) && resolution.linkedUserId && contactMap.has(resolution.linkedUserId)) {
+                unifiedContactId = resolution.linkedUserId;
+            }
+            // And reverse: if the otherId is a UID and a phone-bucket exists for the same person,
+            // try to find that phone-bucket and point to the phone bucket's contact instead.
+            if (!contactMap.has(unifiedContactId)) {
+                // Look for any existing bucket whose linkedUserId matches the current resolution
+                if (resolution.linkedUserId) {
+                    for (const [existingKey, existingEntry] of contactMap.entries()) {
+                        if (existingEntry.linkedUserId === resolution.linkedUserId) {
+                            unifiedContactId = existingKey; // merge into existing bucket
+                            break;
+                        }
+                    }
+                }
+            }
 
             // Initialize contact entry if it doesn't exist
             if (!contactMap.has(unifiedContactId)) {
                 // Check in contactsMap for Activity Feed Metadata
                 const contactMeta = contactsMap.get(unifiedContactId) || contactsMap.get(otherId);
-                // Note: contactsMap is keyed by ID? No, useContacts implementation maps by ID.
-                // Assuming contactsMap is Map<string, Contact>.
-                // We prioritize metadata from Contact object.
 
                 let snippet = '';
                 let activityDate = new Date(0);
@@ -263,8 +279,8 @@ export const Dashboard = () => {
 
                 contactMap.set(unifiedContactId, {
                     name: displayName,
-                    source: resolution.source, // Store the source
-                    status: resolution.status, // Store the status
+                    source: resolution.source,
+                    status: resolution.status,
                     balances: new Map<string, number>(),
                     lastActivity: activityDate,
                     lastSnippet: snippet,
@@ -272,13 +288,12 @@ export const Dashboard = () => {
                     hasUnreadActivity: unread
                 });
             } else {
-                // If we already have an entry, but current resolution is 'contact' and stored is NOT 'contact',
-                // we should upgrade the name/source because we found a better match (e.g. via lockedPhoneNumber hint)
+                // Upgrade existing entry if we found a better source
                 const existing = contactMap.get(unifiedContactId)!;
                 if (existing.source !== 'contact' && resolution.source === 'contact') {
                     existing.name = resolution.displayName;
                     existing.source = 'contact';
-                    existing.status = 'contact'; // Upgrade status
+                    existing.status = 'contact';
                     existing.linkedUserId = resolution.linkedUserId || existing.linkedUserId;
                 }
             }

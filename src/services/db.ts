@@ -350,7 +350,7 @@ export const createDebt = async (
         participants: initialStatus === 'AUTO_HIDDEN' ? [currentUserId] : [lenderId, borrowerId],
         createdAt: serverTimestamp(),
         createdBy: currentUserId,
-        type: (installments && installments.length > 0) ? 'INSTALLMENT' : 'ONE_TIME',
+        type: ((installments && installments.length > 0) || dueDate) ? 'INSTALLMENT' : 'ONE_TIME',
         ...(dueDate && { dueDate: Timestamp.fromDate(dueDate) }),
         ...(note && { note }),
         ...(installments && { installments }),
