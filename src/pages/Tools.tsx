@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo } from 'react';
 import { Calculator, ArrowRightLeft, Delete } from 'lucide-react';
-import { fetchRates, convertToTRY, type CurrencyRates } from '../services/currency';
+import { fetchRates, convertToTRY, fetchTurkishGoldRates, type CurrencyRates, type TurkishGoldRates } from '../services/currency';
 import { formatCurrency } from '../utils/format';
 import { clsx } from 'clsx';
 
@@ -170,93 +170,233 @@ const ConverterView = () => {
     const [fromCurrency, setFromCurrency] = useState('USD');
     const [toCurrency, setToCurrency] = useState('TRY');
     const [rates, setRates] = useState<CurrencyRates | null>(null);
+    const [turkishGold, setTurkishGold] = useState<TurkishGoldRates | null>(null);
 
     useEffect(() => {
         fetchRates().then(setRates);
+        fetchTurkishGoldRates().then(setTurkishGold);
     }, []);
 
-    const result = useMemo(() => {
-        if (rates && amount) {
-            const numAmount = parseFloat(amount);
-            if (isNaN(numAmount)) return null;
+    // All supported converter options
+    const CURRENCY_OPTIONS = [
+        { value: 'TRY',      label: '₺ Türk Lirası' },
+        { value: 'USD',      label: '$ Amerikan Doları' },
+        { value: 'EUR',      label: '€ Euro' },
+        { value: 'GBP',      label: '£ İngiliz Sterlini' },
+        { value: 'CHF',      label: '₣ İsviçre Frangı' },
+        { value: 'SAR',      label: 'SAR Suudi Riyali' },
+        { value: 'JPY',      label: '¥ Japon Yeni' },
+        { value: 'CAD',      label: 'C$ Kanada Doları' },
+        { value: 'AUD',      label: 'A$ Avustralya Doları' },
+    ];
 
-            const amountInTry = convertToTRY(numAmount, fromCurrency, rates);
-            const oneUnitToInTry = convertToTRY(1, toCurrency, rates);
+    const GOLD_OPTIONS = [
+        { value: 'GOLD:GRAM_24',  label: '🥇 Has Altın (gram)' },
+        { value: 'GOLD:GRAM_22',  label: '🥇 22 Ayar Altın (gram)' },
+        { value: 'GOLD:GRAM_18',  label: '🥇 18 Ayar Altın (gram)' },
+        { value: 'GOLD:GRAM_14',  label: '🥇 14 Ayar Altın (gram)' },
+        { value: 'GOLD:CEYREK',   label: '🪙 Çeyrek Altın' },
+        { value: 'GOLD:YARIM',    label: '🪙 Yarım Altın' },
+        { value: 'GOLD:TAM',      label: '🪙 Tam Altın' },
+        { value: 'GOLD:ATA',      label: '🪙 Ata Altın' },
+        { value: 'GOLD:CUMHURIYET', label: '🪙 Cumhuriyet Altını' },
+        { value: 'SILVER_999',    label: '🥈 Has Gümüş (gram)' },
+    ];
 
-            if (oneUnitToInTry > 0) {
-                return amountInTry / oneUnitToInTry;
+    // Convert any supported currency to TRY
+    const toTRY = (val: number, currency: string): number => {
+        if (currency === 'TRY') return val;
+
+        // Gold types
+        if (currency.startsWith('GOLD:')) {
+            const goldTypeId = currency.split(':')[1];
+
+            if (turkishGold) {
+                const sikkeMap: Record<string, number> = {
+                    CEYREK: turkishGold.CEYREK,
+                    YARIM: turkishGold.YARIM,
+                    TAM: turkishGold.TAM,
+                    ATA: turkishGold.ATA,
+                    CUMHURIYET: turkishGold.ATA,
+                };
+                if (sikkeMap[goldTypeId] > 0) return val * sikkeMap[goldTypeId];
+
+                const purityMap: Record<string, number> = {
+                    GRAM_24: 1, GRAM_22: 0.9166, GRAM_18: 0.750, GRAM_14: 0.5833,
+                };
+                if (purityMap[goldTypeId] !== undefined && turkishGold.gramBase > 0) {
+                    return val * purityMap[goldTypeId] * turkishGold.gramBase;
+                }
             }
+
+            // Fallback to xau
+            if (rates) return convertToTRY(val, 'GOLD', rates, undefined, { type: goldTypeId });
+            return 0;
         }
+
+        // Silver
+        if (currency === 'SILVER_999') {
+            if (!rates) return 0;
+            const rate = rates.usd['xag'];
+            const usdToTry = rates.usd['try'];
+            if (!rate || !usdToTry) return 0;
+            return val * (1 / rate / 31.1034768) * usdToTry;
+        }
+
+        // Fiat
+        if (!rates) return 0;
+        return convertToTRY(val, currency, rates);
+    };
+
+    const result = useMemo(() => {
+        const numAmount = parseFloat(amount);
+        if (isNaN(numAmount)) return null;
+
+        const amountInTry = toTRY(numAmount, fromCurrency);
+        const oneUnitToInTry = toTRY(1, toCurrency);
+        if (oneUnitToInTry > 0) return amountInTry / oneUnitToInTry;
         return null;
-    }, [amount, fromCurrency, toCurrency, rates]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [amount, fromCurrency, toCurrency, rates, turkishGold]);
+
+    const isLoading = !rates && !turkishGold;
+    const displayCurrency = toCurrency.startsWith('GOLD:') ? 'GOLD' : toCurrency === 'SILVER_999' ? 'SILVER' : toCurrency;
+
+    // Dynamic font size: shrinks as formatted result grows longer
+    const resultStr = formatCurrency(result ?? 0, displayCurrency);
+    const resultFontSize = (() => {
+        const len = resultStr.length;
+        if (len <= 8)  return '3.2rem';
+        if (len <= 11) return '2.5rem';
+        if (len <= 14) return '2rem';
+        if (len <= 17) return '1.5rem';
+        return '1.2rem';
+    })();
+
+    const amountFontSize = (() => {
+        const len = (amount || '').length;
+        if (len <= 8)  return '2.2rem';
+        if (len <= 11) return '1.8rem';
+        if (len <= 14) return '1.4rem';
+        return '1.1rem';
+    })();
+
+    const CurrencySelect = ({ value, onChange }: { value: string; onChange: (v: string) => void }) => (
+        <select
+            value={value}
+            onChange={(e) => onChange(e.target.value)}
+            className="w-full bg-transparent font-bold text-sm text-text-primary outline-none cursor-pointer"
+        >
+            <optgroup label="Para Birimleri">
+                {CURRENCY_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </optgroup>
+            <optgroup label="Altın &amp; Gümüş">
+                {GOLD_OPTIONS.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+            </optgroup>
+        </select>
+    );
+
+    // Short label for the badge chip
+    const getShortLabel = (val: string) => {
+        if (val.startsWith('GOLD:')) {
+            const map: Record<string, string> = {
+                GRAM_24: '24K', GRAM_22: '22K', GRAM_18: '18K', GRAM_14: '14K',
+                CEYREK: 'Çeyrek', YARIM: 'Yarım', TAM: 'Tam', ATA: 'Ata',
+                CUMHURIYET: 'Cum.'
+            };
+            return map[val.split(':')[1]] ?? val.split(':')[1];
+        }
+        if (val === 'SILVER_999') return 'Gümüş';
+        return val;
+    };
 
     return (
-        <div className="w-full space-y-4">
-            <div className="bg-surface p-6 rounded-2xl border border-border shadow-md ring-1 ring-black/5 dark:ring-white/5 transition-shadow hover:shadow-lg">
-                <label className="block text-sm font-medium text-text-secondary mb-2 uppercase tracking-wider">Miktar</label>
-                <div className="relative">
-                    <input
-                        type="number"
-                        value={amount}
-                        onChange={(e) => setAmount(e.target.value)}
-                        className="w-full text-4xl font-bold bg-transparent border-b-2 border-border focus:border-primary outline-none py-2 text-text-primary placeholder-gray-300"
-                        placeholder="0.00"
-                    />
+        <div className="w-full space-y-3">
+
+            {/* ── Result card (top, most prominent) ── */}
+            <div className="relative overflow-hidden rounded-3xl bg-gradient-to-br from-indigo-600 via-violet-600 to-purple-700 p-6 shadow-2xl shadow-violet-900/30">
+                {/* decorative blur blobs */}
+                <div className="absolute -top-8 -right-8 w-36 h-36 rounded-full bg-white/10 blur-2xl pointer-events-none" />
+                <div className="absolute -bottom-6 -left-6 w-28 h-28 rounded-full bg-white/5 blur-xl pointer-events-none" />
+
+                <p className="text-white/60 text-[11px] font-semibold uppercase tracking-widest mb-1 relative z-10">Sonuç</p>
+                {isLoading ? (
+                    <div className="flex items-center gap-2 relative z-10">
+                        <div className="w-3 h-3 rounded-full bg-white/40 animate-bounce [animation-delay:.1s]" />
+                        <div className="w-3 h-3 rounded-full bg-white/40 animate-bounce [animation-delay:.2s]" />
+                        <div className="w-3 h-3 rounded-full bg-white/40 animate-bounce [animation-delay:.3s]" />
+                    </div>
+                ) : (
+                    <h2
+                        className="font-black text-white tracking-tight leading-none relative z-10 tabular-nums transition-all duration-200"
+                        style={{ fontSize: resultFontSize }}
+                    >
+                        {resultStr}
+                    </h2>
+                )}
+
+                <div className="flex items-center gap-2 mt-3 relative z-10 flex-wrap">
+                    <span className="text-xs text-white/70 font-medium">
+                        {amount || '1'} <span className="font-bold text-white">{getShortLabel(fromCurrency)}</span>
+                        {' '}&rarr;{' '}
+                        <span className="font-bold text-white">{getShortLabel(toCurrency)}</span>
+                    </span>
+                    {turkishGold && (
+                        <span className="ml-auto text-[10px] bg-emerald-500/30 text-emerald-200 px-2 py-0.5 rounded-full font-semibold border border-emerald-400/20">
+                            ✓ TR Piyasa
+                        </span>
+                    )}
                 </div>
             </div>
 
-            <div className="grid grid-cols-[1fr,auto,1fr] gap-4 items-center">
-                <div className="bg-surface p-4 rounded-xl border border-border shadow-sm">
-                    <label className="block text-[10px] font-bold text-text-secondary mb-1 uppercase">Kaynak</label>
-                    <select
-                        value={fromCurrency}
-                        onChange={(e) => setFromCurrency(e.target.value)}
-                        className="w-full bg-transparent font-bold text-lg text-text-primary outline-none cursor-pointer"
-                    >
-                        <option value="TRY">TRY</option>
-                        <option value="USD">USD</option>
-                        <option value="EUR">EUR</option>
-                        <option value="GOLD">Altın</option>
-                    </select>
+            {/* ── Amount input ── */}
+            <div className="bg-surface rounded-2xl border border-border px-5 py-4 shadow-sm">
+                <label className="block text-[10px] font-bold text-text-secondary mb-1.5 uppercase tracking-widest">Miktar</label>
+                <input
+                    type="number"
+                    value={amount}
+                    onChange={(e) => setAmount(e.target.value)}
+                    className="w-full font-bold bg-transparent outline-none text-text-primary placeholder-text-secondary/30 tabular-nums transition-all duration-150"
+                    style={{ fontSize: amountFontSize }}
+                    placeholder="0"
+                    inputMode="decimal"
+                />
+            </div>
+
+            {/* ── From / Swap / To ── */}
+            <div className="grid grid-cols-[1fr,44px,1fr] gap-2 items-stretch">
+                {/* From */}
+                <div className="bg-surface rounded-2xl border border-border px-4 py-3 shadow-sm flex flex-col gap-1">
+                    <span className="text-[10px] font-bold text-text-secondary uppercase tracking-widest">Kaynak</span>
+                    <div className="flex items-center gap-1.5">
+                        <span className="text-lg font-black text-text-primary">{getShortLabel(fromCurrency)}</span>
+                    </div>
+                    <CurrencySelect value={fromCurrency} onChange={setFromCurrency} />
                 </div>
 
-                <div className="flex justify-center">
-                    <button
-                        onClick={() => {
-                            setFromCurrency(toCurrency);
-                            setToCurrency(fromCurrency);
-                        }}
-                        className="p-3 rounded-full bg-surface border border-border hover:bg-background text-primary transition-all shadow-sm active:scale-95 active:rotate-180"
-                    >
-                        <ArrowRightLeft size={20} />
-                    </button>
-                </div>
+                {/* Swap */}
+                <button
+                    onClick={() => { setFromCurrency(toCurrency); setToCurrency(fromCurrency); }}
+                    className="self-center rounded-full w-11 h-11 flex items-center justify-center bg-indigo-600 text-white shadow-lg shadow-indigo-600/30 hover:bg-indigo-500 active:scale-90 transition-all"
+                >
+                    <ArrowRightLeft size={18} />
+                </button>
 
-                <div className="bg-surface p-4 rounded-xl border border-border shadow-sm">
-                    <label className="block text-[10px] font-bold text-text-secondary mb-1 uppercase">Hedef</label>
-                    <select
-                        value={toCurrency}
-                        onChange={(e) => setToCurrency(e.target.value)}
-                        className="w-full bg-transparent font-bold text-lg text-text-primary outline-none cursor-pointer"
-                    >
-                        <option value="TRY">TRY</option>
-                        <option value="USD">USD</option>
-                        <option value="EUR">EUR</option>
-                        <option value="GOLD">Altın</option>
-                    </select>
+                {/* To */}
+                <div className="bg-surface rounded-2xl border border-border px-4 py-3 shadow-sm flex flex-col gap-1">
+                    <span className="text-[10px] font-bold text-text-secondary uppercase tracking-widest">Hedef</span>
+                    <div className="flex items-center gap-1.5">
+                        <span className="text-lg font-black text-text-primary">{getShortLabel(toCurrency)}</span>
+                    </div>
+                    <CurrencySelect value={toCurrency} onChange={setToCurrency} />
                 </div>
             </div>
 
-            <div className="bg-primary/5 dark:bg-primary/10 p-6 rounded-2xl border border-primary/20 text-center shadow-inner">
-                <p className="text-sm font-medium text-text-secondary mb-1">Hesaplanan Değer</p>
-                <h2 className="text-4xl font-black text-primary tracking-tight">
-                    {formatCurrency(result || 0, toCurrency)}
-                </h2>
-                <p className="text-xs text-text-secondary mt-2 opacity-60 font-medium">
-                    * Döviz kurları anlık değişiklik gösterebilir.
-                </p>
-            </div>
+            <p className="text-center text-[10px] text-text-secondary/50 font-medium">
+                * Kurlar 8 saatte bir güncellenir
+            </p>
         </div>
     );
 };
+
 
