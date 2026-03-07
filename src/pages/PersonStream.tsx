@@ -614,7 +614,7 @@ export const PersonStream = () => {
                         return (
                             <SummaryCard
                                 data-mode="TOTAL"
-                                title="Toplam Net Varlık"
+                                title="Genel Durum"
                                 currency="TRY"
                                 net={totalNet}
                                 receivables={totalRec}

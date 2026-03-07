@@ -72,7 +72,7 @@ export const UserBalanceHeader: React.FC<UserBalanceHeaderProps> = ({
             {/* Balance Display */}
             <div>
                 <p className="text-[11px] text-text-secondary mb-2 uppercase tracking-wide font-semibold px-1">
-                    {showTotalBalance ? 'Toplam Varlık (Akış + Özel)' : 'Akış Varlığı'}
+                    {showTotalBalance ? 'Toplam Durum (Akış + Özel)' : 'Akış Durumu'}
                 </p>
                 <div className="flex gap-3 overflow-x-auto pb-2 snap-x snap-mandatory scrollbar-hide pt-1">
                     {Array.from(displayBalance.entries())

@@ -1,5 +1,6 @@
 import { useState, useMemo, useEffect, useCallback, useRef } from 'react';
 import { useDebts } from '../hooks/useDebts';
+import { useLedgerSummary } from '../hooks/useLedgerSummary';
 import { useContacts } from '../hooks/useContacts';
 import { useAuth } from '../hooks/useAuth';
 import { useContactName } from '../hooks/useContactName';
@@ -38,7 +39,7 @@ interface ContactSummary {
 }
 
 export const Dashboard = () => {
-    const { dashboardDebts, loading } = useDebts();
+    const { dashboardDebts, ledgerDebts, loading } = useDebts();
     const { user } = useAuth();
     const { identifiers, isMe } = useUserIdentifiers();
 
@@ -70,6 +71,9 @@ export const Dashboard = () => {
         fetchRates().then(setRates);
         fetchTurkishGoldRates().then(setTurkishGold);
     }, []);
+
+    // Ledger currency summary (all cari hesap transactions aggregated by currency)
+    const { summary: ledgerSummary } = useLedgerSummary(ledgerDebts, user?.uid);
 
     // GHOST USER PROTOCOL: Background Claiming & Normalization
     useEffect(() => {
@@ -335,7 +339,33 @@ export const Dashboard = () => {
             contact.balances.set(currency, currentBalance + effectiveBalance);
         });
 
-        // 2. Convert Map to List & Filter
+        // 2. Merge Ledger (Cari Hesap) currency balances into totalsByCurrency
+        // This ensures foreign-currency cari transactions appear in Dashboard currency cards
+        for (const [currency, ledgerTotal] of Object.entries(ledgerSummary)) {
+            currencies.add(currency);
+            if (!totalsByCurrency[currency]) {
+                totalsByCurrency[currency] = {
+                    receivables: 0, payables: 0, net: 0, currency,
+                    pureGoldReceivables: 0, pureGoldPayables: 0, pureGoldNet: 0
+                };
+            }
+            totalsByCurrency[currency].receivables += ledgerTotal.receivables;
+            totalsByCurrency[currency].payables += ledgerTotal.payables;
+            totalsByCurrency[currency].net += ledgerTotal.net;
+
+            // Add TRY equivalent to grandTotal
+            const isGold = currency.startsWith('GOLD:');
+            const baseCurr = isGold ? 'GOLD' : currency;
+            const goldType = isGold ? currency.split(':')[1] : undefined;
+            const goldDetail = goldType ? { type: goldType } : undefined;
+            const tryRec = convertToTRY(ledgerTotal.receivables, baseCurr, rates!, undefined, goldDetail, turkishGold);
+            const tryPay = convertToTRY(ledgerTotal.payables, baseCurr, rates!, undefined, goldDetail, turkishGold);
+            grandTotalInTRY.receivables += tryRec;
+            grandTotalInTRY.payables += tryPay;
+            grandTotalInTRY.net += (tryRec - tryPay);
+        }
+
+        // 3. Convert Map to List & Filter
         const mapEntries = Array.from(contactMap.entries());
         const summaries = mapEntries.map(([id, data]) => {
             let displayBalance = 0;
@@ -384,7 +414,7 @@ export const Dashboard = () => {
             grandTotalInTRY
         };
 
-    }, [dashboardDebts, user, rates, resolveName, contactsMap, selectedCurrency, identifiers.length, isMe]);
+    }, [dashboardDebts, ledgerSummary, user, rates, turkishGold, resolveName, contactsMap, selectedCurrency, identifiers.length, isMe]);
 
     // Stable now for render phase (React Purity)
     const [renderNow] = useState(() => Date.now());
@@ -609,7 +639,7 @@ export const Dashboard = () => {
                     {/* 1. FIXED GRAND TOTAL CARD (Net Assets in TRY) */}
                     <SummaryCard
                         data-currency="ALL"
-                        title="Toplam Varlık"
+                        title="Genel Durum"
                         currency="TRY"
                         net={grandTotalInTRY.net}
                         receivables={grandTotalInTRY.receivables}
@@ -650,7 +680,7 @@ export const Dashboard = () => {
                                 <SummaryCard
                                     key={total.currency}
                                     data-currency={total.currency}
-                                    title={isGold ? `Altın (${goldTypeData?.label || goldType})` : `Net Varlık (${total.currency})`}
+                                    title={isGold ? `Altın (${goldTypeData?.label || goldType})` : `Net Durum (${total.currency})`}
                                     currency={total.currency}
                                     net={net}
                                     receivables={receivables}

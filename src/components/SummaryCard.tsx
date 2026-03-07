@@ -1,5 +1,5 @@
 import React from 'react';
-import { Wallet } from 'lucide-react';
+import { Wallet, ArrowRightLeft } from 'lucide-react';
 import { formatCurrency } from '../utils/format';
 import clsx from 'clsx';
 
@@ -85,9 +85,20 @@ export const SummaryCard: React.FC<SummaryCardProps & React.HTMLAttributes<HTMLD
                             {showToggle && (
                                 <button
                                     onClick={(e) => { e.stopPropagation(); onToggle?.(); }}
-                                    className="text-[10px] bg-white/20 px-2 py-1 rounded-lg font-bold backdrop-blur-sm hover:bg-white/30 transition-colors active:scale-95"
+                                    title={isToggled ? 'Orijinal para birimine dön' : 'TL karşılığını gör'}
+                                    className="flex items-center gap-1 text-[10px] bg-white/20 px-2 py-1 rounded-lg font-bold backdrop-blur-sm hover:bg-white/30 transition-colors active:scale-95"
                                 >
-                                    {isToggled ? `Geri` : 'TRY'}
+                                    {isToggled ? (
+                                        <>
+                                            <ArrowRightLeft size={10} />
+                                            <span>{currency.startsWith('GOLD:') ? currency.split(':')[1] : currency}</span>
+                                        </>
+                                    ) : (
+                                        <>
+                                            <ArrowRightLeft size={10} />
+                                            <span>₺</span>
+                                        </>
+                                    )}
                                 </button>
                             )}
                             {!showToggle && (
