@@ -110,6 +110,13 @@ service cloud.firestore {
       }
     }
 
+    match /feedbacks/{feedbackId} {
+      // Any authenticated user can submit feedback
+      allow create: if request.auth != null;
+      // Read allowed for authenticated users (admin panel uses this)
+      allow read: if request.auth != null;
+    }
+
     match /phone_registry/{hashedPhone} {
       // Public lookup for existence check (by hashed phone number)
       allow get: if true;

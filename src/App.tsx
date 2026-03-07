@@ -14,12 +14,24 @@ import { useAuth } from './hooks/useAuth';
 import { ActiveSessions } from './pages/ActiveSessions';
 import { AccountSettings } from './pages/AccountSettings';
 import { PrivacySettings } from './pages/PrivacySettings';
+import { AdminPanel } from './pages/AdminPanel';
 
 const ProtectedRoute = ({ children }: { children: React.ReactNode }) => {
   const { user, loading } = useAuth();
 
   if (loading) return <div className="flex justify-center items-center h-screen">Yükleniyor...</div>;
   if (!user) return <Navigate to="/login" />;
+
+  return <>{children}</>;
+};
+
+const AdminRoute = ({ children }: { children: React.ReactNode }) => {
+  const { user, loading } = useAuth();
+
+  if (loading) return <div className="flex justify-center items-center h-screen">Yükleniyor...</div>;
+  if (!user) return <Navigate to="/login" />;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  if (!(user as any).isAdmin) return <Navigate to="/" replace />;
 
   return <>{children}</>;
 };
@@ -43,6 +55,7 @@ function App() {
               <Routes>
                 <Route path="/login" element={<Login />} />
                 <Route path="/register" element={<Navigate to="/login" replace />} />
+                <Route path="/admin" element={<AdminRoute><AdminPanel /></AdminRoute>} />
 
                 <Route element={
                   <ProtectedRoute>
