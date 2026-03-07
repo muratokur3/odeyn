@@ -1,0 +1,18 @@
+rules_version = '2';
+service firebase.storage {
+  match /b/{bucket}/o {
+    
+    // GÜVENLİ PROFİL FOTOĞRAFI KURALI
+    match /profile_images/{userId} {
+      // Giriş yapmış HERKES (arkadaşlarınız) görebilir
+      allow read: if request.auth != null;
+      // Sadece HESAP SAHİBİ yükleyebilir/silebilir ve dosya boyutu/tipi kontrol edilebilir
+      allow write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Diğer tüm klasörleri varsayılan olarak kilitle (Güvenlik İçin)
+    match /{allPaths=**} {
+       allow read, write: if false; 
+    }
+  }
+}

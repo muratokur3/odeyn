@@ -14,14 +14,15 @@ export const uploadProfileImage = async (
         // Compress image before upload
         const compressedBlob = await compressImage(file, 800, 0.8);
         
-        const timestamp = Date.now();
-        const fileName = `profile_${timestamp}.jpg`;
-        const storageRef = ref(storage, `profiles/${userId}/${fileName}`);
+        // Upload exactly to profile_images/{userId} to match strict Firebase Storage rules
+        const storageRef = ref(storage, `profile_images/${userId}`);
+        const metadata = { contentType: 'image/jpeg' };
         
-        const snapshot = await uploadBytes(storageRef, compressedBlob);
+        const snapshot = await uploadBytes(storageRef, compressedBlob, metadata);
         const url = await getDownloadURL(snapshot.ref);
         
-        return url;
+        // Append timestamp to bypass browser cache since we are overwriting the same path
+        return `${url}&t=${Date.now()}`;
     } catch (error) {
         console.error("Error in uploadProfileImage:", error);
         throw error;

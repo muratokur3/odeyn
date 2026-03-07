@@ -119,9 +119,6 @@ export const Login = () => {
                     <p className="text-text-secondary">Güvenli ve Kolay Borç Takibi</p>
                 </div>
 
-                <div className="flex justify-center mb-4">
-                    {loading && <Loader2 className="animate-spin text-primary" size={32} />}
-                </div>
 
                 <div id="login-recaptcha"></div>
 
