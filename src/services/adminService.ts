@@ -19,7 +19,7 @@ export interface AdminStats {
     totalFeedbacks: number;
 }
 
-export interface AdminFeedback extends Feedback {
+export interface AdminFeedback extends Omit<Feedback, 'createdAt'> {
     id: string;
     createdAt: { seconds: number; nanoseconds: number } | null;
 }
