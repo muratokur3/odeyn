@@ -38,14 +38,27 @@ export const initiatePhoneVerification = functions.https.onCall(async (data, con
         }
     }
 
-    // 2. Generate Code
+    // 2. Check for rate limit (e.g., 60 seconds)
+    const verificationRef = db.collection(VERIFICATION_CODES_COLLECTION).doc(clean);
+    const existingDoc = await verificationRef.get();
+
+    if (existingDoc.exists) {
+        const existingData = existingDoc.data();
+        const lastSent = existingData?.createdAt?.toDate();
+        if (lastSent && (Date.now() - lastSent.getTime() < 60000)) {
+            throw new functions.https.HttpsError('resource-exhausted', 'Lütfen tekrar denemeden önce 60 saniye bekleyin.');
+        }
+    }
+
+    // 3. Generate Code
     const code = Math.floor(100000 + Math.random() * 900000).toString();
     const expiresAt = admin.firestore.Timestamp.fromDate(new Date(Date.now() + 5 * 60 * 1000)); // 5 mins
 
-    // 3. Save Code
+    // 4. Save Code
     await db.collection(VERIFICATION_CODES_COLLECTION).doc(clean).set({
         code,
         expiresAt,
+        createdAt: admin.firestore.FieldValue.serverTimestamp(),
         phoneNumber: clean,
         uid // Limit verification to the user who initiated
     });
