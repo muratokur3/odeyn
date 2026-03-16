@@ -1,10 +1,21 @@
-import { collection, getDocs, deleteDoc, doc as firestoreDoc, updateDoc } from 'firebase/firestore';
+import {
+    collection,
+    getDocs,
+    doc as firestoreDoc,
+    updateDoc,
+    query,
+    where,
+    writeBatch,
+    serverTimestamp,
+    getDoc
+} from 'firebase/firestore';
 import { db } from './firebase';
 
 /**
  * Account Deletion Service - GDPR Compliant
  * 
- * Strategy: Anonymize user but keep debt records for counterparties
+ * Strategy: Anonymize user profile but keep debt records for counterparties
+ * by redacting Personal Identifiable Information (PII).
  */
 
 export interface DeletionResult {
@@ -13,7 +24,9 @@ export interface DeletionResult {
   deletedItems: {
     user: boolean;
     contacts: number;
-    ownTransactions: number;
+    sessions: number;
+    notifications: number;
+    notificationReadStatus: number;
   };
   anonymizedDebts: number;
 }
@@ -28,62 +41,138 @@ export async function deleteUserAccount(userId: string): Promise<DeletionResult>
     deletedItems: {
       user: false,
       contacts: 0,
-      ownTransactions: 0
+      sessions: 0,
+      notifications: 0,
+      notificationReadStatus: 0
     },
     anonymizedDebts: 0
   };
 
   try {
-    // 1. Anonymize user in main users collection
+    // 1. Fetch User Data to get Phone (for later redaction)
     const userRef = firestoreDoc(db, 'users', userId);
+    const userSnap = await getDoc(userRef);
+    let userPhone = '';
+
+    if (userSnap.exists()) {
+        userPhone = userSnap.data().phoneNumber;
+    }
+
+    // 2. Anonymize user in main users collection
     await updateDoc(userRef, {
       displayName: '[Silinmiş Kullanıcı]',
       email: null,
       photoURL: null,
       phoneNumber: '[REDACTED]',
       phoneNumbers: [],
-      deletedAt: new Date(),
-      isAnonymized: true
+      deletedAt: serverTimestamp(),
+      isAnonymized: true,
+      preferences: {},
+      settings: {}
     });
     result.deletedItems.user = true;
 
-    // 2. Delete user's contacts subcollection
-    const contactsSnapshot = await getDocs(collection(db, `users/${userId}/contacts`));
-    for (const doc of contactsSnapshot.docs) {
-      await deleteDoc(doc.ref);
-      result.deletedItems.contacts++;
-    }
+    // Use Batch for efficient deletions
+    const deletionBatch = writeBatch(db);
 
-    // 3. Anonymize debts where user is involved
-    const debtsSnapshot = await getDocs(collection(db, 'debts'));
+    // 3. Delete personal sub-collections
+    // Contacts
+    const contactsSnapshot = await getDocs(collection(db, `users/${userId}/contacts`));
+    contactsSnapshot.docs.forEach(doc => {
+        deletionBatch.delete(doc.ref);
+        result.deletedItems.contacts++;
+    });
+
+    // Sessions
+    const sessionsSnapshot = await getDocs(collection(db, `users/${userId}/sessions`));
+    sessionsSnapshot.docs.forEach(doc => {
+        deletionBatch.delete(doc.ref);
+        result.deletedItems.sessions++;
+    });
+
+    // Notification Read Status
+    const readStatusSnapshot = await getDocs(collection(db, `users/${userId}/notificationReadStatus`));
+    readStatusSnapshot.docs.forEach(doc => {
+        deletionBatch.delete(doc.ref);
+        result.deletedItems.notificationReadStatus++;
+    });
+
+    // 4. Delete notifications addressed to this user
+    const notificationsSnapshot = await getDocs(query(collection(db, 'notifications'), where('userId', '==', userId)));
+    notificationsSnapshot.docs.forEach(doc => {
+        deletionBatch.delete(doc.ref);
+        result.deletedItems.notifications++;
+    });
+
+    await deletionBatch.commit();
+
+    // 5. Anonymize debts where user is involved (Targeted Query)
+    const debtsQuery = query(collection(db, 'debts'), where('participants', 'array-contains', userId));
+    const debtsSnapshot = await getDocs(debtsQuery);
+
     for (const debtDoc of debtsSnapshot.docs) {
       const data = debtDoc.data();
-      const needsUpdate = data.borrowerId === userId || data.lenderId === userId;
+      const debtBatch = writeBatch(db);
 
-      if (needsUpdate) {
-        const updates: any = {};
-        
-        if (data.borrowerId === userId) {
-          updates.borrowerName = '[Silinmiş Kullanıcı]';
-        }
-        if (data.lenderId === userId) {
-          updates.lenderName = '[Silinmiş Kullanıcı]';
-        }
+      const debtUpdates: Record<string, unknown> = {
+          updatedAt: serverTimestamp()
+      };
 
-        await updateDoc(debtDoc.ref, updates);
+      let debtChanged = false;
+
+      if (data.borrowerId === userId) {
+        debtUpdates.borrowerName = '[Silinmiş Kullanıcı]';
+        debtChanged = true;
+      }
+      if (data.lenderId === userId) {
+        debtUpdates.lenderName = '[Silinmiş Kullanıcı]';
+        debtChanged = true;
+      }
+
+      // Redact locked phone number if it matches the deleted user's phone
+      if (userPhone && data.lockedPhoneNumber === userPhone) {
+          debtUpdates.lockedPhoneNumber = '[REDACTED]';
+          debtChanged = true;
+      }
+
+      if (debtChanged) {
+        debtBatch.update(debtDoc.ref, debtUpdates);
         result.anonymizedDebts++;
       }
-    }
 
-    // 4. Delete user's own transactions (not shared with others)
-    const transactionsSnapshot = await getDocs(collection(db, 'transactions'));
-    for (const txDoc of transactionsSnapshot.docs) {
-      const data = txDoc.data();
-      // Only delete if both parties are the same user (self-transactions)
-      if (data.fromUserId === userId && data.toUserId === userId) {
-        await deleteDoc(txDoc.ref);
-        result.deletedItems.ownTransactions++;
+      // 6. Anonymize Logs for this debt
+      const logsSnapshot = await getDocs(collection(db, `debts/${debtDoc.id}/logs`));
+      logsSnapshot.docs.forEach(logDoc => {
+          const logData = logDoc.data();
+          if (logData.performedBy === userId) {
+              debtBatch.update(logDoc.ref, {
+                  note: logData.note ? '[Kullanıcı Silindi] ' + logData.note.replace(/[0-9+]{8,}/g, '[PHONE]') : '[Kullanıcı Silindi]',
+                  auditMeta: {
+                      ...logData.auditMeta,
+                      actorId: '[REDACTED]'
+                  }
+              });
+          }
+      });
+
+      // 7. Anonymize Transactions for Ledgers
+      if (data.type === 'LEDGER') {
+          const txSnapshot = await getDocs(collection(db, `debts/${debtDoc.id}/transactions`));
+          txSnapshot.docs.forEach(txDoc => {
+              const txData = txDoc.data();
+              if (txData.createdBy === userId) {
+                  debtBatch.update(txDoc.ref, {
+                      description: txData.description ? '[Silinmiş] ' + txData.description.replace(/[0-9+]{8,}/g, '[PHONE]') : '[Silinmiş İşlem]',
+                      auditMeta: {
+                          ...txData.auditMeta,
+                          actorId: '[REDACTED]'
+                      }
+                  });
+              }
+          });
       }
+
+      await debtBatch.commit();
     }
 
     result.success = true;
@@ -98,16 +187,9 @@ export async function deleteUserAccount(userId: string): Promise<DeletionResult>
 }
 
 /**
- * IMPORTANT: This should be called after user confirms deletion
- * and potentially after a grace period (e.g., 30 days)
+ * Initiates the account deletion process.
+ * In a production environment, this might involve a grace period or additional verification.
  */
 export async function initiateAccountDeletion(userId: string): Promise<void> {
-  // In production, this might:
-  // 1. Mark account for deletion
-  // 2. Notify person via SMS/Push
-  // 3. Wait 30 days
-  // 4. Then call deleteUserAccount()
-  
-  // For now, direct deletion:
   await deleteUserAccount(userId);
 }

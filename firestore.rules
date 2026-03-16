@@ -7,8 +7,10 @@ service cloud.firestore {
       allow list: if request.auth != null;
       allow get: if request.auth != null;
       // VULNERABILITY FIX: Prevent creating other users' profiles
-      allow create: if request.auth != null && request.auth.uid == userId;
-      allow update: if request.auth != null && request.auth.uid == userId;
+      allow create: if request.auth != null && request.auth.uid == userId
+                   && request.resource.data.isAdmin != true;
+      allow update: if request.auth != null && request.auth.uid == userId
+                   && (request.resource.data.get('isAdmin', resource.data.get('isAdmin', false)) == resource.data.get('isAdmin', false));
 
       // Allow access to blockedUsers subcollection
       match /blockedUsers/{blockedUid} {
@@ -113,8 +115,8 @@ service cloud.firestore {
     match /feedbacks/{feedbackId} {
       // Any authenticated user can submit feedback
       allow create: if request.auth != null;
-      // Read allowed for authenticated users (admin panel uses this)
-      allow read: if request.auth != null;
+      // Read allowed ONLY for administrators
+      allow read: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
     }
 
     match /phone_registry/{hashedPhone} {
