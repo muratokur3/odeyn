@@ -14,7 +14,8 @@ import {
     deleteDoc,
     getDoc,
     updateDoc,
-    writeBatch
+    writeBatch,
+    setDoc
 } from 'firebase/firestore';
 import { db } from './firebase';
 import type { Debt, DebtStatus, PaymentLog, User, Contact, Installment } from '../types';
@@ -368,6 +369,17 @@ export const createDebt = async (
     };
 
     const docRef = await addDoc(collection(db, 'debts'), cleanObject(debtData));
+
+    // Update rate limit metadata
+    try {
+        const rateLimitRef = doc(db, 'users', currentUserId, 'metadata', 'rateLimit');
+        await setDoc(rateLimitRef, {
+            lastDebtCreated: serverTimestamp(),
+            lastDebtId: docRef.id
+        }, { merge: true });
+    } catch (e) {
+        console.warn("Failed to update rate limit metadata:", e);
+    }
 
     // Create notification
     // We use the resolved UID to send notifications, not the raw counterpartyId

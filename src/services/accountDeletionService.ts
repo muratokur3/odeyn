@@ -1,10 +1,11 @@
-import { collection, getDocs, deleteDoc, doc as firestoreDoc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, doc as firestoreDoc, updateDoc, query, where, writeBatch } from 'firebase/firestore';
 import { db } from './firebase';
 
 /**
  * Account Deletion Service - GDPR Compliant
  * 
- * Strategy: Anonymize user but keep debt records for counterparties
+ * Strategy: Anonymize user but keep debt records for counterparties to maintain financial integrity.
+ * Version 1.1: Uses targeted queries and batch operations for scalability.
  */
 
 export interface DeletionResult {
@@ -47,43 +48,60 @@ export async function deleteUserAccount(userId: string): Promise<DeletionResult>
     });
     result.deletedItems.user = true;
 
-    // 2. Delete user's contacts subcollection
+    // 2. Delete user's contacts subcollection (Chunked)
     const contactsSnapshot = await getDocs(collection(db, `users/${userId}/contacts`));
-    for (const doc of contactsSnapshot.docs) {
-      await deleteDoc(doc.ref);
-      result.deletedItems.contacts++;
+    if (!contactsSnapshot.empty) {
+        const batch = writeBatch(db);
+        contactsSnapshot.docs.forEach(d => batch.delete(d.ref));
+        await batch.commit();
+        result.deletedItems.contacts = contactsSnapshot.size;
     }
 
-    // 3. Anonymize debts where user is involved
-    const debtsSnapshot = await getDocs(collection(db, 'debts'));
-    for (const debtDoc of debtsSnapshot.docs) {
-      const data = debtDoc.data();
-      const needsUpdate = data.borrowerId === userId || data.lenderId === userId;
+    // 3. Anonymize debts where user is involved (Targeted Query)
+    const debtsRef = collection(db, 'debts');
+    const debtsQuery = query(debtsRef, where('participants', 'array-contains', userId));
+    const debtsSnapshot = await getDocs(debtsQuery);
 
-      if (needsUpdate) {
-        const updates: any = {};
-        
-        if (data.borrowerId === userId) {
-          updates.borrowerName = '[Silinmiş Kullanıcı]';
-        }
-        if (data.lenderId === userId) {
-          updates.lenderName = '[Silinmiş Kullanıcı]';
-        }
+    if (!debtsSnapshot.empty) {
+        const batch = writeBatch(db);
+        debtsSnapshot.docs.forEach(debtDoc => {
+            const data = debtDoc.data();
+            const updates: Record<string, unknown> = {};
 
-        await updateDoc(debtDoc.ref, updates);
-        result.anonymizedDebts++;
-      }
+            if (data.borrowerId === userId) {
+              updates.borrowerName = '[Silinmiş Kullanıcı]';
+            }
+            if (data.lenderId === userId) {
+              updates.lenderName = '[Silinmiş Kullanıcı]';
+            }
+
+            if (Object.keys(updates).length > 0) {
+                batch.update(debtDoc.ref, updates);
+                result.anonymizedDebts++;
+            }
+        });
+        await batch.commit();
     }
 
-    // 4. Delete user's own transactions (not shared with others)
-    const transactionsSnapshot = await getDocs(collection(db, 'transactions'));
-    for (const txDoc of transactionsSnapshot.docs) {
-      const data = txDoc.data();
-      // Only delete if both parties are the same user (self-transactions)
-      if (data.fromUserId === userId && data.toUserId === userId) {
-        await deleteDoc(txDoc.ref);
-        result.deletedItems.ownTransactions++;
-      }
+    // 4. Delete user's own standalone transactions (not shared with others)
+    const transactionsRef = collection(db, 'transactions');
+    const txQuery = query(transactionsRef, where('fromUserId', '==', userId), where('toUserId', '==', userId));
+    const transactionsSnapshot = await getDocs(txQuery);
+
+    if (!transactionsSnapshot.empty) {
+        const batch = writeBatch(db);
+        transactionsSnapshot.docs.forEach(txDoc => batch.delete(txDoc.ref));
+        await batch.commit();
+        result.deletedItems.ownTransactions = transactionsSnapshot.size;
+    }
+
+    // 5. Clean up other user-related data (Sessions, Notifications)
+    const sessionsRef = collection(db, `users/${userId}/sessions`);
+    const sessionsSnap = await getDocs(sessionsRef);
+    if (!sessionsSnap.empty) {
+        const batch = writeBatch(db);
+        sessionsSnap.docs.forEach(d => batch.delete(d.ref));
+        await batch.commit();
     }
 
     result.success = true;

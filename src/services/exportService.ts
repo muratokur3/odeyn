@@ -1,9 +1,11 @@
-import { collection, getDocs, doc as firestoreDoc, Timestamp } from 'firebase/firestore';
+import { collection, getDocs, doc as firestoreDoc, getDoc, query, where } from 'firebase/firestore';
 import { db } from './firebase';
 import type { Debt, Transaction, User, Contact } from '../types';
 
 /**
  * Export Service - GDPR Compliant Data Export
+ *
+ * Version 1.1: Optimized with targeted queries for scalability and privacy compliance.
  */
 
 export interface ExportData {
@@ -25,47 +27,51 @@ export async function exportUserDataAsJSON(userId: string): Promise<string> {
     debts: [],
     transactions: [],
     exportDate: new Date().toISOString(),
-    version: '1.0'
+    version: '1.1'
   };
 
   try {
-    // Fetch user data
-    const userDoc = await getDocs(collection(db, 'users'));
-    const userData = userDoc.docs.find(d => d.id === userId)?.data() as User;
-    if (userData) {
-      exportData.user = { ...userData, uid: userId };
+    // 1. Fetch user data (Targeted)
+    const userRef = firestoreDoc(db, 'users', userId);
+    const userSnap = await getDoc(userRef);
+    if (userSnap.exists()) {
+      exportData.user = { ...userSnap.data() as User, uid: userId };
     }
 
-    // Fetch contacts
+    // 2. Fetch contacts (Subcollection)
     const contactsSnapshot = await getDocs(collection(db, `users/${userId}/contacts`));
     exportData.contacts = contactsSnapshot.docs.map(doc => ({
       id: doc.id,
       ...doc.data()
     } as Contact));
 
-    // Fetch debts
-    const debtsSnapshot = await getDocs(collection(db, 'debts'));
-    exportData.debts = debtsSnapshot.docs
-      .filter(doc => {
-        const data = doc.data();
-        return data.borrowerId === userId || data.lenderId === userId;
-      })
-      .map(doc => ({
+    // 3. Fetch debts (Targeted Query)
+    const debtsRef = collection(db, 'debts');
+    const debtsQuery = query(debtsRef, where('participants', 'array-contains', userId));
+    const debtsSnapshot = await getDocs(debtsQuery);
+
+    exportData.debts = debtsSnapshot.docs.map(doc => ({
         id: doc.id,
         ...doc.data()
       } as Debt));
 
-    // Fetch transactions
-    const transactionsSnapshot = await getDocs(collection(db, 'transactions'));
-    exportData.transactions = transactionsSnapshot.docs
-      .filter(doc => {
-        const data = doc.data();
-        return data.fromUserId === userId || data.toUserId === userId;
-      })
-      .map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as Transaction));
+    // 4. Fetch standalone transactions (Legacy/Self)
+    // Note: Transactions within debts (Ledger) are typically included in debt logs or subcollections,
+    // but the 'transactions' root collection is checked for self-records.
+    const transactionsRef = collection(db, 'transactions');
+    const txQueryFrom = query(transactionsRef, where('fromUserId', '==', userId));
+    const txQueryTo = query(transactionsRef, where('toUserId', '==', userId));
+
+    const [txFromSnap, txToSnap] = await Promise.all([
+        getDocs(txQueryFrom),
+        getDocs(txQueryTo)
+    ]);
+
+    const txMap = new Map<string, Transaction>();
+    txFromSnap.forEach(d => txMap.set(d.id, { id: d.id, ...d.data() } as Transaction));
+    txToSnap.forEach(d => txMap.set(d.id, { id: d.id, ...d.data() } as Transaction));
+
+    exportData.transactions = Array.from(txMap.values());
 
     return JSON.stringify(exportData, null, 2);
   } catch (error) {
