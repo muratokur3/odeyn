@@ -19,7 +19,11 @@ export interface AdminStats {
     totalFeedbacks: number;
 }
 
-export interface AdminFeedback extends Feedback {
+/**
+ * AdminFeedback extends the base Feedback but overrides the createdAt type
+ * for client-side representation (Firestore Timestamp converted to Object).
+ */
+export interface AdminFeedback extends Omit<Feedback, 'createdAt'> {
     id: string;
     createdAt: { seconds: number; nanoseconds: number } | null;
 }
