@@ -3,7 +3,7 @@ import { useState, useEffect } from 'react';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { formatCurrency } from '../utils/format';
-import { History, Wallet, X } from 'lucide-react';
+import { History, Wallet, X, RefreshCw } from 'lucide-react';
 import { rejectPayment } from '../services/db';
 import { useAuth } from '../hooks/useAuth';
 import clsx from 'clsx';
@@ -119,13 +119,15 @@ export const HistoryList: React.FC<HistoryListProps> = ({ logs, currency, goldDe
                                             <div className={clsx(
                                                 "p-2 rounded-full shadow-sm",
                                                 log.type === 'PAYMENT' ? "bg-green-100 text-green-600" :
-                                                    log.type === 'PAYMENT_DECLARATION' ? "bg-green-100 text-green-600" : "bg-white text-blue-600"
+                                                    log.type === 'PAYMENT_DECLARATION' ? "bg-green-100 text-green-600" :
+                                                    log.type === 'HARD_RESET' ? "bg-red-100 text-red-600" : "bg-white text-blue-600"
                                             )}>
-                                                <Wallet size={16} />
+                                                {log.type === 'HARD_RESET' ? <RefreshCw size={16} /> : <Wallet size={16} />}
                                             </div>
                                             <div>
                                                 <p className="text-sm font-medium text-gray-900">
                                                     {log.type === 'INITIAL_CREATION' ? 'Borç Oluşturuldu' :
+                                                        log.type === 'HARD_RESET' ? 'Kayıt Sıfırlandı' :
                                                         (log.type === 'PAYMENT' || log.type === 'PAYMENT_DECLARATION') ? 'Ödeme' : 'Not Eklendi'}
                                                 </p>
                                                 <p className="text-xs text-gray-500">

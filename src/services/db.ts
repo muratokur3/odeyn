@@ -518,7 +518,7 @@ export const updateDebtHardReset = async (
             // 7. Add "Reset" Log
             const resetLogRef = doc(collection(db, `debts/${debtId}/logs`));
             transaction.set(resetLogRef, {
-                type: 'NOTE_ADDED',
+                type: 'HARD_RESET',
                 previousRemaining: 0, // Semantic reset
                 newRemaining: newOriginal,
                 amountPaid: 0,
