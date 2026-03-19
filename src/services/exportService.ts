@@ -1,6 +1,6 @@
-import { collection, getDocs, doc as firestoreDoc, Timestamp } from 'firebase/firestore';
+import { collection, getDocs, doc as firestoreDoc, getDoc, query, where } from 'firebase/firestore';
 import { db } from './firebase';
-import type { Debt, Transaction, User, Contact } from '../types';
+import type { Debt, Transaction, User, Contact, PaymentLog } from '../types';
 
 /**
  * Export Service - GDPR Compliant Data Export
@@ -9,10 +9,9 @@ import type { Debt, Transaction, User, Contact } from '../types';
 export interface ExportData {
   user: User;
   contacts: Contact[];
-  debts: Debt[];
-  transactions: Transaction[];
+  debts: (Debt & { transactions?: Transaction[], logs?: PaymentLog[] })[];
   exportDate: string;
-  version: string;
+  version: '1.1';
 }
 
 /**
@@ -23,17 +22,16 @@ export async function exportUserDataAsJSON(userId: string): Promise<string> {
     user: {} as User,
     contacts: [],
     debts: [],
-    transactions: [],
     exportDate: new Date().toISOString(),
-    version: '1.0'
+    version: '1.1'
   };
 
   try {
-    // Fetch user data
-    const userDoc = await getDocs(collection(db, 'users'));
-    const userData = userDoc.docs.find(d => d.id === userId)?.data() as User;
-    if (userData) {
-      exportData.user = { ...userData, uid: userId };
+    // Fetch user data directly
+    const userRef = firestoreDoc(db, 'users', userId);
+    const userSnap = await getDoc(userRef);
+    if (userSnap.exists()) {
+      exportData.user = { ...userSnap.data(), uid: userId } as User;
     }
 
     // Fetch contacts
@@ -43,29 +41,25 @@ export async function exportUserDataAsJSON(userId: string): Promise<string> {
       ...doc.data()
     } as Contact));
 
-    // Fetch debts
-    const debtsSnapshot = await getDocs(collection(db, 'debts'));
-    exportData.debts = debtsSnapshot.docs
-      .filter(doc => {
-        const data = doc.data();
-        return data.borrowerId === userId || data.lenderId === userId;
-      })
-      .map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as Debt));
+    // Fetch debts using efficient query
+    const debtsQuery = query(collection(db, 'debts'), where('participants', 'array-contains', userId));
+    const debtsSnapshot = await getDocs(debtsQuery);
 
-    // Fetch transactions
-    const transactionsSnapshot = await getDocs(collection(db, 'transactions'));
-    exportData.transactions = transactionsSnapshot.docs
-      .filter(doc => {
-        const data = doc.data();
-        return data.fromUserId === userId || data.toUserId === userId;
-      })
-      .map(doc => ({
-        id: doc.id,
-        ...doc.data()
-      } as Transaction));
+    for (const debtDoc of debtsSnapshot.docs) {
+      const debtData = {
+        id: debtDoc.id,
+        ...debtDoc.data()
+      } as Debt & { transactions?: Transaction[], logs?: PaymentLog[] };
+
+      // Fetch sub-collections for each debt
+      const txSnapshot = await getDocs(collection(db, `debts/${debtDoc.id}/transactions`));
+      debtData.transactions = txSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as Transaction));
+
+      const logsSnapshot = await getDocs(collection(db, `debts/${debtDoc.id}/logs`));
+      debtData.logs = logsSnapshot.docs.map(d => ({ id: d.id, ...d.data() } as PaymentLog));
+
+      exportData.debts.push(debtData);
+    }
 
     return JSON.stringify(exportData, null, 2);
   } catch (error) {

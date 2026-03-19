@@ -1,4 +1,4 @@
-import { collection, getDocs, deleteDoc, doc as firestoreDoc, updateDoc } from 'firebase/firestore';
+import { collection, getDocs, deleteDoc, doc as firestoreDoc, updateDoc, query, where } from 'firebase/firestore';
 import { db } from './firebase';
 
 /**
@@ -54,36 +54,73 @@ export async function deleteUserAccount(userId: string): Promise<DeletionResult>
       result.deletedItems.contacts++;
     }
 
-    // 3. Anonymize debts where user is involved
-    const debtsSnapshot = await getDocs(collection(db, 'debts'));
+    // 3. Process debts where user is involved (anonymize names and clean up sub-collections)
+    const debtsQuery = query(collection(db, 'debts'), where('participants', 'array-contains', userId));
+    const debtsSnapshot = await getDocs(debtsQuery);
+
     for (const debtDoc of debtsSnapshot.docs) {
       const data = debtDoc.data();
-      const needsUpdate = data.borrowerId === userId || data.lenderId === userId;
+      const updates: Record<string, string> = {};
+      let needsAnonymization = false;
 
-      if (needsUpdate) {
-        const updates: any = {};
-        
-        if (data.borrowerId === userId) {
-          updates.borrowerName = '[Silinmiş Kullanıcı]';
-        }
-        if (data.lenderId === userId) {
-          updates.lenderName = '[Silinmiş Kullanıcı]';
-        }
+      if (data.borrowerId === userId) {
+        updates.borrowerName = '[Silinmiş Kullanıcı]';
+        needsAnonymization = true;
+      }
+      if (data.lenderId === userId) {
+        updates.lenderName = '[Silinmiş Kullanıcı]';
+        needsAnonymization = true;
+      }
 
+      if (needsAnonymization) {
         await updateDoc(debtDoc.ref, updates);
         result.anonymizedDebts++;
       }
+
+      // Cleanup sub-collections for this debt
+      // Transactions (Anonymize instead of delete to preserve balance)
+      const txSnapshot = await getDocs(collection(db, `debts/${debtDoc.id}/transactions`));
+      for (const txDoc of txSnapshot.docs) {
+        const txData = txDoc.data();
+        if (txData.createdBy === userId) {
+          // Redact PII but keep amount for financial integrity
+          await updateDoc(txDoc.ref, {
+            description: '[Gizlenmiş]',
+            auditMeta: {
+              actorId: '[SILINMIS_KULLANICI]',
+              timestamp: txData.auditMeta?.timestamp || new Date()
+            }
+          });
+          result.deletedItems.ownTransactions++;
+        }
+      }
+
+      // Payment Logs (anonymize)
+      const logsSnapshot = await getDocs(collection(db, `debts/${debtDoc.id}/logs`));
+      for (const logDoc of logsSnapshot.docs) {
+        const logData = logDoc.data();
+        if (logData.performedBy === userId) {
+          await updateDoc(logDoc.ref, { performedBy: '[Silinmiş Kullanıcı]' });
+        }
+      }
     }
 
-    // 4. Delete user's own transactions (not shared with others)
-    const transactionsSnapshot = await getDocs(collection(db, 'transactions'));
-    for (const txDoc of transactionsSnapshot.docs) {
-      const data = txDoc.data();
-      // Only delete if both parties are the same user (self-transactions)
-      if (data.fromUserId === userId && data.toUserId === userId) {
-        await deleteDoc(txDoc.ref);
-        result.deletedItems.ownTransactions++;
-      }
+    // 4. Delete user-specific metadata sub-collections (Safe to delete as they don't affect others)
+    const sessionSnapshot = await getDocs(collection(db, `users/${userId}/sessions`));
+    for (const sDoc of sessionSnapshot.docs) {
+      await deleteDoc(sDoc.ref);
+    }
+
+    const notifReadSnapshot = await getDocs(collection(db, `users/${userId}/notificationReadStatus`));
+    for (const nrDoc of notifReadSnapshot.docs) {
+      await deleteDoc(nrDoc.ref);
+    }
+
+    // 5. Delete notifications targeted to the user
+    const notificationsQuery = query(collection(db, 'notifications'), where('userId', '==', userId));
+    const notificationsSnapshot = await getDocs(notificationsQuery);
+    for (const nDoc of notificationsSnapshot.docs) {
+      await deleteDoc(nDoc.ref);
     }
 
     result.success = true;
