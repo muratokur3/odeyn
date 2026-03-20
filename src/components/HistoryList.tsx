@@ -10,7 +10,7 @@ import clsx from 'clsx';
 import { AdaptiveActionRow } from './AdaptiveActionRow';
 import { type SwipeAction } from './SwipeableItem';
 
-import { useModal } from '../context/ModalContext';
+import { useModal } from '../context/useModal';
 import { Avatar } from './Avatar';
 
 interface HistoryListProps {

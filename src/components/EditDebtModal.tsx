@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { X, Calendar, AlertCircle } from 'lucide-react';
 import { Timestamp, deleteField } from 'firebase/firestore';
-import { useModal } from '../context/ModalContext';
+import { useModal } from '../context/useModal';
 import { formatAmountToWords, safeParseFloat, CURRENCIES } from '../utils/format';
 import { AmountInput } from './AmountInput';
 import type { Debt, GoldDetail } from '../types';

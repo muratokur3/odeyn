@@ -5,7 +5,7 @@ import { uploadProfileImage } from '../services/storage';
 import { Camera, Loader2, Save, ArrowLeft, ShieldCheck, ChevronRight } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
 import { useNavigate } from 'react-router-dom';
-import { useModal } from '../context/ModalContext';
+import { useModal } from '../context/useModal';
 import { formatPhoneForDisplay } from '../utils/phoneUtils';
 
 export const AccountSettings = () => {

@@ -7,7 +7,7 @@ import { addContact, updateContact, getContacts, searchUserByPhone } from '../se
 import { useDebts } from '../hooks/useDebts';
 import { cleanPhone } from '../utils/phoneUtils';
 import { Avatar } from './Avatar';
-import { useModal } from '../context/ModalContext'; // Assuming ModalContext is available
+import { useModal } from '../context/useModal'; // Assuming ModalContext is available
 import type { Contact, User } from '../types';
 
 interface ContactModalProps {

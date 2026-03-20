@@ -4,7 +4,7 @@ import { doc, setDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { batchAddContacts } from '../services/db';
 import { cleanPhone } from '../utils/phoneUtils';
-import { useModal } from '../context/ModalContext';
+import { useModal } from '../context/useModal';
 
 export const useContactSync = () => {
     const { user } = useAuth();

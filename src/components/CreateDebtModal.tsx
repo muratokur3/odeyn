@@ -14,7 +14,7 @@ import { Toggle } from './Toggle';
 import { AmountInput } from './AmountInput';
 import { Timestamp } from 'firebase/firestore';
 import clsx from 'clsx';
-import { useModal } from '../context/ModalContext';
+import { useModal } from '../context/useModal';
 import { GOLD_TYPES, GOLD_CATEGORIES, SILVER_CATEGORIES, BILEZIK_MODELS, TAKI_TYPES, GOLD_CARATS, getGoldType } from '../utils/goldConstants';
 import { MetalSelectionFields } from './MetalSelectionFields';
 

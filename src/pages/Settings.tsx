@@ -5,7 +5,7 @@ import { updateUserPreferences } from '../services/db';
 import { useAuth } from '../hooks/useAuth';
 import type { User as UserType } from '../types';
 import { Toggle } from '../components/Toggle';
-import { useModal } from '../context/ModalContext';
+import { useModal } from '../context/useModal';
 import { Avatar } from '../components/Avatar';
 import { useTheme } from '../context/ThemeContext';
 import { logoutUser } from '../services/auth';

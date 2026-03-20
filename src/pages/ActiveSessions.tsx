@@ -3,7 +3,7 @@ import { ArrowLeft, Smartphone, Laptop, Trash2, ShieldCheck, AlertCircle } from 
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { getSessions, revokeSession, type SessionData } from '../services/session';
-import { useModal } from '../context/ModalContext';
+import { useModal } from '../context/useModal';
 import { formatDistanceToNow } from 'date-fns';
 import { tr } from 'date-fns/locale';
 

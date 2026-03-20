@@ -1,6 +1,6 @@
 import { ArrowLeft, Download, Trash2, Shield, Info, FileText, ChevronRight } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
-import { useModal } from '../context/ModalContext';
+import { useModal } from '../context/useModal';
 import { useDebts } from '../hooks/useDebts';
 import { exportDebtsToCSV } from '../utils/export';
 import { initiateAccountDeletion } from '../services/accountDeletionService';

@@ -16,7 +16,7 @@ import { ConflictResolutionModal } from '../components/ConflictResolutionModal';
 import { ContactModal } from '../components/ContactModal';
 
 
-import { useModal } from '../context/ModalContext';
+import { useModal } from '../context/useModal';
 
 export const Contacts = () => {
     const { user, blockedUsers } = useAuth();

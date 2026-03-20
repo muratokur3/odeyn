@@ -5,7 +5,7 @@ import { uploadProfileImage } from '../services/storage';
 import { Camera, Loader2, Save, ArrowLeft, Building2, User as UserIcon, MapPin, Hash, Briefcase } from 'lucide-react';
 import { Avatar } from '../components/Avatar';
 import { useNavigate } from 'react-router-dom';
-import { useModal } from '../context/ModalContext';
+import { useModal } from '../context/useModal';
 
 export const EditProfile = () => {
     const { user } = useAuth();

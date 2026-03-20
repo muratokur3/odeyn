@@ -28,6 +28,8 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
 
     // Toast logic: Show toast for new, unshown notifications
     useEffect(() => {
+        let isMounted = true;
+
         if (notifications.length > 0) {
             console.log(`[NotificationContext] received ${notifications.length} notifications`);
             // Get already toasted IDs from current session to prevent double toast
@@ -42,18 +44,27 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
                 const newest = unshown[0];
 
                 if (!activeToast || (newest && activeToast.id !== newest.id)) {
-                    setActiveToast(newest);
+                    // Queue state update for the next tick to avoid synchronous setState inside render loop
+                    setTimeout(() => {
+                        if (isMounted) {
+                            setActiveToast(newest);
 
-                    // Mark as toasted in session
-                    sessionStorage.setItem('toasted_notif_ids', JSON.stringify([...toastedIds, newest.id]));
+                            // Mark as toasted in session
+                            sessionStorage.setItem('toasted_notif_ids', JSON.stringify([...toastedIds, newest.id]));
 
-                    // Mark as shown in DB
-                    notificationService.markAsShown(newest.id).catch(err => {
-                        console.error("Failed to mark notification as shown:", err);
-                    });
+                            // Mark as shown in DB
+                            notificationService.markAsShown(newest.id).catch(err => {
+                                console.error("Failed to mark notification as shown:", err);
+                            });
+                        }
+                    }, 0);
                 }
             }
         }
+
+        return () => {
+            isMounted = false;
+        };
     }, [notifications, activeToast]);
 
     const markAsRead = async (id: string) => {

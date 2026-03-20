@@ -14,26 +14,30 @@ interface AvatarProps {
 }
 
 export const Avatar: React.FC<AvatarProps> = ({ name, photoURL, uid, size = 'md', className, status = 'none' }) => {
-    const [livePhotoURL, setLivePhotoURL] = useState<string | undefined>(photoURL);
-    const prevPhotoURLRef = useRef(photoURL);
+    const [fetchedPhotoURL, setFetchedPhotoURL] = useState<string | null>(null);
+    const [prevUid, setPrevUid] = useState<string | undefined>(uid);
+
+    // Synchronous state reset during render to prevent cascading renders
+    if (uid !== prevUid) {
+        setPrevUid(uid);
+        setFetchedPhotoURL(null);
+    }
 
     // Live Fetch Logic
     useEffect(() => {
-        // Only update if photoURL prop actually changed (not on every render)
-        if (photoURL !== prevPhotoURLRef.current) {
-            setLivePhotoURL(photoURL);
-            prevPhotoURLRef.current = photoURL;
+        if (!uid) {
+            return;
         }
 
-        if (!uid) return;
+        let isMounted = true;
 
         const fetchLivePhoto = async () => {
             try {
                 const userDoc = await getDoc(doc(db, 'users', uid));
-                if (userDoc.exists()) {
+                if (userDoc.exists() && isMounted) {
                     const data = userDoc.data();
                     if (data.photoURL) {
-                        setLivePhotoURL(data.photoURL);
+                        setFetchedPhotoURL(data.photoURL);
                     }
                 }
             } catch {
@@ -41,7 +45,14 @@ export const Avatar: React.FC<AvatarProps> = ({ name, photoURL, uid, size = 'md'
             }
         };
         fetchLivePhoto();
-    }, [uid, photoURL]);
+
+        return () => {
+            isMounted = false;
+        };
+    }, [uid]);
+
+    // Fall back to passed photoURL if fetch fails or hasn't completed
+    const displayPhotoURL = fetchedPhotoURL || photoURL;
 
 
     const sizeClasses = {
@@ -83,14 +94,14 @@ export const Avatar: React.FC<AvatarProps> = ({ name, photoURL, uid, size = 'md'
                 className={clsx(
                     "rounded-full flex items-center justify-center overflow-hidden shrink-0 transition-all",
                     sizeClasses[size],
-                    !livePhotoURL && defaultBgClass,
+                    !displayPhotoURL && defaultBgClass,
                     borderClass,
                     className
                 )}
             >
-                {livePhotoURL ? (
+                {displayPhotoURL ? (
                     <img
-                        src={livePhotoURL}
+                        src={displayPhotoURL}
                         alt={name || 'User'}
                         className="w-full h-full object-cover"
                     />

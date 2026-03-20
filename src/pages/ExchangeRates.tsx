@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { useAuth } from '../hooks/useAuth';
 import { updateUserProfile } from '../services/profile';
 import { useNavigate } from 'react-router-dom';
-import { useModal } from '../context/ModalContext';
+import { useModal } from '../context/useModal';
 import { ArrowLeft, Coins, Info, Loader2 } from 'lucide-react';
 
 export const ExchangeRates = () => {
