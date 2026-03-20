@@ -258,19 +258,22 @@ export const createDebt = async (
 
     // --- 1. STRICT E.164 ENFORCEMENT ---
     let finalTargetId = targetUserId;
+    let knownTargetPhone = '';
+
     if (targetUserId.length < 20) {
-        if (!isValidPhone(targetUserId)) {
-            throw new Error(`Geçersiz telefon formatı: ${targetUserId}. Borç oluşturmak için geçerli bir E.164 numarası gereklidir.`);
+        const cleaned = cleanPhoneNumber(targetUserId);
+        if (!cleaned || !isValidPhone(cleaned)) {
+             throw new Error(`Geçersiz telefon formatı: ${targetUserId}. Borç oluşturmak için geçerli bir E.164 numarası gereklidir.`);
         }
+        finalTargetId = cleaned;
+        knownTargetPhone = cleaned;
 
         // Ghost User (Registered User) Check
         const { resolvePhoneToUid } = await import('./identity');
-        const resolvedUid = await resolvePhoneToUid(targetUserId);
+        const resolvedUid = await resolvePhoneToUid(finalTargetId);
 
         if (resolvedUid) {
             finalTargetId = resolvedUid;
-        } else {
-            finalTargetId = targetUserId;
         }
     }
     // ------------------------------------
@@ -322,7 +325,7 @@ export const createDebt = async (
     }
 
     // Determine Contact Phone for Locking & Auto-Add
-    let contactPhone = '';
+    let contactPhone = knownTargetPhone || '';
     let foundUserData: User | null = null;
     
     if (blockCheckTargetUid) {
@@ -330,7 +333,7 @@ export const createDebt = async (
         const uDoc = await getDoc(doc(db, 'users', blockCheckTargetUid));
         if (uDoc.exists()) {
             foundUserData = uDoc.data() as User;
-            contactPhone = foundUserData.phoneNumber || blockCheckCleanPhone;
+            contactPhone = foundUserData.phoneNumber || blockCheckCleanPhone || contactPhone;
         }
     } else if (blockCheckCleanPhone) {
         // No UID found, just use the clean phone

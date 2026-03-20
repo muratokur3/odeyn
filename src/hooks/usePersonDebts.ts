@@ -2,7 +2,6 @@ import { useMemo } from 'react';
 import { useDebts } from './useDebts';
 import { useAuth } from './useAuth';
 import { cleanPhone } from '../utils/phoneUtils';
-import type { Debt } from '../types';
 
 /**
  * Custom hook to get all debts related to a specific person
@@ -30,6 +29,7 @@ export const usePersonDebts = (personId: string, resolvedUid?: string | null) =>
                 otherId === personId ||
                 cleanOtherId === cleanId ||
                 d.participants.includes(personId) ||
+                (d.lockedPhoneNumber && d.lockedPhoneNumber === cleanId) ||
                 (resolvedUid && otherId === resolvedUid);
 
             if (!isMatch) return false;

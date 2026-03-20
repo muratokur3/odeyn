@@ -1,6 +1,5 @@
 import { useMemo } from 'react';
 import { useAuth } from './useAuth';
-import { standardizeRawPhone } from '../utils/phoneUtils';
 
 export const useUserIdentifiers = () => {
     const { user } = useAuth();

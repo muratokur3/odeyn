@@ -47,8 +47,11 @@ export const getOrCreateLedger = async (
 ): Promise<string> => {
     // 1. Harmonize ID: If it's a phone number, normalize it immediately
     let normalizedOtherId = otherPartyId;
+    let knownPhone = '';
+
     if (otherPartyId.length < 20) {
-        normalizedOtherId = cleanPhoneNumber(otherPartyId);
+        normalizedOtherId = cleanPhoneNumber(otherPartyId) || otherPartyId;
+        knownPhone = normalizedOtherId;
     }
 
     // First, try to find an existing active LEDGER
@@ -72,6 +75,19 @@ export const getOrCreateLedger = async (
         }
     }
 
+    // If target is a UID, try to resolve their phone number for locking
+    if (!knownPhone && normalizedOtherId.length >= 20) {
+        try {
+            const snap = await getDoc(doc(db, 'users', normalizedOtherId));
+            if (snap.exists()) {
+                const udata = snap.data();
+                if (udata.phoneNumber) knownPhone = udata.phoneNumber;
+            }
+        } catch (e) {
+            // ignore
+        }
+    }
+
     // No existing ledger, create a new one
     const newLedger: Omit<Debt, 'id'> = {
         lenderId: currentUserId, // Arbitrary, both have equal rights
@@ -86,7 +102,8 @@ export const getOrCreateLedger = async (
         createdAt: serverTimestamp() as Timestamp,
         createdBy: currentUserId,
         type: 'LEDGER',
-        note: 'Cari Hesap Defteri'
+        note: 'Cari Hesap Defteri',
+        ...(knownPhone && { lockedPhoneNumber: knownPhone }) // Standardize phone number link
     };
 
     const docRef = await addDoc(debtsRef, newLedger);
@@ -120,6 +137,11 @@ export const findActiveLedger = async (
 ): Promise<Debt | null> => {
     const debtsRef = collection(db, 'debts');
 
+    let normalizedOtherId = otherPartyId;
+    if (otherPartyId.length < 20) {
+        normalizedOtherId = cleanPhoneNumber(otherPartyId) || otherPartyId;
+    }
+
     const q = query(
         debtsRef,
         where('participants', 'array-contains', userId),
@@ -132,7 +154,12 @@ export const findActiveLedger = async (
 
     for (const docSnap of snapshot.docs) {
         const data = docSnap.data() as Debt;
-        if (data.participants.includes(otherPartyId)) {
+        // Check exact ID match or normalized phone match
+        if (
+            data.participants.includes(otherPartyId) ||
+            data.participants.includes(normalizedOtherId) ||
+            (data.lockedPhoneNumber && data.lockedPhoneNumber === normalizedOtherId)
+        ) {
             return { ...data, id: docSnap.id };
         }
     }
