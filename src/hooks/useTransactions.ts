@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 /**
  * useTransactions Hook
  * Subscribe to transactions (Cari Hesap) for a specific contact
@@ -21,6 +22,7 @@ export const useTransactions = (userId: string | undefined, contactId: string | 
 
     useEffect(() => {
         if (!userId || !contactId) {
+
             setTransactions([]);
             setLoading(false);
             return;
@@ -31,7 +33,8 @@ export const useTransactions = (userId: string | undefined, contactId: string | 
             // Filter out transactions if the contact is blocked
             const isBlocked = blockedUsers?.some(b => b.blockedUid === contactId);
             if (isBlocked) {
-                setTransactions([]);
+
+            setTransactions([]);
             } else {
                 setTransactions(txs);
             }

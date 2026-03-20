@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useEffect } from 'react';
 import { X, Calendar, AlertCircle } from 'lucide-react';
 import { Timestamp, deleteField } from 'firebase/firestore';

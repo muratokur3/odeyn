@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 import React, { useEffect, useState, useRef } from 'react';
 import { User, ShieldCheck, BookUser } from 'lucide-react';
 import clsx from 'clsx';

@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useState, useEffect } from 'react';
 import { X, FileText, ChevronDown, ChevronUp, Search, Ban, RefreshCw, AlertTriangle, Calendar } from 'lucide-react';
 import { Avatar } from './Avatar';

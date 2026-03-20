@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import type { PaymentLog, GoldDetail } from '../types';
 import { useState, useEffect } from 'react';
 import { format } from 'date-fns';

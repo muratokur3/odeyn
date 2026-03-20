@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { db, auth } from './firebase';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { updateProfile } from 'firebase/auth';

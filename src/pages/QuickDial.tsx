@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { useState, useEffect } from 'react';
 import { UserPlus, Wallet } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';

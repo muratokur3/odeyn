@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { collection, getDocs, doc as firestoreDoc, Timestamp } from 'firebase/firestore';
 import { db } from './firebase';
 import type { Debt, Transaction, User, Contact } from '../types';

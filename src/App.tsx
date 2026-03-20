@@ -42,6 +42,7 @@ import { ModalProvider } from './context/ModalContext';
 import { ContactProvider } from './context/ContactContext';
 import { NotificationProvider } from './context/NotificationContext';
 import { AuthProvider } from './context/AuthContext';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 function App() {
   return (
@@ -49,6 +50,7 @@ function App() {
       <AuthProvider>
         <ModalProvider>
           <ContactProvider>
+            <ErrorBoundary>
             <div className="w-full max-w-3xl mx-auto min-h-screen bg-background shadow-2xl relative border-x border-border">
             <Router>
               <NotificationProvider>
@@ -81,6 +83,7 @@ function App() {
               </NotificationProvider>
             </Router>
             </div>
+            </ErrorBoundary>
           </ContactProvider>
         </ModalProvider>
       </AuthProvider>

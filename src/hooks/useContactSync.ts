@@ -31,7 +31,7 @@ export const useContactSync = () => {
             const props = ['name', 'tel'];
             const options = { multiple: true };
 
-            // @ts-ignore - navigator.contacts is experimental
+            // @ts-expect-error - navigator.contacts is experimental
             const selectedContacts = await navigator.contacts.select(props, options);
 
             if (!selectedContacts || selectedContacts.length === 0) {

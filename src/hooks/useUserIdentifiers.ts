@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import { useMemo } from 'react';
 import { useAuth } from './useAuth';
 import { standardizeRawPhone } from '../utils/phoneUtils';

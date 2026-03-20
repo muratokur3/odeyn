@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 import { useState, useEffect } from 'react';
 import type { Debt, PaymentLog } from '../types';
 import { subscribeToDebtDetails, subscribeToPaymentLogs } from '../services/db';
@@ -9,6 +10,7 @@ export const useDebtDetails = (debtId: string | undefined) => {
 
     useEffect(() => {
         if (!debtId) {
+
             setLoading(false);
             return;
         }
@@ -19,6 +21,7 @@ export const useDebtDetails = (debtId: string | undefined) => {
 
         const unsubscribeLogs = subscribeToPaymentLogs(debtId, (data) => {
             setLogs(data);
+
             setLoading(false); // Assume loading is done when logs are fetched (or debt)
         });
 

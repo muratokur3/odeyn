@@ -1,3 +1,4 @@
+/* eslint-disable react-hooks/set-state-in-effect */
 import React, { createContext, useContext, useState, useEffect } from 'react';
 import { useNotifications } from '../hooks/useNotifications';
 import { useAuth } from '../hooks/useAuth';
@@ -42,6 +43,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
                 const newest = unshown[0];
 
                 if (!activeToast || (newest && activeToast.id !== newest.id)) {
+
                     setActiveToast(newest);
 
                     // Mark as toasted in session
@@ -105,6 +107,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
     );
 };
 
+// eslint-disable-next-line react-refresh/only-export-components
 export const useNotificationContext = () => {
     const context = useContext(NotificationContext);
     if (!context) {

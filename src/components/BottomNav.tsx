@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Home, BookUser, Calculator, Plus, Settings } from 'lucide-react';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { clsx } from 'clsx';

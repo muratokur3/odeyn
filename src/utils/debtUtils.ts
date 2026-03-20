@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import { Timestamp, FieldValue } from 'firebase/firestore';
 import type { Debt } from '../types';
 

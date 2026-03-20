@@ -39,7 +39,7 @@ export const ImportContactsButton: React.FC<ImportContactsButtonProps> = ({
             const props = ['name', 'tel'];
             const options = { multiple: true };
 
-            // @ts-ignore
+            // @ts-expect-error - ignore third party lib types
             const selectedContacts = await navigator.contacts.select(props, options);
 
             if (!selectedContacts || selectedContacts.length === 0) {

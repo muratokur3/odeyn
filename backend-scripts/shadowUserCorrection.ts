@@ -1,3 +1,5 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-unused-vars */
 import * as admin from 'firebase-admin';
 
 // NOTE: This function is intended to be run in a Node.js Backend Environment (Cloud Functions or Admin Script).

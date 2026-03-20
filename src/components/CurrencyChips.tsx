@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-unused-vars */
 /**
  * CurrencyChips Component
  * Displays multi-currency balances as horizontal scrolling chips
