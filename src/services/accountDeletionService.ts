@@ -1,4 +1,4 @@
-import { collection, getDocs, deleteDoc, doc as firestoreDoc, updateDoc, query, where } from 'firebase/firestore';
+import { collection, getDocs, doc as firestoreDoc, query, where, writeBatch } from 'firebase/firestore';
 import { db } from './firebase';
 
 /**
@@ -14,6 +14,7 @@ export interface DeletionResult {
     user: boolean;
     contacts: number;
     ownTransactions: number;
+    subTransactions: number;
   };
   anonymizedDebts: number;
 }
@@ -28,15 +29,27 @@ export async function deleteUserAccount(userId: string): Promise<DeletionResult>
     deletedItems: {
       user: false,
       contacts: 0,
-      ownTransactions: 0
+      ownTransactions: 0,
+      subTransactions: 0
     },
     anonymizedDebts: 0
   };
 
   try {
+    let batch = writeBatch(db);
+    let batchCount = 0;
+
+    const commitBatchIfNeeded = async () => {
+      if (batchCount >= 450) {
+        await batch.commit();
+        batch = writeBatch(db);
+        batchCount = 0;
+      }
+    };
+
     // 1. Anonymize user in main users collection
     const userRef = firestoreDoc(db, 'users', userId);
-    await updateDoc(userRef, {
+    batch.update(userRef, {
       displayName: '[Silinmiş Kullanıcı]',
       email: null,
       photoURL: null,
@@ -45,13 +58,25 @@ export async function deleteUserAccount(userId: string): Promise<DeletionResult>
       deletedAt: new Date(),
       isAnonymized: true
     });
+    batchCount++;
     result.deletedItems.user = true;
 
     // 2. Delete user's contacts subcollection
     const contactsSnapshot = await getDocs(collection(db, `users/${userId}/contacts`));
     for (const doc of contactsSnapshot.docs) {
-      await deleteDoc(doc.ref);
+      batch.delete(doc.ref);
+      batchCount++;
+      await commitBatchIfNeeded();
       result.deletedItems.contacts++;
+
+      // Delete subTransactions for this contact if they exist (legacy structure)
+      const contactTxSnapshot = await getDocs(collection(db, `users/${userId}/contacts/${doc.id}/transactions`));
+      for (const txDoc of contactTxSnapshot.docs) {
+        batch.delete(txDoc.ref);
+        batchCount++;
+        await commitBatchIfNeeded();
+        result.deletedItems.subTransactions++;
+      }
     }
 
     // 3. Process debts where user is involved (anonymize names and clean up sub-collections)
@@ -72,8 +97,10 @@ export async function deleteUserAccount(userId: string): Promise<DeletionResult>
         needsAnonymization = true;
       }
 
-      if (needsAnonymization) {
-        await updateDoc(debtDoc.ref, updates);
+      if (needsAnonymization && Object.keys(updates).length > 0) {
+        batch.update(debtDoc.ref, updates);
+        batchCount++;
+        await commitBatchIfNeeded();
         result.anonymizedDebts++;
       }
 
@@ -84,14 +111,17 @@ export async function deleteUserAccount(userId: string): Promise<DeletionResult>
         const txData = txDoc.data();
         if (txData.createdBy === userId) {
           // Redact PII but keep amount for financial integrity
-          await updateDoc(txDoc.ref, {
+          batch.update(txDoc.ref, {
             description: '[Gizlenmiş]',
             auditMeta: {
               actorId: '[SILINMIS_KULLANICI]',
               timestamp: txData.auditMeta?.timestamp || new Date()
             }
           });
+          batchCount++;
+          await commitBatchIfNeeded();
           result.deletedItems.ownTransactions++;
+          result.deletedItems.subTransactions++;
         }
       }
 
@@ -100,7 +130,9 @@ export async function deleteUserAccount(userId: string): Promise<DeletionResult>
       for (const logDoc of logsSnapshot.docs) {
         const logData = logDoc.data();
         if (logData.performedBy === userId) {
-          await updateDoc(logDoc.ref, { performedBy: '[Silinmiş Kullanıcı]' });
+          batch.update(logDoc.ref, { performedBy: '[Silinmiş Kullanıcı]' });
+          batchCount++;
+          await commitBatchIfNeeded();
         }
       }
     }
@@ -108,19 +140,39 @@ export async function deleteUserAccount(userId: string): Promise<DeletionResult>
     // 4. Delete user-specific metadata sub-collections (Safe to delete as they don't affect others)
     const sessionSnapshot = await getDocs(collection(db, `users/${userId}/sessions`));
     for (const sDoc of sessionSnapshot.docs) {
-      await deleteDoc(sDoc.ref);
+      batch.delete(sDoc.ref);
+      batchCount++;
+      await commitBatchIfNeeded();
     }
 
     const notifReadSnapshot = await getDocs(collection(db, `users/${userId}/notificationReadStatus`));
     for (const nrDoc of notifReadSnapshot.docs) {
-      await deleteDoc(nrDoc.ref);
+      batch.delete(nrDoc.ref);
+      batchCount++;
+      await commitBatchIfNeeded();
     }
 
     // 5. Delete notifications targeted to the user
     const notificationsQuery = query(collection(db, 'notifications'), where('userId', '==', userId));
     const notificationsSnapshot = await getDocs(notificationsQuery);
     for (const nDoc of notificationsSnapshot.docs) {
-      await deleteDoc(nDoc.ref);
+      batch.delete(nDoc.ref);
+      batchCount++;
+      await commitBatchIfNeeded();
+    }
+
+    // 6. Delete phone_registry entries
+    const phoneRegistryQuery = query(collection(db, 'phone_registry'), where('uid', '==', userId));
+    const phoneRegistrySnapshot = await getDocs(phoneRegistryQuery);
+    for (const pDoc of phoneRegistrySnapshot.docs) {
+      batch.delete(pDoc.ref);
+      batchCount++;
+      await commitBatchIfNeeded();
+    }
+
+    // Commit any remaining operations
+    if (batchCount > 0) {
+      await batch.commit();
     }
 
     result.success = true;
