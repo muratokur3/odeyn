@@ -19,14 +19,19 @@ export const useTransactions = (userId: string | undefined, contactId: string | 
     const [transactions, setTransactions] = useState<Transaction[]>([]);
     const [loading, setLoading] = useState(true);
 
+    const [prevKeys, setPrevKeys] = useState({ userId, contactId });
+
+    if (userId !== prevKeys.userId || contactId !== prevKeys.contactId) {
+        setPrevKeys({ userId, contactId });
+        setTransactions([]);
+        setLoading(!!userId && !!contactId);
+    }
+
     useEffect(() => {
         if (!userId || !contactId) {
-            setTransactions([]);
-            setLoading(false);
             return;
         }
 
-        setLoading(true);
         const unsubscribe = subscribeToTransactions(userId, contactId, (txs) => {
             // Filter out transactions if the contact is blocked
             const isBlocked = blockedUsers?.some(b => b.blockedUid === contactId);

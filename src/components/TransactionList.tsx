@@ -11,7 +11,7 @@ import { formatCurrency } from '../utils/format';
 import { deleteLedgerTransaction } from '../services/transactionService';
 import { isTransactionEditable } from '../services/db'; // New helper
 import { useAuth } from '../hooks/useAuth';
-import { useModal } from '../context/ModalContext';
+import { useModal } from '../hooks/useModal';
 import clsx from 'clsx';
 import type { Transaction, User, Contact, Debt } from '../types';
 import { AdaptiveActionRow } from './AdaptiveActionRow';

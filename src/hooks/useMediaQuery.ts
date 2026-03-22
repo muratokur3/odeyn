@@ -9,10 +9,17 @@ export function useMediaQuery(query: string): boolean {
         return false;
     });
 
+    const [prevQuery, setPrevQuery] = useState(query);
+
+    if (query !== prevQuery) {
+        setPrevQuery(query);
+        if (typeof window !== 'undefined') {
+            setMatches(window.matchMedia(query).matches);
+        }
+    }
+
     useEffect(() => {
         const media = window.matchMedia(query);
-        // Update only if different (though event will handle it)
-        setMatches(media.matches);
 
         const listener = () => setMatches(media.matches);
         media.addEventListener('change', listener);

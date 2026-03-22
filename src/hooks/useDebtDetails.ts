@@ -6,10 +6,17 @@ export const useDebtDetails = (debtId: string | undefined) => {
     const [debt, setDebt] = useState<Debt | null>(null);
     const [logs, setLogs] = useState<PaymentLog[]>([]);
     const [loading, setLoading] = useState(true);
+    const [prevDebtId, setPrevDebtId] = useState<string | undefined>(undefined);
+
+    if (debtId !== prevDebtId) {
+        setPrevDebtId(debtId);
+        setDebt(null);
+        setLogs([]);
+        setLoading(!!debtId);
+    }
 
     useEffect(() => {
         if (!debtId) {
-            setLoading(false);
             return;
         }
 

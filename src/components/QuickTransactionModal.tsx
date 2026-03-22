@@ -10,7 +10,7 @@ import { addLedgerTransaction, getOrCreateLedger } from '../services/transaction
 import { getDebtsBetweenParticipants, makePayment } from '../services/db';
 import { formatAmountToWords, safeParseFloat, CURRENCIES } from '../utils/format';
 import { useAuth } from '../hooks/useAuth';
-import { useModal } from '../context/ModalContext';
+import { useModal } from '../hooks/useModal';
 import clsx from 'clsx';
 import type { TransactionDirection, Transaction, GoldDetail } from '../types';
 import { GOLD_TYPES, GOLD_CATEGORIES, SILVER_CATEGORIES, BILEZIK_MODELS, TAKI_TYPES, GOLD_CARATS, getGoldType } from '../utils/goldConstants';

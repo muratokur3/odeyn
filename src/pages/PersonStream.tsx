@@ -23,7 +23,7 @@ import { DebtsTab } from '../components/DebtsTab';
 import { DateFilterDropdown, type QuickFilterType } from '../components/DateFilterDropdown';
 import { CreateDebtModal } from '../components/CreateDebtModal';
 import { ContactModal } from '../components/ContactModal';
-import { useModal } from '../context/ModalContext';
+import { useModal } from '../hooks/useModal';
 import { getContacts, markContactAsRead, deleteContact, deletePersonHistory } from '../services/db';
 import { isUserBlocked, blockUser, unblockUser } from '../services/blockService';
 import { cleanPhone, formatPhoneForDisplay } from '../utils/phoneUtils';

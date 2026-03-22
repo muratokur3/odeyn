@@ -1,22 +1,10 @@
-import React, { createContext, useContext, useState, useEffect } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useNotifications } from '../hooks/useNotifications';
 import { useAuth } from '../hooks/useAuth';
 import { notificationService, type Notification } from '../services/notificationService';
 import { NotificationToast } from '../components/NotificationToast';
 import { NotificationsModal } from '../components/NotificationsModal';
-
-interface NotificationContextType {
-    notifications: Notification[];
-    unreadCount: number;
-    showModal: boolean;
-    setShowModal: (show: boolean) => void;
-    markAsRead: (id: string) => Promise<void>;
-    markAllAsRead: () => Promise<void>;
-    deleteNotification: (id: string) => Promise<void>;
-    clearAll: () => Promise<void>;
-}
-
-const NotificationContext = createContext<NotificationContextType | undefined>(undefined);
+import { NotificationContext } from '../hooks/useNotificationContext';
 
 export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ children }) => {
     const { notifications } = useNotifications();
@@ -42,6 +30,7 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
                 const newest = unshown[0];
 
                 if (!activeToast || (newest && activeToast.id !== newest.id)) {
+                    // Start of safe side effects inside useEffect.
                     setActiveToast(newest);
 
                     // Mark as toasted in session
@@ -103,12 +92,4 @@ export const NotificationProvider: React.FC<{ children: React.ReactNode }> = ({ 
             />
         </NotificationContext.Provider>
     );
-};
-
-export const useNotificationContext = () => {
-    const context = useContext(NotificationContext);
-    if (!context) {
-        throw new Error('useNotificationContext must be used within a NotificationProvider');
-    }
-    return context;
 };

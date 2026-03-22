@@ -2,7 +2,7 @@ import React, { useState } from 'react';
 import { Users, Loader2 } from 'lucide-react';
 import type { Contact } from '../types';
 import { cleanPhone } from '../utils/phoneUtils';
-import { useModal } from '../context/ModalContext';
+import { useModal } from '../hooks/useModal';
 
 export interface Conflict {
     newContact: Partial<Contact>;

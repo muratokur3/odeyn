@@ -16,7 +16,7 @@ import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import clsx from 'clsx';
 
-import { useModal } from '../context/ModalContext';
+import { useModal } from '../hooks/useModal';
 
 export const DebtDetail = () => {
     const { id } = useParams();

@@ -5,14 +5,14 @@ import { useContacts } from '../hooks/useContacts';
 import { useAuth } from '../hooks/useAuth';
 import { useContactName } from '../hooks/useContactName';
 import { ContactRow } from '../components/ContactRow';
-import { useNotificationContext } from '../context/NotificationContext';
+import { useNotificationContext } from '../hooks/useNotificationContext';
 import { useUserIdentifiers } from '../hooks/useUserIdentifiers';
 import { useNavigate } from 'react-router-dom';
 import { Wallet, Bell, Sun, Moon, CalendarClock } from 'lucide-react';
 import { PendingPaymentsModal } from '../components/PendingPaymentsModal';
 
 
-import { useTheme } from '../context/ThemeContext';
+import { useTheme } from '../hooks/useTheme';
 import { fetchRates, convertToTRY, convertPureMetalToTRY, fetchTurkishGoldRates, type CurrencyRates, type TurkishGoldRates } from '../services/currency';
 import type { Debt } from '../types';
 import { SummaryCard } from '../components/SummaryCard';

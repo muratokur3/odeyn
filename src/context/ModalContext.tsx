@@ -1,25 +1,10 @@
-import { createContext, useContext, useState, useCallback, type ReactNode } from 'react';
+import { useState, useCallback, type ReactNode } from 'react';
 import { AlertModal } from '../components/AlertModal';
 import { AnimatePresence, motion } from 'framer-motion';
 import { HelpCircle } from 'lucide-react';
 import clsx from 'clsx';
-
-type ModalType = 'success' | 'error' | 'warning' | 'info';
-
-interface ModalContextType {
-    showAlert: (title: string, message: string, type?: ModalType) => Promise<void>;
-    showConfirm: (title: string, message: string, type?: ModalType) => Promise<boolean>;
-}
-
-const ModalContext = createContext<ModalContextType | undefined>(undefined);
-
-export const useModal = () => {
-    const context = useContext(ModalContext);
-    if (!context) {
-        throw new Error('useModal must be used within a ModalProvider');
-    }
-    return context;
-};
+import type { ModalType } from './ModalContext.types';
+import { ModalContext } from '../hooks/useModal';
 
 export const ModalProvider = ({ children }: { children: ReactNode }) => {
     // Alert State

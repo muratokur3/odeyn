@@ -4,7 +4,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import { getBlockedUsers, unblockUser } from '../services/blockService';
 import type { BlockRecord } from '../services/blockService';
-import { useModal } from '../context/ModalContext';
+import { useModal } from '../hooks/useModal';
 import { Avatar } from '../components/Avatar';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';

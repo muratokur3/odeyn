@@ -9,7 +9,7 @@ import { formatPhoneForDisplay as formatPhoneNumber } from '../utils/phoneUtils'
 import { Avatar } from './Avatar';
 import clsx from 'clsx';
 import { useState } from 'react';
-import { useModal } from '../context/ModalContext';
+import { useModal } from '../hooks/useModal';
 import { CreateDebtModal } from './CreateDebtModal';
 import { useMediaQuery } from '../hooks/useMediaQuery';
 

@@ -6,7 +6,7 @@ import { RecaptchaVerifier } from 'firebase/auth';
 import type { ConfirmationResult } from 'firebase/auth';
 import { doc, getDoc } from 'firebase/firestore';
 import { startPhoneLogin, finalizeUserRegistration } from '../services/auth';
-import { useModal } from '../context/ModalContext';
+import { useModal } from '../hooks/useModal';
 import { useAuth } from '../hooks/useAuth';
 import { PhoneInput } from '../components/PhoneInput';
 import { formatPhoneForDisplay } from '../utils/phoneUtils';
