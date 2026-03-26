@@ -257,6 +257,7 @@ export const EditDebtModal: React.FC<EditDebtModalProps> = ({ isOpen, onClose, d
                                     </span>
                                     <input
                                         type="number"
+                                        inputMode="decimal"
                                         value={manualRate}
                                         onChange={(e) => setManualRate(e.target.value)}
                                         step="0.01"

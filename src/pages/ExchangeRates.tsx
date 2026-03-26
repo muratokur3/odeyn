@@ -95,6 +95,7 @@ export const ExchangeRates = () => {
                                 <div className="relative">
                                     <input
                                         type="number"
+                                        inputMode="decimal"
                                         value={usdRate}
                                         onChange={(e) => setUsdRate(e.target.value)}
                                         className="w-full px-4 py-3 rounded-xl bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 outline-none text-right font-bold"
@@ -109,6 +110,7 @@ export const ExchangeRates = () => {
                                 <div className="relative">
                                     <input
                                         type="number"
+                                        inputMode="decimal"
                                         value={eurRate}
                                         onChange={(e) => setEurRate(e.target.value)}
                                         className="w-full px-4 py-3 rounded-xl bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 outline-none text-right font-bold"
@@ -123,6 +125,7 @@ export const ExchangeRates = () => {
                                 <div className="relative">
                                     <input
                                         type="number"
+                                        inputMode="decimal"
                                         value={goldRate}
                                         onChange={(e) => setGoldRate(e.target.value)}
                                         className="w-full px-4 py-3 rounded-xl bg-gray-50 dark:bg-slate-950 border border-gray-200 dark:border-slate-800 outline-none text-right font-bold"
