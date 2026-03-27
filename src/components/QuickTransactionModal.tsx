@@ -423,6 +423,7 @@ export const QuickTransactionModal: React.FC<QuickTransactionModalProps> = ({
                                         </span>
                                         <input
                                             type="number"
+                                            inputMode="decimal"
                                             value={manualRate}
                                             onChange={(e) => setManualRate(e.target.value)}
                                             step="0.01"
