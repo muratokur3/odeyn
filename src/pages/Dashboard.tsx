@@ -556,7 +556,8 @@ export const Dashboard = () => {
         });
     }, [navigate]);
 
-    if (loading) return <div className="flex justify-center items-center h-screen text-lg text-text-primary">Yükleniyor...</div>;
+    const isDataLoading = loading || !rates;
+    if (isDataLoading) return <div className="flex justify-center items-center h-screen text-lg text-text-primary">Yükleniyor...</div>;
 
     return (
         <div className="min-h-full bg-gray-50 dark:bg-slate-900 pb-28 transition-colors duration-200">
@@ -723,7 +724,7 @@ export const Dashboard = () => {
                         />
                     ))}
 
-                    {contactSummaries.length === 0 && (
+                    {dashboardDebts.length === 0 && (
                         <EmptyState
                             icon={PlusCircle}
                             title="Henüz Borcunuz Yok"
@@ -735,6 +736,14 @@ export const Dashboard = () => {
                                 window.dispatchEvent(event);
                             }}
                         />
+                    )}
+
+                    {dashboardDebts.length > 0 && contactSummaries.length === 0 && (
+                        <div className="text-center py-12 px-6">
+                            <p className="text-gray-500 dark:text-slate-400">
+                                Bu görünümde gösterilecek bir bakiye bulunamadı.
+                            </p>
+                        </div>
                     )}
                 </div>
             </main>
