@@ -10,7 +10,8 @@ import { usePersonDebts } from '../hooks/usePersonDebts';
 import { useDebts } from '../hooks/useDebts';
 import { useContactName } from '../hooks/useContactName';
 import { useLedger } from '../hooks/useLedger';
-import { ArrowLeft, MoreVertical, Edit2, UserPlus, Ban, Trash2, Phone, MessageCircle } from 'lucide-react';
+import { ArrowLeft, MoreVertical, Edit2, UserPlus, Ban, Trash2, Phone, MessageCircle, FileText, CreditCard } from 'lucide-react';
+import { EmptyState } from '../components/EmptyState';
 import { Avatar } from '../components/Avatar';
 import clsx from 'clsx';
 import { SummaryCard } from '../components/SummaryCard';
@@ -743,11 +744,29 @@ export const PersonStream = () => {
                                 hasMore={hasMore}
                                 loadingMore={loadingMore}
                             />
+                            {filteredTransactions.length === 0 && (
+                                <EmptyState
+                                    icon={FileText}
+                                    title="İşlem Geçmişi Boş"
+                                    description="Bu kişiyle henüz bir cari hesap hareketi bulunmuyor."
+                                    actionLabel="İlk İşlemi Ekle"
+                                    onAction={() => setShowCreateDebtModal(true)}
+                                />
+                            )}
                         </div>
                     )}
                     {tabMode === 'INSTALLMENT' && (
                         <div className="animate-in fade-in slide-in-from-bottom-2">
                             <DebtsTab debts={installmentDebts} />
+                            {installmentDebts.length === 0 && (
+                                <EmptyState
+                                    icon={CreditCard}
+                                    title="Vadeli Borç Yok"
+                                    description="Bu kişiyle kayıtlı herhangi bir taksitli veya vadeli borç bulunmuyor."
+                                    actionLabel="Vadeli Borç Ekle"
+                                    onAction={() => setShowCreateDebtModal(true)}
+                                />
+                            )}
                         </div>
                     )}
                 </div>

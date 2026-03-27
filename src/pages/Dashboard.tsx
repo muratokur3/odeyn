@@ -8,7 +8,8 @@ import { ContactRow } from '../components/ContactRow';
 import { useNotificationContext } from '../context/NotificationContext';
 import { useUserIdentifiers } from '../hooks/useUserIdentifiers';
 import { useNavigate } from 'react-router-dom';
-import { Wallet, Bell, Sun, Moon, CalendarClock } from 'lucide-react';
+import { Wallet, Bell, Sun, Moon, CalendarClock, PlusCircle } from 'lucide-react';
+import { EmptyState } from '../components/EmptyState';
 import { PendingPaymentsModal } from '../components/PendingPaymentsModal';
 
 
@@ -723,13 +724,17 @@ export const Dashboard = () => {
                     ))}
 
                     {contactSummaries.length === 0 && (
-                        <div className="flex flex-col items-center justify-center py-20 opacity-60">
-                            <div className="bg-gray-100 dark:bg-slate-800 p-6 rounded-full mb-4">
-                                <Wallet size={40} className="text-gray-400 dark:text-gray-500" />
-                            </div>
-                            <p className="text-gray-600 dark:text-gray-400 font-medium">Bu görünümde kişi yok.</p>
-                            <p className="text-sm text-gray-400 dark:text-gray-600 mt-1">Yeni bir işlem ekleyerek başlayabilirsin.</p>
-                        </div>
+                        <EmptyState
+                            icon={PlusCircle}
+                            title="Henüz Borcunuz Yok"
+                            description="Finansal huzur için borç ve alacaklarınızı takip etmeye başlayın."
+                            actionLabel="Yeni İşlem Ekle"
+                            onAction={() => {
+                                // Trigger the global FAB action
+                                const event = new CustomEvent('trigger-fab-open-debt');
+                                window.dispatchEvent(event);
+                            }}
+                        />
                     )}
                 </div>
             </main>

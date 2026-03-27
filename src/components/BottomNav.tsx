@@ -96,6 +96,20 @@ export const BottomNav = () => {
         resolveContext();
     }, [personId, debtId, user, contactsMap, resolveName, location.state]);
 
+    // Global Event Listeners for Emply States
+    useEffect(() => {
+        const openDebt = () => setShowDebtModal(true);
+        const openContact = () => setShowContactModal(true);
+
+        window.addEventListener('trigger-fab-open-debt', openDebt);
+        window.addEventListener('trigger-fab-open-contact', openContact);
+
+        return () => {
+            window.removeEventListener('trigger-fab-open-debt', openDebt);
+            window.removeEventListener('trigger-fab-open-contact', openContact);
+        };
+    }, []);
+
     // Submit handler for CreateDebtModal
     const handleCreateDebtSubmit = async (
         borrowerId: string,

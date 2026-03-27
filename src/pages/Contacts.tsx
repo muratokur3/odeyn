@@ -14,6 +14,8 @@ import { ImportContactsButton } from '../components/ImportContactsButton';
 import type { Conflict } from '../components/ImportContactsButton';
 import { ConflictResolutionModal } from '../components/ConflictResolutionModal';
 import { ContactModal } from '../components/ContactModal';
+import { EmptyState } from '../components/EmptyState';
+import { UserPlus, UserSearch } from 'lucide-react';
 
 
 import { useModal } from '../context/ModalContext';
@@ -424,13 +426,16 @@ export const Contacts = () => {
                         ))}
                     </div>
                 ) : (
-                    <div className="text-center py-20 px-4">
-                        <div className="bg-surface inline-flex p-4 rounded-full mb-4 shadow-sm border border-border">
-                            <Search size={32} className="text-text-secondary opacity-50" />
-                        </div>
-                        <h3 className="text-lg font-semibold text-text-primary mb-1">Kişi Bulunamadı</h3>
-                        <p className="text-text-secondary text-sm">Aradığınız kriterlere uygun kayıt yok.</p>
-                    </div>
+                    <EmptyState
+                        icon={searchTerm ? UserSearch : UserPlus}
+                        title={searchTerm ? "Sonuç Bulunamadı" : "Rehberiniz Boş"}
+                        description={searchTerm ? `'${searchTerm}' aramasıyla eşleşen kimse yok.` : "Hemen bir kişi ekleyerek borç takibi başlatın."}
+                        actionLabel={searchTerm ? undefined : "Yeni Kişi Ekle"}
+                        onAction={searchTerm ? undefined : () => {
+                            const event = new CustomEvent('trigger-fab-open-contact');
+                            window.dispatchEvent(event);
+                        }}
+                    />
                 )}
             </main>
 

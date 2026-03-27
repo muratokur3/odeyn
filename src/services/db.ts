@@ -1113,13 +1113,11 @@ export const subscribeToUserDebts = (identifiers: string[], callback: (debts: De
     // We want all debts where user is a participant (UID or Phone). Query both fields and merge results.
     const qParticipants = query(
         debtsRef,
-        where('participants', 'array-contains-any', identifiers),
-        orderBy('createdAt', 'desc')
+        where('participants', 'array-contains-any', identifiers)
     );
     const qParticipantsPhones = query(
         debtsRef,
-        where('participantsPhones', 'array-contains-any', identifiers),
-        orderBy('createdAt', 'desc')
+        where('participantsPhones', 'array-contains-any', identifiers)
     );
 
     let participantsDebts: Debt[] = [];

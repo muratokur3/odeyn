@@ -8,6 +8,7 @@ import { useModal } from '../context/ModalContext';
 import { Avatar } from '../components/Avatar';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
+import { EmptyState } from '../components/EmptyState';
 
 export const BlockedUsers = () => {
     const { user } = useAuth();
@@ -99,10 +100,12 @@ export const BlockedUsers = () => {
                         ))}
                     </div>
                 ) : (
-                    <div className="flex flex-col items-center justify-center py-16 text-text-secondary opacity-60">
-                        <UserX size={48} className="mb-4 text-slate-300 dark:text-slate-600" />
-                        <p>Engellenmiş kullanıcı bulunmuyor.</p>
-                    </div>
+                    <EmptyState
+                        icon={UserX}
+                        title="Engellenen Kimse Yok"
+                        description="Şu an için engellediğiniz herhangi bir kullanıcı bulunmuyor."
+                        iconColor="text-slate-400"
+                    />
                 )}
             </main>
         </div>
