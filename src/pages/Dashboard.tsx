@@ -401,7 +401,7 @@ export const Dashboard = () => {
                 linkedUserId: data.linkedUserId,
                 hasUnreadActivity: data.hasUnreadActivity
             } as ContactSummary;
-        }).filter(c => Math.abs(c.netBalance) > 0.01);
+        });
 
         // 3. Sorting
         summaries.sort((a, b) => b.lastActivity.getTime() - a.lastActivity.getTime());

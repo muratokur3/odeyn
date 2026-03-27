@@ -57,7 +57,7 @@ export const AdaptiveActionRow: React.FC<AdaptiveActionRowProps> = ({
         }
 
         return (
-            <div className={clsx("relative group flex items-center", className)}>
+            <div className={clsx("relative group flex items-center", menuOpen ? "z-50" : "z-auto", className)}>
                 <div className="flex-1 min-w-0">
                     {children}
                 </div>

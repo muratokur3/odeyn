@@ -25,7 +25,7 @@ import { DateFilterDropdown, type QuickFilterType } from '../components/DateFilt
 import { CreateDebtModal } from '../components/CreateDebtModal';
 import { ContactModal } from '../components/ContactModal';
 import { useModal } from '../context/ModalContext';
-import { getContacts, markContactAsRead, deleteContact, deletePersonHistory } from '../services/db';
+import { getContacts, markContactAsRead, deleteContact } from '../services/db';
 import { isUserBlocked, blockUser, unblockUser } from '../services/blockService';
 import { cleanPhone, formatPhoneForDisplay } from '../utils/phoneUtils';
 import { doc, getDoc } from 'firebase/firestore';
@@ -432,14 +432,6 @@ export const PersonStream = () => {
         }
     };
 
-    const handleDeleteHistory = async () => {
-        if (!user) return;
-        if (await showConfirm("Tüm Geçmişi Sil", "Bu kişiyle olan tüm geçmişiniz (borçlar, kayıtlar) silinecektir. Eğer kişiyi siz eklediyseniz rehberden de silinir. Bu işlem geri alınamaz.", "error")) {
-            const cleanP = id ? cleanPhone(id) : null;
-            await deletePersonHistory(user.uid, resolvedUid, cleanP, contactId || undefined);
-            navigate('/');
-        }
-    };
 
     const handleOpenEdit = () => {
         setEditName(personInfo.name || '');
@@ -513,12 +505,7 @@ export const PersonStream = () => {
                                         <Trash2 size={16} /> Rehberden Sil
                                     </button>
                                 )}
-                                <button
-                                    onClick={() => { handleDeleteHistory(); setShowMenu(false); }}
-                                    className="w-full text-left px-4 py-3 text-sm font-medium text-red-600 hover:bg-red-50 flex items-center gap-2"
-                                >
-                                    <Trash2 size={16} /> Tüm Geçmişi Sil
-                                </button>
+
                             </div>
                         </>
                     )}

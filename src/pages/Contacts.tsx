@@ -358,7 +358,7 @@ export const Contacts = () => {
                                                 isOpen={openRowId === `${contact.id}_left` ? 'left' : (openRowId === `${contact.id}_right` ? 'right' : null)}
                                                 onOpen={(dir) => setOpenRowId(`${contact.id}_${dir}`)}
                                                 onClose={() => setOpenRowId(null)}
-                                                className="mb-0 overflow-hidden"
+                                                className="mb-0"
                                             >
                                                 <div
                                                     onClick={async () => {
