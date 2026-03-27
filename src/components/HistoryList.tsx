@@ -67,7 +67,7 @@ export const HistoryList: React.FC<HistoryListProps> = ({ logs, currency, goldDe
 
     return (
         <div className="space-y-4">
-            <h3 className="font-semibold text-gray-900 flex items-center gap-2">
+            <h3 className="font-semibold text-text-primary flex items-center gap-2">
                 <History size={18} />
                 İşlem Geçmişi
             </h3>
@@ -110,22 +110,22 @@ export const HistoryList: React.FC<HistoryListProps> = ({ logs, currency, goldDe
                                 <div className={clsx(
                                     "p-3 rounded-2xl border-2 relative shadow-sm max-w-[80%] sm:max-w-[70%] transition-all",
                                     isMine
-                                        ? "ml-auto bg-green-50/20 border-green-200 rounded-tr-sm"
-                                        : "mr-auto bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 rounded-tl-sm",
-                                    log.status === 'REJECTED' && "bg-red-50 border-red-200 opacity-75 grayscale"
+                                        ? "ml-auto bg-green-50/50 dark:bg-green-900/20 border-green-200 dark:border-green-800 rounded-tr-sm"
+                                        : "mr-auto bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-tl-sm",
+                                    log.status === 'REJECTED' && "bg-red-50 dark:bg-red-900/20 border-red-200 dark:border-red-800 opacity-75 grayscale"
                                 )}>
                                     <div className="flex items-center justify-between mb-2">
                                         <div className="flex items-center gap-3">
                                             <div className={clsx(
                                                 "p-2 rounded-full shadow-sm",
-                                                log.type === 'PAYMENT' ? "bg-green-100 text-green-600" :
-                                                    log.type === 'PAYMENT_DECLARATION' ? "bg-green-100 text-green-600" :
-                                                    log.type === 'HARD_RESET' ? "bg-red-100 text-red-600" : "bg-white text-blue-600"
+                                                log.type === 'PAYMENT' || log.type === 'PAYMENT_DECLARATION' ? "bg-green-100 dark:bg-green-900/40 text-green-600 dark:text-green-400" :
+                                                log.type === 'HARD_RESET' ? "bg-red-100 dark:bg-red-900/40 text-red-600 dark:text-red-400" : 
+                                                "bg-blue-50 dark:bg-blue-900/40 text-blue-600 dark:text-blue-400"
                                             )}>
                                                 {log.type === 'HARD_RESET' ? <RefreshCw size={16} /> : <Wallet size={16} />}
                                             </div>
                                             <div>
-                                                <p className="text-sm font-medium text-gray-900">
+                                                <p className="text-sm font-medium text-text-primary">
                                                     {log.type === 'INITIAL_CREATION' ? 'Borç Oluşturuldu' :
                                                         log.type === 'HARD_RESET' ? 'Kayıt Sıfırlandı' :
                                                         (log.type === 'PAYMENT' || log.type === 'PAYMENT_DECLARATION') ? 'Ödeme' : 'Not Eklendi'}

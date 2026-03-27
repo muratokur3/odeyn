@@ -410,6 +410,13 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
             showAlert("Hata", "Lütfen geçerli bir tutar girin.", "error");
             return;
         }
+
+        // Gold/Silver mandatory due date check
+        if ((currency === 'GOLD' || currency === 'SILVER') && !dueDate) {
+            showAlert("Hata", "Altın/Gümüş işlemleri için vade tarihi seçmek zorunludur.", "error");
+            return;
+        }
+
         if (numDownPayment >= numAmount) {
             showAlert("Hata", "Peşinat tutarı toplam tutardan büyük veya eşit olamaz.", "error");
             return;
@@ -770,12 +777,16 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                                     onChange={(e) => {
                                         const newCurr = e.target.value;
                                         setCurrency(newCurr);
-                                        if (newCurr === 'SILVER') {
-                                            setGoldCategory('SILVER');
-                                            setGoldTypeId('SILVER_999');
-                                        } else if (newCurr === 'GOLD') {
-                                            setGoldCategory('GRAM');
-                                            setGoldTypeId('GRAM_24');
+                                        if (newCurr === 'SILVER' || newCurr === 'GOLD') {
+                                            setShowDetails(true);
+                                            setIsInstallment(false);
+                                            if (newCurr === 'SILVER') {
+                                                setGoldCategory('SILVER');
+                                                setGoldTypeId('SILVER_999');
+                                            } else {
+                                                setGoldCategory('GRAM');
+                                                setGoldTypeId('GRAM_24');
+                                            }
                                         }
                                     }}
                                     disabled={isTargetBlocked}
@@ -788,13 +799,13 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                             </div>
                             <div className="flex-[3] min-w-0">
                                 <AmountInput
-                                    label={currency === 'GOLD' ? (getGoldType(goldTypeId)?.category === 'GRAM' ? 'Gram' : 'Adet') : 'Tutar'}
+                                    label={(currency === 'GOLD' || currency === 'SILVER') ? (getGoldType(goldTypeId)?.category === 'GRAM' || currency === 'SILVER' ? 'Gram' : 'Adet') : 'Tutar'}
                                     value={amount}
                                     onChange={setAmount}
                                     disabled={isTargetBlocked}
                                     required
                                     allowDecimals={currency === 'SILVER' || (currency === 'GOLD' && getGoldType(goldTypeId)?.category === 'GRAM')}
-                                    hideCommaSuffix={currency === 'GOLD' && getGoldType(goldTypeId)?.category !== 'GRAM'}
+                                    hideCommaSuffix={(currency === 'GOLD' || currency === 'SILVER') && getGoldType(goldTypeId)?.category !== 'GRAM' && currency !== 'SILVER'}
                                 />
                             </div>
                         </div>
@@ -876,6 +887,7 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                             <button
                                 type="button"
                                 onClick={() => setShowDetails(!showDetails)}
+                                hidden={currency === 'GOLD' || currency === 'SILVER'}
                                 disabled={isTargetBlocked}
                                 className="flex items-center gap-2 text-sm text-blue-600 font-medium hover:text-blue-700 transition-colors w-full justify-center py-2 disabled:opacity-50 disabled:cursor-not-allowed"
                             >
@@ -908,11 +920,12 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                                         </div>
                                     )}
 
-                                    {/* Installment Toggle */}
-                                    <div className={clsx(
-                                        "p-4 rounded-xl border transition-all",
-                                        isInstallment ? "bg-blue-50/50 border-blue-200 dark:bg-blue-900/10 dark:border-blue-800" : "bg-background border-slate-700"
-                                    )}>
+                                    {/* Installment Toggle - Only for non-metal currencies */}
+                                    {(currency !== 'GOLD' && currency !== 'SILVER') && (
+                                        <div className={clsx(
+                                            "p-4 rounded-xl border transition-all",
+                                            isInstallment ? "bg-blue-50/50 border-blue-200 dark:bg-blue-900/10 dark:border-blue-800" : "bg-background border-slate-700"
+                                        )}>
                                         <div className="flex items-center justify-between">
                                             <span className="text-sm font-medium text-text-primary">Taksitlendir</span>
                                             <Toggle
@@ -985,6 +998,7 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                                             </div>
                                         )}
                                     </div>
+                                    )}
 
                                     {/* Payment Permission Toggle (Only for Special Debt) */}
                                     {isSpecialDebt && (
