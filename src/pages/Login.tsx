@@ -120,7 +120,7 @@ export const Login = () => {
             <div className="w-full max-w-md bg-surface p-8 rounded-3xl shadow-xl border border-slate-700">
                 
                 <div className="text-center mb-8">
-                    <h1 className="text-3xl font-bold text-text-primary mb-2">DebtDert</h1>
+                    <h1 className="text-3xl font-bold text-text-primary mb-2">Odeyn</h1>
                     <p className="text-text-secondary">Güvenli ve Kolay Borç Takibi</p>
                 </div>
 

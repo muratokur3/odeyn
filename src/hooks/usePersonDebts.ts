@@ -30,6 +30,7 @@ export const usePersonDebts = (personId: string, resolvedUid?: string | null) =>
                 otherId === personId ||
                 cleanOtherId === cleanId ||
                 d.participants.includes(personId) ||
+                (d.participantsPhones && d.participantsPhones.includes(cleanId)) ||
                 (resolvedUid && otherId === resolvedUid);
 
             if (!isMatch) return false;

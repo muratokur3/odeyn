@@ -1,6 +1,6 @@
 [AI Directive]: Bu dosya, son kullanıcılar için kullanım rehberi ve arayüz açıklamalarını içerir.
 
-# DebtDert - Kullanıcı Rehberi (User Guide)
+# Odeyn - Kullanıcı Rehberi (User Guide)
 
 Arkadaşlarınızla aranızdaki alacak/verecek durumunu takip etmenizi sağlayan modern, kullanıcı dostu borç takip uygulaması.
 

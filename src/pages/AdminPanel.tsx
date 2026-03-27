@@ -145,7 +145,7 @@ export const AdminPanel = () => {
                     <span style={{ fontSize: 22 }}>🛡️</span>
                     <div>
                         <div style={{ fontWeight: 700, fontSize: 16, lineHeight: 1 }}>Admin Panel</div>
-                        <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>DebtDert · Read-only</div>
+                        <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Odeyn · Read-only</div>
                     </div>
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>

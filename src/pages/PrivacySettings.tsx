@@ -62,7 +62,7 @@ export const PrivacySettings = () => {
     const handleDataRequest = () => {
         showAlert(
             "Veri Talebi",
-            "Hesap verilerinizin tamamını içeren detaylı bir rapor talep etmek için destek@debtdert.com adresine kayıtlı telefon numaranızla birlikte e-posta gönderebilirsiniz. Talebiniz 30 gün içinde karşılanacaktır.",
+            "Hesap verilerinizin tamamını içeren detaylı bir rapor talep etmek için destek@odeyn.com adresine kayıtlı telefon numaranızla birlikte e-posta gönderebilirsiniz. Talebiniz 30 gün içinde karşılanacaktır.",
             "info"
         );
     };
@@ -153,7 +153,7 @@ export const PrivacySettings = () => {
                             icon={Info}
                             title="Gizlilik Politikası"
                             description="Verilerinizin nasıl işlendiğini öğrenin."
-                            onClick={() => window.open('https://debtdert.com/privacy', '_blank')}
+                            onClick={() => window.open('https://odeyn.com/privacy', '_blank')}
                         />
                     </div>
 

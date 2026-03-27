@@ -256,7 +256,7 @@ export const ContactModal: React.FC<ContactModalProps> = ({
                                     />
                                     <div className="flex-1">
                                         <p className="text-sm text-blue-900 dark:text-blue-100 font-medium">
-                                            Bu numara DebtDert'te kayıtlı!
+                                            Bu numara Odeyn'te kayıtlı!
                                         </p>
                                         <p className="text-xs text-blue-700 dark:text-blue-300">
                                             İsim olarak <strong>{suggestedUser.displayName}</strong> kullanmak için tıklayın.

@@ -26,6 +26,31 @@ import { notificationService } from './notificationService';
 // --- Helper Functions ---
 
 /**
+ * Normalizes a phone or UID into E.164 phone number if possible.
+ * Returns null if it cannot be resolved.
+ */
+const resolvePhoneFromIdentifier = async (identifier: string): Promise<string | null> => {
+    if (!identifier) return null;
+
+    if (isValidPhone(identifier)) {
+        return cleanPhoneNumber(identifier);
+    }
+
+    if (identifier.length > 20) {
+        // Could be UID
+        const userDoc = await getDoc(doc(db, 'users', identifier));
+        if (userDoc.exists()) {
+            const data = userDoc.data() as User;
+            if (data.phoneNumber && isValidPhone(data.phoneNumber)) {
+                return cleanPhoneNumber(data.phoneNumber);
+            }
+        }
+    }
+
+    return null;
+};
+
+/**
  * Checks if a transaction is editable (created within the last 60 minutes).
  */
 export const isTransactionEditable = (createdAt: Timestamp | Date | number | string): boolean => {
@@ -305,6 +330,16 @@ export const createDebt = async (
         }
     }
 
+    // PHONE-FIRST CONSISTENCY: Normalize phones for creator, lender, borrower
+    const creatorPhone = await resolvePhoneFromIdentifier(currentUserId);
+    const lenderPhone = await resolvePhoneFromIdentifier(lenderId) || '';
+    const borrowerPhone = await resolvePhoneFromIdentifier(borrowerId) || '';
+    const participantsPhones = Array.from(new Set(
+        [lenderPhone, borrowerPhone].filter(p => !!p) as string[]
+    ));
+
+    const claimStatus: 'UNCLAIMED' | 'CLAIMED' = blockCheckTargetUid ? 'CLAIMED' : 'UNCLAIMED';
+
     // Calculate amounts
     const remainingAmount = amount - initialPayment;
     // If remaining is 0 and status was ACTIVE/AUTO_HIDDEN, it becomes PAID immediately.
@@ -343,11 +378,20 @@ export const createDebt = async (
         lenderName,
         borrowerId,
         borrowerName,
+        creatorPhone: creatorPhone || undefined,
+        lenderPhone: lenderPhone || undefined,
+        borrowerPhone: borrowerPhone || undefined,
+        participantsPhones,
+        claimStatus,
+        claimedByUid: blockCheckTargetUid || undefined,
         originalAmount: amount,
         remainingAmount: remainingAmount,
         currency,
         status: initialStatus,
-        participants: initialStatus === 'AUTO_HIDDEN' ? [currentUserId] : [lenderId, borrowerId],
+        participants: initialStatus === 'AUTO_HIDDEN' ? [currentUserId] : Array.from(new Set(
+            [lenderId, borrowerId, lenderPhone, borrowerPhone].filter((v) => !!v) as string[]
+        )),
+
         createdAt: serverTimestamp(),
         createdBy: currentUserId,
         type: ((installments && installments.length > 0) || dueDate) ? 'INSTALLMENT' : 'ONE_TIME',
@@ -890,10 +934,19 @@ export const claimLegacyDebts = async (userId: string, phoneNumber: string): Pro
         const possiblePhones = [cleanPhone, local, bare];
 
         const debtsRef = collection(db, 'debts');
-        // Use array-contains-any to find debts containing ANY of the possible formats in participants
-        const q = query(debtsRef, where('participants', 'array-contains-any', possiblePhones));
 
-        const snapshot = await getDocs(q);
+        // Find debts by any matching participants, older style; also cover participantsPhones new style.
+        const q1 = query(debtsRef, where('participants', 'array-contains-any', possiblePhones));
+        const q2 = query(debtsRef, where('participantsPhones', 'array-contains-any', possiblePhones));
+
+        const [snap1, snap2] = await Promise.all([getDocs(q1), getDocs(q2)]);
+
+        // Merge unique docs from both snapshots
+        const docsMap = new Map<string, typeof snap1.docs[0]>();
+        snap1.docs.forEach(d => docsMap.set(d.id, d));
+        snap2.docs.forEach(d => docsMap.set(d.id, d));
+
+        const snapshot = { docs: Array.from(docsMap.values()), empty: docsMap.size === 0 } as typeof snap1;
 
         if (snapshot.empty) return 0;
 
@@ -903,6 +956,7 @@ export const claimLegacyDebts = async (userId: string, phoneNumber: string): Pro
         snapshot.docs.forEach(docSnap => {
             const data = docSnap.data();
             const participants = data.participants || [];
+            const participantsPhones = Array.from(new Set([...(data.participantsPhones || []), ...possiblePhones]));
 
             // Filter out ANY of the matched phone formats, Add UID
             const updatedParticipants = participants.filter((p: string) => !possiblePhones.includes(p));
@@ -910,6 +964,10 @@ export const claimLegacyDebts = async (userId: string, phoneNumber: string): Pro
 
             const updates: Record<string, unknown> = {
                 participants: updatedParticipants,
+                participantsPhones,
+                claimStatus: 'CLAIMED',
+                claimedByUid: userId,
+                lockedPhoneNumber: cleanPhone,
                 updatedAt: serverTimestamp(),
                 auditMeta: {
                     actorId: userId,
@@ -1052,17 +1110,48 @@ export const bulkRelinkDebts = async (
 // Restoration of subscribeToUserDebts
 export const subscribeToUserDebts = (identifiers: string[], callback: (debts: Debt[]) => void) => {
     const debtsRef = collection(db, 'debts');
-    // We want all debts where user is a participant (UID or Phone)
-    const q = query(
+    // We want all debts where user is a participant (UID or Phone). Query both fields and merge results.
+    const qParticipants = query(
         debtsRef,
         where('participants', 'array-contains-any', identifiers),
         orderBy('createdAt', 'desc')
     );
+    const qParticipantsPhones = query(
+        debtsRef,
+        where('participantsPhones', 'array-contains-any', identifiers),
+        orderBy('createdAt', 'desc')
+    );
 
-    return onSnapshot(q, (snapshot) => {
-        const debts = snapshot.docs.map(doc => normalizeDebt(doc.id, doc.data()));
-        callback(debts);
+    let participantsDebts: Debt[] = [];
+    let participantsPhonesDebts: Debt[] = [];
+
+    const emitCombined = () => {
+        const map = new Map<string, Debt>();
+        participantsDebts.forEach(debt => map.set(debt.id, debt));
+        participantsPhonesDebts.forEach(debt => map.set(debt.id, debt));
+        callback(Array.from(map.values()).sort((a, b) => {
+            const tA = a.createdAt?.toMillis?.() || 0;
+            const tB = b.createdAt?.toMillis?.() || 0;
+            return tB - tA;
+        }));
+    };
+
+    const unsubscribeParticipants = onSnapshot(qParticipants, (snapshot) => {
+        participantsDebts = snapshot.docs.map(doc => normalizeDebt(doc.id, doc.data()));
+        emitCombined();
     });
+
+    const unsubscribeParticipantsPhones = onSnapshot(qParticipantsPhones, (snapshot) => {
+        participantsPhonesDebts = snapshot.docs.map(doc => normalizeDebt(doc.id, doc.data()));
+        emitCombined();
+    });
+
+    return () => {
+        unsubscribeParticipants();
+        unsubscribeParticipantsPhones();
+    };
+
+
 };
 
 export const subscribeToContacts = (userId: string, callback: (contacts: Contact[]) => void) => {

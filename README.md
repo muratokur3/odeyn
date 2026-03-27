@@ -1,4 +1,4 @@
-# Pamuk Eller (DebtDert)
+# Pamuk Eller (Odeyn)
 
 Arkadaşlarınızla aranızdaki alacak/verecek durumunu takip etmenizi sağlayan modern, kullanıcı dostu bir borç takip uygulaması. "Söz uçar, yazı kalır" prensibini dijitalleştirir.
 
@@ -9,7 +9,19 @@ Arkadaşlarınızla aranızdaki alacak/verecek durumunu takip etmenizi sağlayan
     *   **Dosyalar (Özel):** Vadeli veya taksitli büyük borçlar için resmi kayıt kartları.
 *   **Asimetrik Güven:** İşlemler anında karşı tarafa yansır. Onay beklemez, sadece reddedilebilir.
 *   **1 Saat Kuralı:** Hatalı girişler ilk 1 saat içinde silinebilir, sonrasında kalıcı hale gelir (Güvenlik).
+*   **Sağlam Telefon Temelli Kimlik:** `participantsPhones` ile hem kayıtlı hem kayıtsız numaralar arasında kesintisiz borç geçmişi.
+*   **Kayıt Sonrası Claim:** Kullanıcı kaydolunca `claimLegacyDebts` otomatik tetiklenerek önceki borçlar bağlanır.
 *   **Çoklu Para Birimi:** TRY, USD, EUR ve Altın (Gram) desteği.
+
+## 🧪 Test Hazırlığı
+
+1. Firebase Emulator kullanın (`firebase emulators:start`).
+2. Önce +905551112233 gibi kayıtsız numara ile borç oluşturun.
+3. Sonra bu numara ile yeni kullanıcı kaydolup giriş yapsın.
+4. `debts` kayıtlarında `claimStatus` `CLAIMED` olmalı, `claimedByUid` yeni UID.
+5. `participantsPhones` hem borç hem alacak yönünde tutarlı olmalı.
+
+## 📚 Dokümantasyon
 *   **Rehber Entegrasyonu:** Telefon rehberinizdeki kişilerle kolay eşleşme.
 
 ## 📚 Dokümantasyon

@@ -1,6 +1,6 @@
 [AI Directive]: Bu dosya, projenin teknik analizi, mimarisi ve iş mantığı hakkında detaylı rehberlik sunar.
 
-# DebtDert - Comprehensive Technical Specification
+# Odeyn - Comprehensive Technical Specification
 
 **Document Version:** 2.0
 **Status:** Living Document
@@ -13,7 +13,7 @@
 
 ### 1.1 Product Definition
 
-DebtDert is **not** a payment processor, money transfer service, or financial transaction platform. It is a **collaborative debt ledger** that:
+Odeyn is **not** a payment processor, money transfer service, or financial transaction platform. It is a **collaborative debt ledger** that:
 
 - **Records** debt/credit obligations between individuals.
 - **Represents** financial positions through a familiar chat-style interface.
@@ -102,9 +102,16 @@ The conversational interface is not decorative—it solves the fundamental UX pr
 ### 3.6 Ghost User Protocol (Heritage Inheritance)
 
 - **Purpose**: Bridges the gap between unregistered phone numbers and new UIDs.
-- **Mechanism**: `claimLegacyDebts` queries `participants` array for the user's phone number.
-- **Transformation**: Replaces phone number in `participants`, `lenderId`, and `borrowerId` with UID.
-- **Integrity**: Records the original phone in `lockedPhoneNumber` even after the UID transition.
+- **Mechanism**: `claimLegacyDebts` queries both `participants` and `participantsPhones` for the user's phone number.
+- **Transformation**: Replaces phone number in `participants`, `lenderId`, `borrowerId` with UID where uygun, ve `claimStatus` = `CLAIMED` olarak işaretler.
+- **Integrity**: `lockedPhoneNumber` ve `participantsPhones` her zaman tutulur, böylece geçmişin bütünlüğü korunur.
+
+### 3.7 Phone-first Consistency (Yeni)
+
+- **New Invariant**: `participantsPhones` is the authoritative cross-account anchor.
+- **Why**: UID-based lookup may break for non-registered numbers; phone path ensures auditability.
+- **Active Flow**: `createDebt` stores `creatorPhone`, `lenderPhone`, `borrowerPhone`, and `participantsPhones`.
+- **Claim Flow**: On login, `AuthContext` triggers `claimLegacyDebts(uid, phoneNumber)` to bind old entries.
 
 ---
 

@@ -204,7 +204,7 @@ export const Settings = () => {
 
                     {/* Version Info */}
                     <div className="pt-8 pb-4 text-center">
-                        <p className="text-xs text-gray-400 font-medium">DebtDert v0.1.0 (Beta)</p>
+                        <p className="text-xs text-gray-400 font-medium">Odeyn v0.1.0 (Beta)</p>
                     </div>
                 </div>
             </main>

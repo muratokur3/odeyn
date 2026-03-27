@@ -70,11 +70,11 @@ export const TermsOfServiceModal: React.FC<{ isOpen: boolean; onClose: () => voi
         <div className="space-y-4 text-sm">
             <section>
                 <h3 className="font-bold text-text-primary mb-2">1. Taraflar</h3>
-                <p>Bu Kullanım Koşulları, DebtDert uygulamasını ("Uygulama") kullanan kişi ("Kullanıcı") ile Uygulama geliştiricileri arasındadır.</p>
+                <p>Bu Kullanım Koşulları, Odeyn uygulamasını ("Uygulama") kullanan kişi ("Kullanıcı") ile Uygulama geliştiricileri arasındadır.</p>
             </section>
             <section>
                 <h3 className="font-bold text-text-primary mb-2">2. Hizmetin Tanımı</h3>
-                <p>DebtDert, kullanıcıların şahsi borç ve alacak kayıtlarını dijital ortamda tutmalarına olanak sağlayan bir takip platformudur. Uygulama, finansal bir danışmanlık, bankacılık veya ödeme hizmeti sunmaz.</p>
+                <p>Odeyn, kullanıcıların şahsi borç ve alacak kayıtlarını dijital ortamda tutmalarına olanak sağlayan bir takip platformudur. Uygulama, finansal bir danışmanlık, bankacılık veya ödeme hizmeti sunmaz.</p>
             </section>
             <section>
                 <h3 className="font-bold text-text-primary mb-2">3. Kullanım Şartları</h3>

@@ -1,14 +1,14 @@
 [AI Directive]: Bu dosya, projenin kimliği, kuralları ve manifestosu hakkında kesin bilgi kaynağıdır.
 
-# DebtDert - Proje Manifestosu (Project Manifest)
+# Odeyn - Proje Manifestosu (Project Manifest)
 
-Bu belge, DebtDert projesinin temel amacını, veri bütünlüğü kurallarını, iş mantığını ve kullanıcı deneyimi standartlarını tanımlar. Bu projede kod yazan tüm AI modelleri ve geliştiriciler bu kurallara uymak zorundadır.
+Bu belge, Odeyn projesinin temel amacını, veri bütünlüğü kurallarını, iş mantığını ve kullanıcı deneyimi standartlarını tanımlar. Bu projede kod yazan tüm AI modelleri ve geliştiriciler bu kurallara uymak zorundadır.
 
 ---
 
 ## 1. Proje Kimliği (Project Identity)
 
-**DebtDert**, bireyler arası borç/alacak takibini sağlayan, telefon numarası tabanlı bir finansal kayıt defteridir.
+**Odeyn**, bireyler arası borç/alacak takibini sağlayan, telefon numarası tabanlı bir finansal kayıt defteridir.
 
 - **Vizyon:** "Söz uçar, yazı kalır" prensibini dijitalleştirmek. Finansal ilişkileri şeffaf ve gerilimsiz hale getirmek.
 - **Hedef Kitle:** Teknolojiyle arası çok iyi olmayan kullanıcılar (yaşlılar) dahil herkes.
@@ -64,6 +64,15 @@ Bu belge, DebtDert projesinin temel amacını, veri bütünlüğü kurallarını
 2.  **Sistem Kullanıcısı:** Kayıtlı `User` ise onun `displayName`'i ("Ahmet Yılmaz").
 3.  **Snapshot İsim:** Borç oluşturulurken girilen yedek isim ("Ahmet").
 4.  **Ham Numara:** Hiçbiri yoksa E.164 (+90 555...).
+
+---
+
+### Telefon-first Tutarlılık (Yeni)
+
+- `participantsPhones` tüm borç kayıtlarının primi olarak kabul edilmelidir. UID yerine fonksiyonel anahtar bu alandır.
+- `createDebt` hem kayıtlı hem kayıtsız borçlar için `participantsPhones` yazmalı.
+- `claimLegacyDebts` ile kayıtsız numara sonrası kullanıcı oluşturulduğunda senkronizasyon yapılır; `claimStatus` güncellenir.
+- Borç listesi (`useDebts`) entegrasyonu hem `participants` hem `participantsPhones` üzerinden çalışmalıdır.
 
 **Rehber Mantığı:**
 

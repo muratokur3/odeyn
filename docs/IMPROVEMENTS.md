@@ -1,6 +1,6 @@
 [AI Directive]: Bu dosya, projenin iyileştirme planlarını, hata raporlarını ve gelecekteki özelliklerini içerir.
 
-# DebtDert - İyileştirme ve Geliştirme Manifestosu (Improvement Manifest)
+# Odeyn - İyileştirme ve Geliştirme Manifestosu (Improvement Manifest)
 
 Bu belge, projenin bilinen eksiklerini, planlanan özellikleri ve kritik hata düzeltmelerini içerir.
 
@@ -56,6 +56,8 @@ Aşağıdaki özellikler, uygulamanın "Production Ready" olması için tamamlan
 *   **DebtStatus Enum:** Spec ile kod arasında uyumsuzluk var. Sadeleştirilmeli (`ACTIVE`, `SETTLED`, `CANCELED`).
 *   **Soft Delete:** `isDeleted` alanı kaldırılmalı, 1 saat kuralı içinde Hard Delete, sonrasında değişmezlik uygulanmalı.
 *   **Hard Reset:** Kod tarafında `PaymentLogType` içinde eksik.
+*   **Phone-First Model:** `participantsPhones`, `creatorPhone`, `lenderPhone`, `borrowerPhone`, `claimStatus`, `claimedByUid` alanları zorunlu hale getirilmeli; UI ve backend buna göre test edilmeli.
+*   **Auth Claim On-Login:** `AuthContext` login sırasında `claimLegacyDebts` girilmesi sonsuz döngü olmadan doğrulanmalı.
 
 ### 3.2. Debug Notları: Transaction Silme Hatası
 *   **Sorun:** Ledger transaction silinirken bazen hata alınıyor.

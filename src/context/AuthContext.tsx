@@ -59,21 +59,43 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 }
 
                 const userRef = doc(db, 'users', firebaseUser.uid);
-                unsubscribeSnapshot = onSnapshot(userRef, (docSnap) => {
+                unsubscribeSnapshot = onSnapshot(userRef, async (docSnap) => {
                     if (docSnap.exists()) {
                         const data = docSnap.data();
+                        const phoneNumber = data.phoneNumber || firebaseUser.phoneNumber || '';
+
                         setUser({
                             ...data,
                             uid: firebaseUser.uid,
-                            displayName: data.displayName || firebaseUser.displayName || 'Kullanıcı'
+                            displayName: data.displayName || firebaseUser.displayName || 'Kullanıcı',
+                            phoneNumber
                         } as User);
+
+                        if (phoneNumber) {
+                            try {
+                                const { claimLegacyDebts } = await import('../services/db');
+                                await claimLegacyDebts(firebaseUser.uid, phoneNumber);
+                            } catch (err) {
+                                console.warn('claimLegacyDebts failed on login:', err);
+                            }
+                        }
                     } else {
                         // Doc might not exist yet, but we have the Firebase User
+                        const phoneNumber = firebaseUser.phoneNumber || '';
                         setUser({
                             uid: firebaseUser.uid,
                             displayName: firebaseUser.displayName || 'Kullanıcı',
-                            phoneNumber: firebaseUser.phoneNumber || ''
+                            phoneNumber
                         } as User);
+
+                        if (phoneNumber) {
+                            try {
+                                const { claimLegacyDebts } = await import('../services/db');
+                                await claimLegacyDebts(firebaseUser.uid, phoneNumber);
+                            } catch (err) {
+                                console.warn('claimLegacyDebts failed on login:', err);
+                            }
+                        }
                     }
                     setLoading(false);
                 }, (error) => {

@@ -1,6 +1,6 @@
 [AI Directive]: Bu dosya, projenin güvenlik protokolleri ve spam önleme mekanizmaları hakkında bilgi verir.
 
-# DebtDert - Güvenlik ve Erişim Manifestosu (Security Manifest)
+# Odeyn - Güvenlik ve Erişim Manifestosu (Security Manifest)
 
 Bu belge, uygulamanın veri güvenliği, erişim kontrolü ve kötüye kullanım (spam) önleme stratejilerini tanımlar.
 

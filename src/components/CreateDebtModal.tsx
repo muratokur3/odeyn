@@ -740,7 +740,7 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
                                                     />
                                                     <div>
                                                         <p className="text-sm font-bold text-text-primary group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">{(foundUser as User).displayName}</p>
-                                                        <p className="text-[10px] text-blue-600 dark:text-blue-400 uppercase tracking-wider font-bold">DebtDert Kullanıcısı</p>
+                                                        <p className="text-[10px] text-blue-600 dark:text-blue-400 uppercase tracking-wider font-bold">Odeyn Kullanıcısı</p>
                                                     </div>
                                                 </div>
                                                 <div className="text-right">

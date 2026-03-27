@@ -1,5 +1,15 @@
 {
   "projects": {
-    "default": "debtdert"
-  }
+    "default": "odeyn-101"
+  },
+  "targets": {
+    "odeyn-101": {
+      "storage": {
+        "default": [
+          "odeyn-101.firebasestorage.app"
+        ]
+      }
+    }
+  },
+  "etags": {}
 }

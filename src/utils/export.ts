@@ -55,6 +55,6 @@ export const exportDebtsToCSV = (debts: Debt[]) => {
         ...rows.map(r => r.join(','))
     ].join('\n');
 
-    const fileName = `DebtDert_Borclar_${format(new Date(), 'yyyyMMdd_HHmm')}.csv`;
+    const fileName = `Odeyn_Borclar_${format(new Date(), 'yyyyMMdd_HHmm')}.csv`;
     downloadCSV(csvContent, fileName);
 };

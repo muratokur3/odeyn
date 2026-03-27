@@ -1,10 +1,10 @@
-# DebtDert AI Coding Instructions & Architectural Rules (V2)
+# Odeyn AI Coding Instructions & Architectural Rules (V2)
 
-This document serves as the **Source of Truth** for all AI-generated code and architectural decisions for DebtDert.
+This document serves as the **Source of Truth** for all AI-generated code and architectural decisions for Odeyn.
 All future modifications must strictly adhere to these guidelines.
 
 ## 1. Core Philosophy: The Asymmetric Trust Model
-The "Mutual Confirmation" model is obsolete. DebtDert V2 operates on **Asymmetric Trust**.
+The "Mutual Confirmation" model is obsolete. Odeyn V2 operates on **Asymmetric Trust**.
 
 - **Instant Validity:** All Debts and Payments are **Instantly Active** upon creation. There is no "Pending" state, no "Approval Request", and no "Waiting for Confirmation".
     - *Rationale:* Users record debts for themselves first. Trust is implicit or verified socially, not blocked by UI.

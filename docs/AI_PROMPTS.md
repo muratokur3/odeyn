@@ -1,8 +1,8 @@
 [AI Directive]: Bu dosya, AI asistanları için özel talimatlar ve çalışma prensiplerini içerir.
 
-# PROJECT DEBTDERT - AI & AGENT MANIFESTO
+# PROJECT ODEYN - AI & AGENT MANIFESTO
 
-This document outlines the core rules, architectural decisions, and coding standards for the "DebtDert" project. All AI agents (Jules, Copilot, etc.) MUST adhere to these guidelines strictly.
+This document outlines the core rules, architectural decisions, and coding standards for the "Odeyn" project. All AI agents (Jules, Copilot, etc.) MUST adhere to these guidelines strictly.
 
 ## 1. CORE PHILOSOPHY: DUAL-LAYER ARCHITECTURE
 The app now operates on a "Dual-Layer" architecture:

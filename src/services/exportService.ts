@@ -71,7 +71,7 @@ export async function exportUserDataAsJSON(userId: string): Promise<string> {
 /**
  * Download JSON export as file
  */
-export function downloadJSON(jsonString: string, filename: string = 'debtdert_export.json') {
+export function downloadJSON(jsonString: string, filename: string = 'odeyn_export.json') {
   const blob = new Blob([jsonString], { type: 'application/json' });
   const url = URL.createObjectURL(blob);
   const link = document.createElement('a');
@@ -89,7 +89,7 @@ export function downloadJSON(jsonString: string, filename: string = 'debtdert_ex
 export async function exportAndDownloadUserData(userId: string) {
   const jsonData = await exportUserDataAsJSON(userId);
   const timestamp = new Date().toISOString().split('T')[0];
-  downloadJSON(jsonData, `debtdert_export_${timestamp}.json`);
+  downloadJSON(jsonData, `odeyn_export_${timestamp}.json`);
 }
 
 /**

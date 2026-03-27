@@ -47,9 +47,22 @@ export const getOrCreateLedger = async (
 ): Promise<string> => {
     // 1. Harmonize ID: If it's a phone number, normalize it immediately
     let normalizedOtherId = otherPartyId;
+    let otherPartyPhone = otherPartyId;
     if (otherPartyId.length < 20) {
-        normalizedOtherId = cleanPhoneNumber(otherPartyId);
+        otherPartyPhone = cleanPhoneNumber(otherPartyId);
+        normalizedOtherId = otherPartyPhone;
     }
+
+    let currentUserPhone = '';
+    const currentUserDoc = await getDoc(doc(db, 'users', currentUserId));
+    if (currentUserDoc.exists()) {
+        const userData = currentUserDoc.data() as { phoneNumber?: string };
+        if (userData.phoneNumber) {
+            currentUserPhone = cleanPhoneNumber(userData.phoneNumber);
+        }
+    }
+
+    const participantsPhones = Array.from(new Set([currentUserPhone, otherPartyPhone].filter(p => !!p) as string[]));
 
     // First, try to find an existing active LEDGER
     const debtsRef = collection(db, 'debts');
@@ -78,11 +91,17 @@ export const getOrCreateLedger = async (
         lenderName: currentUserName,
         borrowerId: normalizedOtherId,
         borrowerName: otherPartyName,
+        creatorPhone: currentUserPhone || undefined,
+        lenderPhone: currentUserPhone || undefined,
+        borrowerPhone: otherPartyPhone || undefined,
+        participantsPhones,
+        claimStatus: 'CLAIMED',
+        lockedPhoneNumber: otherPartyPhone || undefined,
         originalAmount: 0, // Ledger starts at 0
         remainingAmount: 0,
         currency: 'TRY',
         status: 'ACTIVE',
-        participants: [currentUserId, normalizedOtherId],
+        participants: Array.from(new Set([currentUserId, normalizedOtherId, currentUserPhone, otherPartyPhone].filter((v) => !!v) as string[])),
         createdAt: serverTimestamp() as Timestamp,
         createdBy: currentUserId,
         type: 'LEDGER',

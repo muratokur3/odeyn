@@ -1,6 +1,6 @@
 # Yayına Alım Öncesi Kritik Aksiyon Planı
 
-Bu belge, DebtDert projesinin "Production Ready" (Yayına Hazır) hale gelmesi için tamamlanması gereken en kritik 3 aksiyonu içermektedir.
+Bu belge, Odeyn projesinin "Production Ready" (Yayına Hazır) hale gelmesi için tamamlanması gereken en kritik 3 aksiyonu içermektedir.
 
 ## 1. Gerçek SMS Gateway Entegrasyonu
 *   **Mevcut Durum:** Telefon doğrulama sistemi şu an `functions/src/index.ts` içerisinde sadece loglara kod basan bir mock yapıdadır.

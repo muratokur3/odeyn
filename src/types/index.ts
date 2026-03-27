@@ -114,6 +114,13 @@ export interface Debt {
     installments?: Installment[];
     goldDetail?: GoldDetail;
     customExchangeRate?: number;
+    // Phone-centric identity fields (for unauthenticated/legacy flows)
+    creatorPhone?: string;
+    lenderPhone?: string;
+    borrowerPhone?: string;
+    participantsPhones?: string[];
+    claimStatus?: 'UNCLAIMED' | 'CLAIMED';
+    claimedByUid?: string;
     // [REMOVED] isDeleted, deletedAt
     canBorrowerAddPayment?: boolean;
     lockedPhoneNumber?: string; // Immutable E.164 phone number for recovery/display
