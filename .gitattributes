@@ -2,8 +2,7 @@
 # Set default behavior to automatically normalize line endings.
 ###############################################################################
 * text=auto
-  git config --global core.autocrlf true
-  
+
 ###############################################################################
 # Set default behavior for command prompt diff.
 #
