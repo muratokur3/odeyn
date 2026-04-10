@@ -8,7 +8,7 @@ import { Toggle } from '../components/Toggle';
 import { useModal } from '../context/ModalContext';
 import { Avatar } from '../components/Avatar';
 import { useTheme } from '../context/ThemeContext';
-import { doc, setDoc } from 'firebase/firestore';
+import { doc, updateDoc } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import { logoutUser } from '../services/auth';
 
@@ -55,18 +55,14 @@ export const Settings = () => {
     const { showConfirm } = useModal();
     const { theme, toggleTheme } = useTheme();
 
-    // Local State - settings.contactSyncEnabled (doğru alan)
-    const [syncContacts, setSyncContacts] = useState(false);
-    const userSyncSetting = user?.settings?.contactSyncEnabled;
+    // Doğrudan user state'inden oku - her render'da güncel değer
+    const syncContacts = user?.settings?.contactSyncEnabled ?? false;
+    const [optimisticSync, setOptimisticSync] = useState<boolean | null>(null);
+    const displaySync = optimisticSync !== null ? optimisticSync : syncContacts;
 
-    // Pattern to sync state from props (derived state)
-    const [prevPref, setPrevPref] = useState(userSyncSetting);
-
-    if (userSyncSetting !== prevPref) {
-        setPrevPref(userSyncSetting);
-        if (userSyncSetting !== undefined) {
-            setSyncContacts(userSyncSetting);
-        }
+    // User güncellendiğinde optimistic state'i temizle
+    if (optimisticSync !== null && syncContacts === optimisticSync) {
+        setOptimisticSync(null);
     }
 
     // Persist Helpers
@@ -74,11 +70,12 @@ export const Settings = () => {
         setter(value); // Optimistic update
         if (user) {
             try {
-                // settings.contactSyncEnabled alanına yaz (doğru alan)
+                // Dot notation ile sadece tek alanı güncelle (diğer settings alanlarını silmez)
                 const userRef = doc(db, 'users', user.uid);
-                await setDoc(userRef, {
-                    settings: { contactSyncEnabled: value }
-                }, { merge: true });
+                await updateDoc(userRef, {
+                    'settings.contactSyncEnabled': value
+                });
+                console.log('[Settings] contactSyncEnabled updated to:', value);
             } catch (error) {
                 console.error("Failed to update setting", error);
                 setter(!value); // Revert on failure
@@ -154,7 +151,7 @@ export const Settings = () => {
                             icon={RefreshCw}
                             title="Rehber Senkronizasyonu"
                             description="Kişileri eşleştirmek için rehber periyodik olarak taransın."
-                            action={<Toggle checked={syncContacts} onChange={(v) => toggleSetting('syncContacts', v, setSyncContacts)} />}
+                            action={<Toggle checked={displaySync} onChange={(v) => toggleSetting('syncContacts', v, setOptimisticSync)} />}
                         />
                     </div>
 

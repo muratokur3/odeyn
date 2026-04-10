@@ -3,6 +3,7 @@
 
     <!-- Rehber erişimi -->
     <uses-permission android:name="android.permission.READ_CONTACTS" />
+    <uses-permission android:name="android.permission.WRITE_CONTACTS" />
     <!-- Push bildirimler -->
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <!-- Internet (zaten var ama explicit) -->
