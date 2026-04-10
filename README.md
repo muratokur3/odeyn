@@ -1,4 +1,4 @@
-# Pamuk Eller (Odeyn)
+# Odeyn
 
 Arkadaşlarınızla aranızdaki alacak/verecek durumunu takip etmenizi sağlayan modern, kullanıcı dostu bir borç takip uygulaması. "Söz uçar, yazı kalır" prensibini dijitalleştirir.
 
