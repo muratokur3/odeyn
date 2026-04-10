@@ -7,6 +7,7 @@ import { registerSession, monitorSession, signOutUser } from '../services/sessio
 import { subscribeToBlockedUsers } from '../services/blockService';
 import type { BlockRecord } from '../services/blockService';
 import type { User } from '../types';
+import { initPushNotifications, removePushListeners } from '../services/pushNotification';
 
 interface AuthContextType {
     user: User | null;
@@ -99,6 +100,12 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                             }
                         }
                     }
+
+                    // Push notification init (native only)
+                    initPushNotifications(firebaseUser.uid).catch(err =>
+                        console.warn('Push notification init failed:', err)
+                    );
+
                     setLoading(false);
                 }, (error) => {
                     console.error("User snapshot error:", error);
@@ -115,6 +122,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                 setBlockedUsers([]);
                 setBlockedUsersLoading(false);
                 setLoading(false);
+                removePushListeners().catch(() => {}); // Cleanup push listeners
             }
         });
 

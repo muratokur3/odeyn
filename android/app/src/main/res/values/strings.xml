@@ -1,0 +1,7 @@
+<?xml version='1.0' encoding='utf-8'?>
+<resources>
+    <string name="app_name">Odeyn</string>
+    <string name="title_activity_main">Odeyn</string>
+    <string name="package_name">com.odeyn.app</string>
+    <string name="custom_url_scheme">com.odeyn.app</string>
+</resources>

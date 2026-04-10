@@ -193,3 +193,77 @@ const claimLegacyDebtsAdmin = async (userId: string, phoneNumber: string) => {
 
     // Link contacts logic can also be added here if needed, but debts are the priority.
 };
+
+// ============= PUSH NOTIFICATION TRIGGER =============
+
+/**
+ * Firestore'da yeni bildirim oluşturulduğunda FCM push notification gönder.
+ * Kullanıcının fcmTokens alanından token'ları alır.
+ */
+export const sendPushOnNotification = functions.firestore
+    .document('notifications/{notifId}')
+    .onCreate(async (snap) => {
+        const data = snap.data();
+        if (!data || !data.userId) return;
+
+        try {
+            // Alıcının FCM token'larını al
+            const userDoc = await db.collection(USERS_COLLECTION).doc(data.userId).get();
+            if (!userDoc.exists) return;
+
+            const userData = userDoc.data();
+            const tokens: string[] = userData?.fcmTokens || [];
+
+            if (tokens.length === 0) return;
+
+            // Push notification gönder
+            const message = {
+                tokens,
+                notification: {
+                    title: 'Odeyn',
+                    body: data.message || 'Yeni bildiriminiz var.'
+                },
+                data: {
+                    debtId: data.debtId || '',
+                    type: data.type || '',
+                    actorId: data.actorId || ''
+                },
+                android: {
+                    priority: 'high' as const,
+                    notification: {
+                        sound: 'default',
+                        channelId: 'odeyn_notifications'
+                    }
+                },
+                apns: {
+                    payload: {
+                        aps: {
+                            sound: 'default',
+                            badge: 1
+                        }
+                    }
+                }
+            };
+
+            const response = await admin.messaging().sendEachForMulticast(message);
+
+            // Geçersiz token'ları temizle
+            const invalidTokens: string[] = [];
+            response.responses.forEach((resp, idx) => {
+                if (!resp.success && resp.error?.code === 'messaging/registration-token-not-registered') {
+                    invalidTokens.push(tokens[idx]);
+                }
+            });
+
+            if (invalidTokens.length > 0) {
+                await db.collection(USERS_COLLECTION).doc(data.userId).update({
+                    fcmTokens: admin.firestore.FieldValue.arrayRemove(...invalidTokens)
+                });
+                console.log(`[Push] ${invalidTokens.length} geçersiz token temizlendi.`);
+            }
+
+            console.log(`[Push] ${response.successCount}/${tokens.length} başarılı gönderim.`);
+        } catch (error) {
+            console.error('[Push] Gönderim hatası:', error);
+        }
+    });

@@ -5,14 +5,14 @@ import { db } from '../services/firebase';
 import { batchAddContacts } from '../services/db';
 import { cleanPhone } from '../utils/phoneUtils';
 import { useModal } from '../context/ModalContext';
+import { getDeviceContacts, isContactsSupported } from '../services/nativeContacts';
 
 export const useContactSync = () => {
     const { user } = useAuth();
     const { showAlert } = useModal();
     const [isSyncing, setIsSyncing] = useState(false);
 
-    // Check if browser supports Contact Picker API
-    const isSupported = 'contacts' in navigator && 'ContactsManager' in window;
+    const isSupported = isContactsSupported();
 
     const syncContacts = useCallback(async () => {
         if (!user) return;
@@ -28,11 +28,8 @@ export const useContactSync = () => {
 
         setIsSyncing(true);
         try {
-            const props = ['name', 'tel'];
-            const options = { multiple: true };
-
-            // @ts-ignore - navigator.contacts is experimental
-            const selectedContacts = await navigator.contacts.select(props, options);
+            // Platform-aware: Native veya Web Contact Picker
+            const selectedContacts = await getDeviceContacts();
 
             if (!selectedContacts || selectedContacts.length === 0) {
                 setIsSyncing(false);
@@ -43,12 +40,12 @@ export const useContactSync = () => {
             const processedNumbers = new Set<string>();
 
             for (const contact of selectedContacts) {
-                const name = contact.name?.[0];
-                const tels = contact.tel || [];
+                const name = contact.name;
+                const phones = contact.phones || [];
 
-                if (!name || tels.length === 0) continue;
+                if (!name || phones.length === 0) continue;
 
-                for (const tel of tels) {
+                for (const tel of phones) {
                     const clean = cleanPhone(tel);
                     if (!clean || clean.length < 8) continue;
                     if (processedNumbers.has(clean)) continue;
@@ -59,16 +56,14 @@ export const useContactSync = () => {
             }
 
             if (validContacts.length > 0) {
-                // 1. Save Contacts to Subcollection
                 await batchAddContacts(user.uid, validContacts);
 
-                // 2. Update Settings
                 const userRef = doc(db, 'users', user.uid);
                 await setDoc(userRef, {
                     settings: {
                         contactSyncEnabled: true,
                         contactAccessGranted: true,
-                        suppressSyncSuggestion: true, // Auto-suppress after success
+                        suppressSyncSuggestion: true,
                         lastSyncAt: serverTimestamp()
                     }
                 }, { merge: true });
@@ -78,7 +73,6 @@ export const useContactSync = () => {
 
         } catch (error) {
             console.error("Sync error:", error);
-            // Don't show alert for user cancellation if possible, but hard to detect exact error type across browsers
             showAlert("Hata", "Rehber eşlenirken bir sorun oluştu.", "error");
         } finally {
             setIsSyncing(false);

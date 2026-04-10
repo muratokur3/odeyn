@@ -8,9 +8,19 @@
     "build": "tsc -b && vite build",
     "lint": "eslint .",
     "preview": "vite preview",
-    "deploy": "npm run build && npx firebase deploy"
+    "deploy": "npm run build && npx firebase deploy",
+    "cap:sync": "npx cap sync",
+    "cap:android": "npm run build && npx cap sync android && npx cap open android",
+    "cap:ios": "npm run build && npx cap sync ios && npx cap open ios",
+    "cap:build": "npm run build && npx cap sync"
   },
   "dependencies": {
+    "@capacitor-community/contacts": "^7.1.0",
+    "@capacitor/android": "^8.3.0",
+    "@capacitor/cli": "^8.3.0",
+    "@capacitor/core": "^8.3.0",
+    "@capacitor/ios": "^8.3.0",
+    "@capacitor/push-notifications": "^8.0.3",
     "clsx": "^2.1.1",
     "date-fns": "^4.1.0",
     "firebase": "^12.6.0",
