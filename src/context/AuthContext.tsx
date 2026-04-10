@@ -74,8 +74,7 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                         if (phoneNumber) {
                             try {
                                 const { claimLegacyDebts } = await import('../services/db');
-                                const name = data.displayName || firebaseUser.displayName || 'Kullanıcı';
-                                await claimLegacyDebts(firebaseUser.uid, phoneNumber, name);
+                                await claimLegacyDebts(firebaseUser.uid, phoneNumber);
                             } catch (err) {
                                 console.warn('claimLegacyDebts failed on login:', err);
                             }
@@ -83,17 +82,16 @@ export const AuthProvider: React.FC<{ children: React.ReactNode }> = ({ children
                     } else {
                         // Doc might not exist yet, but we have the Firebase User
                         const phoneNumber = firebaseUser.phoneNumber || '';
-                        const name = firebaseUser.displayName || 'Kullanıcı';
                         setUser({
                             uid: firebaseUser.uid,
-                            displayName: name,
+                            displayName: firebaseUser.displayName || 'Kullanıcı',
                             phoneNumber
                         } as User);
 
                         if (phoneNumber) {
                             try {
                                 const { claimLegacyDebts } = await import('../services/db');
-                                await claimLegacyDebts(firebaseUser.uid, phoneNumber, name);
+                                await claimLegacyDebts(firebaseUser.uid, phoneNumber);
                             } catch (err) {
                                 console.warn('claimLegacyDebts failed on login:', err);
                             }

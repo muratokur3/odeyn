@@ -1,0 +1,39 @@
+type User @table {
+  username: String!
+  email: String!
+  createdAt: Timestamp!
+  displayName: String
+  profilePictureUrl: String
+}
+
+type Expense @table {
+  description: String!
+  amount: Float!
+  date: Date!
+  currency: String!
+  payer: User!
+  group: Group
+}
+
+type Group @table {
+  name: String!
+  createdAt: Timestamp!
+  admin: User!
+  description: String
+}
+
+type GroupMembership @table(key: ["user", "group"]) {
+  user: User!
+  group: Group!
+  joinedAt: Timestamp!
+}
+
+type Debt @table {
+  debtor: User!
+  creditor: User!
+  amount: Float!
+  currency: String!
+  createdAt: Timestamp!
+  group: Group
+  settledAt: Timestamp
+}

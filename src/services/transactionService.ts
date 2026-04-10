@@ -23,8 +23,7 @@ import {
     getDoc,
     limit,
     startAfter,
-    QueryDocumentSnapshot,
-    runTransaction
+    QueryDocumentSnapshot
 } from 'firebase/firestore';
 import { db } from './firebase';
 import type { Transaction, TransactionDirection, Debt } from '../types';
@@ -182,7 +181,6 @@ const getLedgerTransactionsRef = (ledgerId: string) => {
 
 /**
  * Add a new transaction to a shared ledger
- * ATOMIC: Transaction + balance update in single Firestore transaction
  */
 export const addLedgerTransaction = async (
     ledgerId: string,
@@ -194,17 +192,7 @@ export const addLedgerTransaction = async (
     goldDetail?: Transaction['goldDetail'],
     customExchangeRate?: number
 ): Promise<string> => {
-    // Input validation
-    if (typeof amount !== 'number' || isNaN(amount) || !isFinite(amount) || amount <= 0) {
-        throw new Error('Geçersiz tutar. Tutar sıfırdan büyük olmalıdır.');
-    }
-    if (amount > 10_000_000) {
-        throw new Error('Maksimum tutar 10.000.000 olmalıdır.');
-    }
-
-    const ledgerRef = doc(db, 'debts', ledgerId);
-    const txCollectionRef = collection(db, 'debts', ledgerId, 'transactions');
-    const newTxRef = doc(txCollectionRef); // Pre-generate ID for atomic set
+    const txRef = getLedgerTransactionsRef(ledgerId);
 
     // Build transaction object without undefined values
     const newTx: Record<string, unknown> = {
@@ -223,75 +211,58 @@ export const addLedgerTransaction = async (
         }
     };
 
+    // Only add description if it has a value
     if (description && description.trim()) {
-        newTx.description = description.trim().slice(0, 500); // Enforce max length
+        newTx.description = description.trim();
     }
 
-    // ATOMIC: Transaction ekleme + balance güncelleme tek Firestore transaction'da
-    await runTransaction(db, async (transaction) => {
-        const ledgerSnap = await transaction.get(ledgerRef);
-        if (!ledgerSnap.exists()) {
-            throw new Error('Cari hesap bulunamadı.');
-        }
+    const docRef = await addDoc(txRef, cleanObject(newTx));
 
-        const ledgerData = ledgerSnap.data() as Debt;
-        const lenderId = ledgerData.lenderId;
-
-        // Calculate balance delta from lender's perspective
-        let delta: number;
-        if (userId === lenderId) {
-            delta = direction === 'OUTGOING' ? amount : -amount;
-        } else {
-            delta = direction === 'OUTGOING' ? -amount : amount;
-        }
-
-        const currentBalance = ledgerData.remainingAmount || 0;
-        const newBalance = currentBalance + delta;
-
-        // Atomic: add transaction + update balance
-        transaction.set(newTxRef, cleanObject(newTx));
-        transaction.update(ledgerRef, {
-            remainingAmount: newBalance,
-            updatedAt: serverTimestamp(),
-            lastTransactionAmount: amount,
-            lastTransactionDirection: direction,
-            auditMeta: {
-                actorId: userId,
-                timestamp: serverTimestamp(),
-                platform: 'Web'
-            }
-        });
-    });
-
-    // Non-critical side effects (notification + activity feed)
+    // Add notification
     try {
-        const ledgerSnap = await getDoc(ledgerRef);
+        const ledgerSnap = await getDoc(doc(db, 'debts', ledgerId));
         if (ledgerSnap.exists()) {
             const data = ledgerSnap.data() as Debt;
             const otherId = data.participants.find(p => p !== userId);
+
+            // Resolve actor name - we should use the name of the person adding the transaction
             const actorName = userId === data.lenderId ? data.lenderName : data.borrowerName;
 
             if (otherId && otherId.length > 20) {
                 notificationService.addNotification({
                     userId: otherId,
                     actorId: userId,
-                    type: 'PAYMENT_MADE',
+                    type: 'PAYMENT_MADE', // Use payment type for ledger transactions for simplicity
                     message: `${actorName} cari hesaba ${amount} ${currency} işlem ekledi.`,
                     amount,
                     currency,
                     debtId: ledgerId
                 }).catch(err => console.warn("Ledger notification failed:", err));
             }
+        }
+    } catch (notifError) {
+        console.warn("Notification failed after ledger transaction:", notifError);
+    }
 
+    // Update ledger's remainingAmount based on direction
+    // Note: We need to update the balance on the ledger document
+    await updateLedgerBalance(ledgerId, userId, amount, direction);
+
+    // Update Activity Feed
+    try {
+        const ledgerSnap = await getDoc(doc(db, 'debts', ledgerId));
+        if (ledgerSnap.exists()) {
+            const data = ledgerSnap.data() as Debt;
+            const otherId = data.participants.find(p => p !== userId);
             if (otherId) {
                 updateContactActivity(userId, otherId, 'İşlem eklendi');
             }
         }
-    } catch (sideEffectError) {
-        console.warn("Side effect failed after ledger transaction:", sideEffectError);
+    } catch (activityError) {
+        console.warn("Activity feed update failed after ledger transaction:", activityError);
     }
 
-    return newTxRef.id;
+    return docRef.id;
 };
 
 /**
@@ -345,73 +316,52 @@ export const getLedgerTransactionsPage = async (
 /**
  * Delete a ledger transaction (only by creator)
  * ENFORCES 1-HOUR HARD RULE
- * ATOMIC: Delete + balance recalculation in single Firestore transaction
  */
 export const deleteLedgerTransaction = async (
     ledgerId: string,
     transactionId: string,
-    actorId: string
+    actorId: string // Added actorId
 ): Promise<void> => {
-    const txDocRef = doc(db, 'debts', ledgerId, 'transactions', transactionId);
-    const ledgerRef = doc(db, 'debts', ledgerId);
-
-    // Pre-check: Read transaction to validate 1-hour rule (outside transaction for better error messages)
-    const txSnap = await getDoc(txDocRef);
-    if (!txSnap.exists()) {
-        throw new Error("İşlem bulunamadı.");
-    }
-
-    const txData = txSnap.data();
-    if (!isTransactionEditable(txData.createdAt)) {
-        throw new Error("Bu kayıt silinemez (1 saat kuralı). Lütfen ters işlem yapın.");
-    }
-
-    // ATOMIC: Delete transaction + recalculate balance
-    await runTransaction(db, async (transaction) => {
-        const ledgerSnap = await transaction.get(ledgerRef);
-        if (!ledgerSnap.exists()) {
-            throw new Error("Cari hesap bulunamadı.");
-        }
-
-        const ledgerData = ledgerSnap.data() as Debt;
-        const lenderId = ledgerData.lenderId;
-
-        // Calculate the delta to reverse
-        let reverseDelta: number;
-        if (txData.createdBy === lenderId) {
-            reverseDelta = txData.direction === 'OUTGOING' ? -txData.amount : txData.amount;
-        } else {
-            reverseDelta = txData.direction === 'OUTGOING' ? txData.amount : -txData.amount;
-        }
-
-        const currentBalance = ledgerData.remainingAmount || 0;
-        const newBalance = currentBalance + reverseDelta;
-
-        // Atomic: delete + update balance
-        transaction.delete(txDocRef);
-        transaction.update(ledgerRef, {
-            remainingAmount: newBalance,
-            updatedAt: serverTimestamp(),
-            auditMeta: {
-                actorId,
-                timestamp: serverTimestamp(),
-                platform: 'Web'
-            }
-        });
-    });
-
-    // Non-critical: Activity feed update
     try {
-        const ledgerSnap = await getDoc(ledgerRef);
-        if (ledgerSnap.exists()) {
-            const data = ledgerSnap.data() as Debt;
-            const otherId = data.participants.find(p => p !== actorId);
-            if (otherId) {
-                updateContactActivity(actorId, otherId, 'İşlem silindi');
-            }
+        const txDoc = doc(db, 'debts', ledgerId, 'transactions', transactionId);
+
+        // Check 1-Hour Rule
+        const txSnap = await getDoc(txDoc);
+        if (!txSnap.exists()) {
+            throw new Error("İşlem bulunamadı.");
         }
-    } catch (activityError) {
-        console.warn("Activity feed update failed after ledger deletion:", activityError);
+
+        const data = txSnap.data();
+        if (!isTransactionEditable(data.createdAt)) {
+            throw new Error("Bu kayıt silinemez (1 saat kuralı). Lütfen ters işlem yapın.");
+        }
+
+        await deleteDoc(txDoc);
+
+        // Update Activity Feed
+        try {
+            const ledgerSnap = await getDoc(doc(db, 'debts', ledgerId));
+            if (ledgerSnap.exists()) {
+                const data = ledgerSnap.data() as Debt;
+                const otherId = data.participants.find(p => p !== actorId);
+                if (otherId) {
+                    updateContactActivity(actorId, otherId, 'İşlem silindi');
+                }
+            }
+        } catch (activityError) {
+            console.warn("Activity feed update failed after ledger deletion:", activityError);
+        }
+
+        // Recalculate balance (non-blocking)
+        try {
+            await updateLedgerBalance(ledgerId, actorId);
+        } catch (balanceError) {
+            console.warn("Balance update failed after transaction deletion:", balanceError);
+            // Transaction is deleted, balance will be recalculated on next operation
+        }
+    } catch (error) {
+        console.error("Error deleting ledger transaction:", error);
+        throw error;
     }
 };
 

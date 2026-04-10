@@ -13,8 +13,6 @@ import { useContactSync } from '../hooks/useContactSync';
 import { Toggle } from './Toggle';
 import { AmountInput } from './AmountInput';
 import { Timestamp } from 'firebase/firestore';
-import { checkCooldown, getRemainingCooldown, COOLDOWN } from '../utils/rateLimiter';
-import { validateAmount, MAX_AMOUNT } from '../utils/validation';
 import clsx from 'clsx';
 import { useModal } from '../context/ModalContext';
 import { GOLD_TYPES, GOLD_CATEGORIES, SILVER_CATEGORIES, BILEZIK_MODELS, TAKI_TYPES, GOLD_CARATS, getGoldType } from '../utils/goldConstants';
@@ -404,21 +402,12 @@ export const CreateDebtModal: React.FC<CreateDebtModalProps> = ({
             return;
         }
 
-        // Rate limiting
-        if (!checkCooldown('debt_create', COOLDOWN.DEBT_CREATE)) {
-            const remaining = getRemainingCooldown('debt_create', COOLDOWN.DEBT_CREATE);
-            showAlert("Lütfen Bekleyin", `${remaining} saniye sonra tekrar deneyebilirsiniz.`, "error");
-            return;
-        }
-
         const numAmount = safeParseFloat(amount) || 0;
         const numDownPayment = safeParseFloat(downPayment) || 0;
         const customRate = useManualRate ? safeParseFloat(manualRate) : undefined;
 
-        // Amount validation (enhanced)
-        const amountCheck = validateAmount(numAmount);
-        if (!amountCheck.valid) {
-            showAlert("Hata", amountCheck.error || "Geçersiz tutar.", "error");
+        if (numAmount <= 0) {
+            showAlert("Hata", "Lütfen geçerli bir tutar girin.", "error");
             return;
         }
 

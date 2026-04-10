@@ -20,7 +20,7 @@ import { db } from './firebase';
 import type { Debt, DebtStatus, PaymentLog, User, Contact, Installment } from '../types';
 import { cleanPhone as cleanPhoneNumber, isValidPhone } from '../utils/phoneUtils';
 import { checkBlockStatus } from './blockService';
-import { cleanObject, normalizeDebt, isValidStatusTransition } from '../utils/debtUtils';
+import { cleanObject, normalizeDebt } from '../utils/debtUtils';
 import { notificationService } from './notificationService';
 
 // --- Helper Functions ---
@@ -603,11 +603,6 @@ export const makePayment = async (
     installmentId?: string,
     method: 'CASH' | 'IBAN' | 'CREDIT_CARD' | 'OTHER' = 'CASH' // ✅ New
 ) => {
-    // Amount validation
-    if (typeof amount !== 'number' || isNaN(amount) || !isFinite(amount) || amount <= 0) {
-        throw new Error('Geçersiz ödeme tutarı. Tutar sıfırdan büyük olmalıdır.');
-    }
-
     await runTransaction(db, async (transaction) => {
         const debtRef = doc(db, 'debts', debtId);
         const debtDoc = await transaction.get(debtRef);
@@ -617,11 +612,6 @@ export const makePayment = async (
         }
 
         const debtData = debtDoc.data() as Debt;
-
-        // Status validation: PAID borçlara ödeme yapılamaz
-        if (debtData.status === 'PAID') {
-            throw new Error('Bu borç zaten ödenmiş durumda.');
-        }
 
         // Auto-Correction for Desync:
         // If attempting to pay MORE than remaining (e.g. paying an outdated installment amount),
@@ -668,21 +658,13 @@ export const makePayment = async (
             } else {
                 // Scenario 2: Interim Payment (Ara Ödeme)
                 // Recalculate remaining installments based on NEW balance
-                // FIX: Rounding correction - son taksitte kuruş farkını düzelt
                 const unpaidOnes = updatedInstallments.filter(i => !i.isPaid);
                 if (unpaidOnes.length > 0) {
-                    const base = Math.floor((newRemaining / unpaidOnes.length) * 100) / 100;
-                    const totalBase = Math.round(base * unpaidOnes.length * 100) / 100;
-                    const remainder = Math.round((newRemaining - totalBase) * 100) / 100;
-
-                    let unpaidIdx = 0;
-                    updatedInstallments = updatedInstallments.map(inst => {
-                        if (inst.isPaid) return inst;
-                        unpaidIdx++;
-                        // Son unpaid taksitte kalan kuruş farkını ekle
-                        const isLastUnpaid = unpaidIdx === unpaidOnes.length;
-                        return { ...inst, amount: isLastUnpaid ? base + remainder : base };
-                    });
+                    const newAmountPerInstallment = Math.round((newRemaining / unpaidOnes.length) * 100) / 100;
+                    console.log("DEBUG: Recalculating installments", { newRemaining, newAmountPerInstallment });
+                    updatedInstallments = updatedInstallments.map(inst =>
+                        inst.isPaid ? inst : { ...inst, amount: newAmountPerInstallment }
+                    );
                 }
             }
         }
@@ -765,11 +747,6 @@ export const respondToDebtRequest = async (debtId: string, status: 'ACTIVE' | 'R
         }
 
         const debtData = debtDoc.data() as Debt;
-
-        // Status transition validation
-        if (!isValidStatusTransition(debtData.status, status)) {
-            throw new Error(`Geçersiz durum geçişi: ${debtData.status} → ${status}`);
-        }
 
         // Update debt status
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -946,7 +923,7 @@ export const searchContacts = async (userId: string, searchQuery: string) => {
 
 // Redefined logic below for claimDebts to include Contact Linking
 // Enhanced Claiming Logic for Data Integrity (DEBUG VERSION)
-export const claimLegacyDebts = async (userId: string, phoneNumber: string, displayName?: string): Promise<number> => {
+export const claimLegacyDebts = async (userId: string, phoneNumber: string): Promise<number> => {
     try {
         const cleanPhone = cleanPhoneNumber(phoneNumber); // Expected E.164 (+90...)
         if (!cleanPhone) return 0;
@@ -999,15 +976,9 @@ export const claimLegacyDebts = async (userId: string, phoneNumber: string, disp
                 }
             };
 
-            // Update lender/borrower ID and name if they match the phone number
-            if (possiblePhones.includes(data.lenderId)) {
-                updates.lenderId = userId;
-                if (displayName) updates.lenderName = displayName;
-            }
-            if (possiblePhones.includes(data.borrowerId)) {
-                updates.borrowerId = userId;
-                if (displayName) updates.borrowerName = displayName;
-            }
+            // Update lender/borrower if they match the phone number
+            if (possiblePhones.includes(data.lenderId)) updates.lenderId = userId;
+            if (possiblePhones.includes(data.borrowerId)) updates.borrowerId = userId;
 
             // Normalize locked phone number
             updates.lockedPhoneNumber = cleanPhone;
@@ -1142,11 +1113,13 @@ export const subscribeToUserDebts = (identifiers: string[], callback: (debts: De
     // We want all debts where user is a participant (UID or Phone). Query both fields and merge results.
     const qParticipants = query(
         debtsRef,
-        where('participants', 'array-contains-any', identifiers)
+        where('participants', 'array-contains-any', identifiers),
+        orderBy('createdAt', 'desc')
     );
     const qParticipantsPhones = query(
         debtsRef,
-        where('participantsPhones', 'array-contains-any', identifiers)
+        where('participantsPhones', 'array-contains-any', identifiers),
+        orderBy('createdAt', 'desc')
     );
 
     let participantsDebts: Debt[] = [];
@@ -1674,7 +1647,82 @@ export const batchAddContacts = async (currentUserId: string, contacts: { name: 
     }
 };
 
+export const deletePersonHistory = async (
+    currentUserId: string,
+    targetUserId: string | null,
+    targetPhone: string | null,
+    contactId?: string
+) => {
+    try {
+        // 1. Delete Contact if exists
+        if (contactId) {
+            // We use the existing deleteContact function
+            await deleteContact(currentUserId, contactId);
+        }
 
+        // 2. Find Debts where I am a participant
+        const debtsRef = collection(db, 'debts');
+        const q = query(debtsRef, where('participants', 'array-contains', currentUserId));
+        const snapshot = await getDocs(q);
+
+        const tasks = snapshot.docs.map(async (docSnap) => {
+            const data = docSnap.data() as Debt;
+
+            // Check if this debt involves the target
+            // Target could be identified by UID or Phone (if lockedPhoneNumber matches or raw participant)
+            let isTargetInvolved = false;
+
+            if (targetUserId && data.participants.includes(targetUserId)) {
+                isTargetInvolved = true;
+            } else if (targetPhone) {
+                // Check lockedPhoneNumber
+                if (data.lockedPhoneNumber === targetPhone) isTargetInvolved = true;
+                // Check raw phone in participants (legacy)
+                if (data.participants.includes(targetPhone)) isTargetInvolved = true;
+            }
+
+            if (!isTargetInvolved) return;
+
+            // ACTION: Delete or Leave
+            if (data.createdBy === currentUserId) {
+                // I created it -> Hard Delete
+
+                // If it is a Ledger, delete transactions first
+                if (data.type === 'LEDGER') {
+                    const txRef = collection(db, 'debts', docSnap.id, 'transactions');
+                    const txSnap = await getDocs(txRef);
+                    const txDeletePromises = txSnap.docs.map(tx => deleteDoc(tx.ref));
+                    await Promise.all(txDeletePromises);
+                }
+
+                // Also delete logs subcollection for any debt type to be clean
+                const logsRef = collection(db, 'debts', docSnap.id, 'logs');
+                const logsSnap = await getDocs(logsRef);
+                const logsDeletePromises = logsSnap.docs.map(log => deleteDoc(log.ref));
+                await Promise.all(logsDeletePromises);
+
+                await deleteDoc(docSnap.ref);
+            } else {
+                // I did not create it -> Leave (Remove myself from participants)
+                const newParticipants = data.participants.filter(p => p !== currentUserId);
+
+                // If no participants left, maybe delete?
+                // If the other person is still there, they keep it.
+                // If I was the only one (unlikely), it becomes orphaned.
+                if (newParticipants.length === 0) {
+                    await deleteDoc(docSnap.ref);
+                } else {
+                    await updateDoc(docSnap.ref, { participants: newParticipants });
+                }
+            }
+        });
+
+        await Promise.all(tasks);
+    } catch (error) {
+        console.error("Error deleting person history:", error);
+        throw error;
+    }
+};
 
 /**
  * AUTO-LINK (SELF REPAIR):
