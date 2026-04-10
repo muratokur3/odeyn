@@ -566,11 +566,9 @@ export const Dashboard = () => {
                 <div className="flex items-center gap-2">
                     {/* Brand Logo / Text */}
                     <div className="flex items-center gap-2">
-                        <div className="bg-blue-600 dark:bg-blue-500 rounded-lg p-1.5 shadow-sm">
-                            <Wallet className="text-white" size={20} strokeWidth={2.5} />
-                        </div>
+                        <img src="/logo.svg" alt="Odeyn" className="w-8 h-8 rounded-lg shadow-sm" />
                         <span className="text-xl font-bold text-gray-900 dark:text-white tracking-tight leading-none">
-                            Pamuk<span className="text-blue-600 dark:text-blue-400">Eller</span>
+                            Ode<span className="text-teal-600 dark:text-teal-400">yn</span>
                         </span>
                     </div>
                 </div>
