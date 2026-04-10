@@ -175,14 +175,38 @@ export const useLedger = (
         }
     }, [userId, userName, otherPartyId, otherPartyName]);
 
-    // Calculate balance
+    // Calculate balance from client-side transactions
     const balance = userId ? calculateLedgerBalance(transactions, userId) : 0;
 
-    return { 
-        ledger, 
-        ledgerId, 
-        transactions, 
-        loading, 
+    // Balance sanity check: compare server balance with client calculation
+    // Only meaningful when all transactions are loaded (no pagination pending)
+    useEffect(() => {
+        if (ledger && ledgerId && !hasMore && transactions.length > 0) {
+            const serverBalance = ledger.remainingAmount || 0;
+            // Calculate from lender's perspective (same as updateLedgerBalance on server)
+            const lenderId = ledger.lenderId;
+            let recalcBalance = 0;
+            transactions.forEach(tx => {
+                if (tx.createdBy === lenderId) {
+                    recalcBalance += tx.direction === 'OUTGOING' ? tx.amount : -tx.amount;
+                } else {
+                    recalcBalance += tx.direction === 'OUTGOING' ? -tx.amount : tx.amount;
+                }
+            });
+
+            if (Math.abs(serverBalance - recalcBalance) > 0.01) {
+                console.warn(
+                    `[useLedger] Balance mismatch detected! Server: ${serverBalance}, Recalculated: ${recalcBalance}, Ledger: ${ledgerId}`
+                );
+            }
+        }
+    }, [ledger, ledgerId, hasMore, transactions]);
+
+    return {
+        ledger,
+        ledgerId,
+        transactions,
+        loading,
         loadingMore,
         hasMore,
         balance,

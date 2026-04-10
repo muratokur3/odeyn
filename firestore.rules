@@ -64,27 +64,18 @@ service cloud.firestore {
       // But we know 'participants' from request.resource.data.participants.
       // One is me, one is them.
 
+      // Amount validation helper
+      function isValidAmount() {
+        return request.resource.data.originalAmount is number
+            && request.resource.data.originalAmount > 0
+            && request.resource.data.originalAmount <= 10000000;
+      }
+
       allow create: if request.auth != null
         && request.auth.uid in request.resource.data.participants
         && request.resource.data.createdAt == request.time
-        // Check 1: Creator must be in participants (Already covered)
-
-        // Check 2: The OTHER participant must not have blocked ME.
-        // Since we can't loop, we check for every participant P in the list:
-        // IF P != auth.uid, THEN check if /users/P/blockedUsers/auth.uid exists.
-        // Firestore rules don't support looping, but for a fixed list size (2) we could try.
-        // But participants is an array.
-
-        // Alternative: We trust the client for the "I blocked them" check (which we do in code).
-        // We enforce "They blocked me" check here?
-        // Checking "exists(/databases/$(database)/documents/users/$(otherUid)/blockedUsers/$(request.auth.uid)) == false"
-        // But extracting otherUid is hard.
-
-        // Simplification: We will rely on Cloud Functions or strict client checks + minimal rule support.
-        // Ideally, we'd use a function trigger to validate blocking and delete/reject if found.
-        // For now, we will stick to the basic rules and rely on client + backend-like service checks if possible.
-        // But the prompt ASKED to "Update security rules... if possible".
-        // Let's at least keep the participant check strong.
+        // Amount validation: positive, max 10M
+        && isValidAmount()
         ;
 
       allow update: if request.auth != null && request.auth.uid in resource.data.participants;
@@ -108,7 +99,14 @@ service cloud.firestore {
       // Both participants have full read/write access for LEDGER type
       match /transactions/{txId} {
         allow read: if request.auth != null && request.auth.uid in get(/databases/$(database)/documents/debts/$(debtId)).data.participants;
-        allow create: if request.auth != null && request.auth.uid in get(/databases/$(database)/documents/debts/$(debtId)).data.participants;
+        allow create: if request.auth != null
+            && request.auth.uid in get(/databases/$(database)/documents/debts/$(debtId)).data.participants
+            // Ledger transaction amount validation
+            && request.resource.data.amount is number
+            && request.resource.data.amount > 0
+            && request.resource.data.amount <= 10000000
+            // Description length limit
+            && (!('description' in request.resource.data) || request.resource.data.description.size() <= 500);
         // Only the creator of the transaction can delete it within the grace period
         allow delete: if request.auth != null && resource.data.createdBy == request.auth.uid && isWithinGracePeriod();
         // Allow update for anonymization during account deletion
@@ -118,8 +116,10 @@ service cloud.firestore {
     }
 
     match /feedbacks/{feedbackId} {
-      // Any authenticated user can submit feedback
-      allow create: if request.auth != null;
+      // Any authenticated user can submit feedback (with length limits)
+      allow create: if request.auth != null
+        && request.resource.data.title.size() <= 200
+        && request.resource.data.description.size() <= 2000;
       // Read allowed only for admin users
       allow read: if request.auth != null && get(/databases/$(database)/documents/users/$(request.auth.uid)).data.isAdmin == true;
     }

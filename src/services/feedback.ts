@@ -25,6 +25,14 @@ export const sendFeedback = async (
     description: string,
     pagePath: string
 ) => {
+    // Input validation
+    if (title.length > 200) {
+        throw new Error('Başlık en fazla 200 karakter olabilir.');
+    }
+    if (description.length > 2000) {
+        throw new Error('Açıklama en fazla 2000 karakter olabilir.');
+    }
+
     try {
         const parser = new UAParser();
         const result = parser.getResult();

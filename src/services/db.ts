@@ -20,7 +20,7 @@ import { db } from './firebase';
 import type { Debt, DebtStatus, PaymentLog, User, Contact, Installment } from '../types';
 import { cleanPhone as cleanPhoneNumber, isValidPhone } from '../utils/phoneUtils';
 import { checkBlockStatus } from './blockService';
-import { cleanObject, normalizeDebt } from '../utils/debtUtils';
+import { cleanObject, normalizeDebt, isValidStatusTransition } from '../utils/debtUtils';
 import { notificationService } from './notificationService';
 
 // --- Helper Functions ---
@@ -603,6 +603,11 @@ export const makePayment = async (
     installmentId?: string,
     method: 'CASH' | 'IBAN' | 'CREDIT_CARD' | 'OTHER' = 'CASH' // ✅ New
 ) => {
+    // Amount validation
+    if (typeof amount !== 'number' || isNaN(amount) || !isFinite(amount) || amount <= 0) {
+        throw new Error('Geçersiz ödeme tutarı. Tutar sıfırdan büyük olmalıdır.');
+    }
+
     await runTransaction(db, async (transaction) => {
         const debtRef = doc(db, 'debts', debtId);
         const debtDoc = await transaction.get(debtRef);
@@ -612,6 +617,11 @@ export const makePayment = async (
         }
 
         const debtData = debtDoc.data() as Debt;
+
+        // Status validation: PAID borçlara ödeme yapılamaz
+        if (debtData.status === 'PAID') {
+            throw new Error('Bu borç zaten ödenmiş durumda.');
+        }
 
         // Auto-Correction for Desync:
         // If attempting to pay MORE than remaining (e.g. paying an outdated installment amount),
@@ -658,13 +668,21 @@ export const makePayment = async (
             } else {
                 // Scenario 2: Interim Payment (Ara Ödeme)
                 // Recalculate remaining installments based on NEW balance
+                // FIX: Rounding correction - son taksitte kuruş farkını düzelt
                 const unpaidOnes = updatedInstallments.filter(i => !i.isPaid);
                 if (unpaidOnes.length > 0) {
-                    const newAmountPerInstallment = Math.round((newRemaining / unpaidOnes.length) * 100) / 100;
-                    console.log("DEBUG: Recalculating installments", { newRemaining, newAmountPerInstallment });
-                    updatedInstallments = updatedInstallments.map(inst =>
-                        inst.isPaid ? inst : { ...inst, amount: newAmountPerInstallment }
-                    );
+                    const base = Math.floor((newRemaining / unpaidOnes.length) * 100) / 100;
+                    const totalBase = Math.round(base * unpaidOnes.length * 100) / 100;
+                    const remainder = Math.round((newRemaining - totalBase) * 100) / 100;
+
+                    let unpaidIdx = 0;
+                    updatedInstallments = updatedInstallments.map(inst => {
+                        if (inst.isPaid) return inst;
+                        unpaidIdx++;
+                        // Son unpaid taksitte kalan kuruş farkını ekle
+                        const isLastUnpaid = unpaidIdx === unpaidOnes.length;
+                        return { ...inst, amount: isLastUnpaid ? base + remainder : base };
+                    });
                 }
             }
         }
@@ -747,6 +765,11 @@ export const respondToDebtRequest = async (debtId: string, status: 'ACTIVE' | 'R
         }
 
         const debtData = debtDoc.data() as Debt;
+
+        // Status transition validation
+        if (!isValidStatusTransition(debtData.status, status)) {
+            throw new Error(`Geçersiz durum geçişi: ${debtData.status} → ${status}`);
+        }
 
         // Update debt status
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -923,7 +946,7 @@ export const searchContacts = async (userId: string, searchQuery: string) => {
 
 // Redefined logic below for claimDebts to include Contact Linking
 // Enhanced Claiming Logic for Data Integrity (DEBUG VERSION)
-export const claimLegacyDebts = async (userId: string, phoneNumber: string): Promise<number> => {
+export const claimLegacyDebts = async (userId: string, phoneNumber: string, displayName?: string): Promise<number> => {
     try {
         const cleanPhone = cleanPhoneNumber(phoneNumber); // Expected E.164 (+90...)
         if (!cleanPhone) return 0;
@@ -976,9 +999,15 @@ export const claimLegacyDebts = async (userId: string, phoneNumber: string): Pro
                 }
             };
 
-            // Update lender/borrower if they match the phone number
-            if (possiblePhones.includes(data.lenderId)) updates.lenderId = userId;
-            if (possiblePhones.includes(data.borrowerId)) updates.borrowerId = userId;
+            // Update lender/borrower ID and name if they match the phone number
+            if (possiblePhones.includes(data.lenderId)) {
+                updates.lenderId = userId;
+                if (displayName) updates.lenderName = displayName;
+            }
+            if (possiblePhones.includes(data.borrowerId)) {
+                updates.borrowerId = userId;
+                if (displayName) updates.borrowerName = displayName;
+            }
 
             // Normalize locked phone number
             updates.lockedPhoneNumber = cleanPhone;

@@ -1,5 +1,5 @@
 import { Timestamp, FieldValue } from 'firebase/firestore';
-import type { Debt } from '../types';
+import type { Debt, DebtStatus } from '../types';
 
 /**
  * Normalizes a debt object from Firestore to ensure it matches the Debt interface.
@@ -73,3 +73,26 @@ export const cleanObject = (obj: any): any => {
     });
     return newObj;
 };
+
+// --- Status Transition Validation ---
+
+const VALID_TRANSITIONS: Record<DebtStatus, DebtStatus[]> = {
+    'PENDING': ['ACTIVE', 'REJECTED'],
+    'ACTIVE': ['PAID', 'REJECTED_BY_RECEIVER', 'AUTO_HIDDEN', 'ARCHIVED', 'DISPUTED'],
+    'PAID': [], // Terminal state - no transitions allowed
+    'REJECTED': [],
+    'REJECTED_BY_RECEIVER': ['ACTIVE'],
+    'HIDDEN': ['ACTIVE'],
+    'AUTO_HIDDEN': ['ACTIVE', 'PAID'],
+    'ARCHIVED': ['ACTIVE'],
+    'DISPUTED': ['ACTIVE'],
+};
+
+/**
+ * Validates if a debt status transition is allowed.
+ * Prevents invalid transitions like PAID → ACTIVE.
+ */
+export function isValidStatusTransition(from: DebtStatus, to: DebtStatus): boolean {
+    if (from === to) return true; // Same status is always valid
+    return VALID_TRANSITIONS[from]?.includes(to) ?? false;
+}

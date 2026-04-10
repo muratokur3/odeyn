@@ -58,6 +58,24 @@ export const notificationService = {
 
         try {
             const notificationsRef = collection(db, 'notifications');
+
+            // De-duplication: Check for recent identical notification (within 30 seconds)
+            if (params.debtId) {
+                const thirtySecondsAgo = Timestamp.fromMillis(Date.now() - 30_000);
+                const dupeQuery = query(
+                    notificationsRef,
+                    where('userId', '==', params.userId),
+                    where('type', '==', params.type),
+                    where('debtId', '==', params.debtId),
+                    where('createdAt', '>', thirtySecondsAgo)
+                );
+                const dupeSnap = await getDocs(dupeQuery);
+                if (!dupeSnap.empty) {
+                    console.log(`[NotificationService] Duplicate notification skipped for ${params.userId}`);
+                    return true;
+                }
+            }
+
             const data = {
                 userId: params.userId,
                 actorId: params.actorId,
@@ -71,9 +89,8 @@ export const notificationService = {
                 createdAt: serverTimestamp()
             };
 
-            console.log(`[NotificationService] Attempting to add notification for ${params.userId}`, data);
             const docRef = await addDoc(notificationsRef, data);
-            console.log(`[NotificationService] Notification added successfully: ${docRef.id}`);
+            console.log(`[NotificationService] Notification added: ${docRef.id}`);
             return true;
         } catch (error) {
             console.error('[NotificationService] Failed to add notification to Firestore:', error);

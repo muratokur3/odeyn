@@ -13,6 +13,8 @@ import { useAuth } from '../hooks/useAuth';
 import { useModal } from '../context/ModalContext';
 import clsx from 'clsx';
 import type { TransactionDirection, Transaction, GoldDetail } from '../types';
+import { checkCooldown, getRemainingCooldown, COOLDOWN } from '../utils/rateLimiter';
+import { validateAmount } from '../utils/validation';
 import { GOLD_TYPES, GOLD_CATEGORIES, SILVER_CATEGORIES, BILEZIK_MODELS, TAKI_TYPES, GOLD_CARATS, getGoldType } from '../utils/goldConstants';
 import { MetalSelectionFields } from './MetalSelectionFields';
 
@@ -148,9 +150,17 @@ export const QuickTransactionModal: React.FC<QuickTransactionModalProps> = ({
             return;
         }
 
+        // Rate limiting
+        if (!checkCooldown('ledger_tx', COOLDOWN.LEDGER_TRANSACTION)) {
+            const remaining = getRemainingCooldown('ledger_tx', COOLDOWN.LEDGER_TRANSACTION);
+            showAlert("Lütfen Bekleyin", `${remaining} saniye sonra tekrar deneyebilirsiniz.`, "error");
+            return;
+        }
+
         const numAmount = safeParseFloat(amount) || 0;
-        if (numAmount <= 0) {
-            showAlert("Hata", "Geçerli bir tutar girin.", "error");
+        const amountCheck = validateAmount(numAmount);
+        if (!amountCheck.valid) {
+            showAlert("Hata", amountCheck.error || "Geçersiz tutar.", "error");
             return;
         }
 
