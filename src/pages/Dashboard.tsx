@@ -368,40 +368,47 @@ export const Dashboard = () => {
 
         // 3. Convert Map to List & Filter
         const mapEntries = Array.from(contactMap.entries());
-        const summaries = mapEntries.map(([id, data]) => {
-            let displayBalance = 0;
-            let displayCurrency = 'TRY';
+        const summaries = mapEntries
+            .map(([id, data]) => {
+                let displayBalance = 0;
+                let displayCurrency = 'TRY';
 
-            if (selectedCurrency === 'ALL') {
-                // Calculate total converted to TRY
-                data.balances.forEach((amt, curr) => {
-                    // Extract base currency and sub-type for gold
-                    const isGold = curr.startsWith('GOLD:');
-                    const baseCurr = isGold ? 'GOLD' : curr;
-                    const goldType = isGold ? curr.split(':')[1] : undefined;
-                    const goldDetail = goldType ? { type: goldType } : undefined;
+                if (selectedCurrency === 'ALL') {
+                    // Calculate total converted to TRY
+                    data.balances.forEach((amt, curr) => {
+                        // Extract base currency and sub-type for gold
+                        const isGold = curr.startsWith('GOLD:');
+                        const baseCurr = isGold ? 'GOLD' : curr;
+                        const goldType = isGold ? curr.split(':')[1] : undefined;
+                        const goldDetail = goldType ? { type: goldType } : undefined;
 
-                    displayBalance += convertToTRY(amt, baseCurr, rates!, undefined, goldDetail, turkishGold);
-                });
-                displayCurrency = 'TRY';
-            } else {
-                // Show specific currency balance
-                displayBalance = data.balances.get(selectedCurrency) || 0;
-                displayCurrency = selectedCurrency;
-            }
+                        displayBalance += convertToTRY(amt, baseCurr, rates!, undefined, goldDetail, turkishGold);
+                    });
+                    displayCurrency = 'TRY';
+                } else {
+                    // Show specific currency balance
+                    displayBalance = data.balances.get(selectedCurrency) || 0;
+                    displayCurrency = selectedCurrency;
+                }
 
-            return {
-                id,
-                name: data.name,
-                netBalance: displayBalance,
-                currency: displayCurrency,
-                lastActivity: data.lastActivity,
-                lastActionSnippet: data.lastSnippet, // lastActionSnippet is what ContactRow expects
-                status: data.status,
-                linkedUserId: data.linkedUserId,
-                hasUnreadActivity: data.hasUnreadActivity
-            } as ContactSummary;
-        });
+                return {
+                    id,
+                    name: data.name,
+                    netBalance: displayBalance,
+                    currency: displayCurrency,
+                    lastActivity: data.lastActivity,
+                    lastActionSnippet: data.lastSnippet, // lastActionSnippet is what ContactRow expects
+                    status: data.status,
+                    linkedUserId: data.linkedUserId,
+                    hasUnreadActivity: data.hasUnreadActivity,
+                    // Seçili currency'de bu kullanıcının herhangi bir hareketi/kaydı var mı?
+                    _hasActivityInSelectedCurrency: selectedCurrency === 'ALL'
+                        ? data.balances.size > 0
+                        : data.balances.has(selectedCurrency)
+                } as ContactSummary & { _hasActivityInSelectedCurrency: boolean };
+            })
+            // Seçili currency'de kaydı olmayan kullanıcıları filtrele
+            .filter(s => s._hasActivityInSelectedCurrency);
 
         // 3. Sorting
         summaries.sort((a, b) => b.lastActivity.getTime() - a.lastActivity.getTime());
@@ -505,7 +512,9 @@ export const Dashboard = () => {
 
         const handleScroll = () => {
             if (scrollTimer) clearTimeout(scrollTimer);
-            scrollTimer = setTimeout(detectActiveCard, 150);
+            // 150ms delay: kayışta kart değişimi yavaş hissediliyordu
+            // 60ms: daha responsive ama yine de debounce yapıyor
+            scrollTimer = setTimeout(detectActiveCard, 60);
         };
 
         el.addEventListener('scroll', handleScroll, { passive: true });
@@ -739,7 +748,11 @@ export const Dashboard = () => {
                     {dashboardDebts.length > 0 && contactSummaries.length === 0 && (
                         <div className="text-center py-12 px-6">
                             <p className="text-gray-500 dark:text-slate-400">
-                                Bu görünümde gösterilecek bir bakiye bulunamadı.
+                                {selectedCurrency === 'ALL'
+                                    ? 'Gösterilecek aktif bir kaydınız bulunmuyor.'
+                                    : selectedCurrency.startsWith('GOLD:')
+                                    ? `${getGoldType(selectedCurrency.split(':')[1])?.label || 'Altın'} cinsinden aktif kaydınız bulunmuyor.`
+                                    : `${selectedCurrency} cinsinden aktif kaydınız bulunmuyor.`}
                             </p>
                         </div>
                     )}

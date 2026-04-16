@@ -198,7 +198,10 @@ export const DebtDetail = () => {
     if (loading) return <div className="flex justify-center items-center h-screen">Yükleniyor...</div>;
     if (!debt) return <div className="flex justify-center items-center h-screen">Borç bulunamadı</div>;
 
-    const progress = ((debt.originalAmount - debt.remainingAmount) / debt.originalAmount) * 100;
+    const rawProgress = debt.originalAmount > 0
+        ? ((debt.originalAmount - debt.remainingAmount) / debt.originalAmount) * 100
+        : 0;
+    const progress = Math.max(0, Math.min(100, rawProgress));
 
     // determine title
     const headerTitle = debt.note || "Borç Detayı";

@@ -1,7 +1,17 @@
 import React from 'react';
 import { Wallet, ArrowRightLeft } from 'lucide-react';
 import { formatCurrency } from '../utils/format';
+import { getGoldType } from '../utils/goldConstants';
 import clsx from 'clsx';
+
+// Altin/currency label'ini Dashboard ile tutarl\u0131 sekilde al
+const getCurrencyLabel = (currency: string): string => {
+    if (currency.startsWith('GOLD:')) {
+        const goldType = currency.split(':')[1];
+        return getGoldType(goldType)?.label || goldType;
+    }
+    return currency;
+};
 
 interface SummaryCardProps {
     title: string;
@@ -91,7 +101,7 @@ export const SummaryCard: React.FC<SummaryCardProps & React.HTMLAttributes<HTMLD
                                     {isToggled ? (
                                         <>
                                             <ArrowRightLeft size={10} />
-                                            <span>{currency.startsWith('GOLD:') ? currency.split(':')[1] : currency}</span>
+                                            <span>{getCurrencyLabel(currency)}</span>
                                         </>
                                     ) : (
                                         <>
@@ -103,7 +113,7 @@ export const SummaryCard: React.FC<SummaryCardProps & React.HTMLAttributes<HTMLD
                             )}
                             {!showToggle && (
                                  <span className="text-[10px] bg-white/20 px-2 py-1 rounded-lg font-bold backdrop-blur-sm uppercase">
-                                     {currency.startsWith('GOLD:') ? currency.split(':')[1] : currency}
+                                     {getCurrencyLabel(currency)}
                                  </span>
                             )}
                         </div>

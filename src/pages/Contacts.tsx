@@ -337,7 +337,8 @@ export const Contacts = () => {
                                             }
                                         ];
 
-                                        const leftActions: SwipeAction[] = [
+                                        // Engelli ki\u015filer i\u00e7in bor\u00e7 ekleme devre d\u0131\u015f\u0131
+                                        const leftActions: SwipeAction[] = blocked ? [] : [
                                             {
                                                 key: 'create_debt',
                                                 icon: <Wallet size={20} />,

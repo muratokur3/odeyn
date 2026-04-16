@@ -14,6 +14,7 @@ import { useState, useEffect, useRef } from 'react';
 import { collection, query, orderBy, getDocs } from 'firebase/firestore';
 import { db } from '../services/firebase';
 import type { Transaction, Debt } from '../types';
+import { calculatePureMetalWeight } from '../utils/goldConstants';
 
 export interface LedgerCurrencyTotal {
     receivables: number;
@@ -53,6 +54,11 @@ function aggregateTransactions(
         const t = totals[currency];
         const amount = tx.amount;
 
+        // Altın ise pure metal ağırlığını hesapla
+        const pureWeight = (currency.startsWith('GOLD') && tx.goldDetail)
+            ? calculatePureMetalWeight(tx.goldDetail.type, amount, tx.goldDetail.weightPerUnit)
+            : 0;
+
         // OUTGOING from me = I gave = receivable (they owe me)
         // INCOMING to me   = they gave = payable (I owe them)
         const iMadeThis = tx.createdBy === currentUserId;
@@ -61,17 +67,25 @@ function aggregateTransactions(
             if (tx.direction === 'OUTGOING') {
                 t.receivables += amount;
                 t.net += amount;
+                t.pureGoldReceivables += pureWeight;
+                t.pureGoldNet += pureWeight;
             } else {
                 t.payables += amount;
                 t.net -= amount;
+                t.pureGoldPayables += pureWeight;
+                t.pureGoldNet -= pureWeight;
             }
         } else {
             if (tx.direction === 'OUTGOING') {
                 t.payables += amount;
                 t.net -= amount;
+                t.pureGoldPayables += pureWeight;
+                t.pureGoldNet -= pureWeight;
             } else {
                 t.receivables += amount;
                 t.net += amount;
+                t.pureGoldReceivables += pureWeight;
+                t.pureGoldNet += pureWeight;
             }
         }
     }

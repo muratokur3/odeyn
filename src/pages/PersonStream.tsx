@@ -359,7 +359,8 @@ export const PersonStream = () => {
 
         const handleScroll = () => {
             if (scrollTimer) clearTimeout(scrollTimer);
-            scrollTimer = setTimeout(detectActiveCard, 150);
+            // 60ms: responsive kart ge\u00e7i\u015fi (eskiden 150ms ile yava\u015f hissediliyordu)
+            scrollTimer = setTimeout(detectActiveCard, 60);
         };
 
         el.addEventListener('scroll', handleScroll, { passive: true });
@@ -732,13 +733,22 @@ export const PersonStream = () => {
                                 loadingMore={loadingMore}
                             />
                             {filteredTransactions.length === 0 && (
-                                <EmptyState
-                                    icon={FileText}
-                                    title="İşlem Geçmişi Boş"
-                                    description="Bu kişiyle henüz bir cari hesap hareketi bulunmuyor."
-                                    actionLabel="İlk İşlemi Ekle"
-                                    onAction={() => setShowCreateDebtModal(true)}
-                                />
+                                transactions.length > 0 ? (
+                                    // Hi\u00e7 filtrelenmemi\u015f transactions varsa ama filtreden sonra bo\u015f ise
+                                    <EmptyState
+                                        icon={FileText}
+                                        title="Filtreye Uygun \u0130\u015flem Yok"
+                                        description="Se\u00e7ili filtreye uygun bir i\u015flem bulunamad\u0131. Filtreyi s\u0131f\u0131rlamay\u0131 deneyebilirsiniz."
+                                    />
+                                ) : (
+                                    <EmptyState
+                                        icon={FileText}
+                                        title="\u0130\u015flem Ge\u00e7mi\u015fi Bo\u015f"
+                                        description="Bu ki\u015fiyle hen\u00fcz bir cari hesap hareketi bulunmuyor."
+                                        actionLabel="\u0130lk \u0130\u015flemi Ekle"
+                                        onAction={() => setShowCreateDebtModal(true)}
+                                    />
+                                )
                             )}
                         </div>
                     )}

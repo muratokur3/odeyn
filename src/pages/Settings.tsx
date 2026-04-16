@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, UserX, ChevronRight, RefreshCw, User, Moon, Sun, LogOut, Coins, Shield } from 'lucide-react';
 import { updateUserPreferences } from '../services/db';
@@ -55,15 +55,17 @@ export const Settings = () => {
     const { showConfirm } = useModal();
     const { theme, toggleTheme } = useTheme();
 
-    // Doğrudan user state'inden oku - her render'da güncel değer
+    // Do\u011frudan user state'inden oku - her render'da g\u00fcncel de\u011fer
     const syncContacts = user?.settings?.contactSyncEnabled ?? false;
     const [optimisticSync, setOptimisticSync] = useState<boolean | null>(null);
     const displaySync = optimisticSync !== null ? optimisticSync : syncContacts;
 
-    // User güncellendiğinde optimistic state'i temizle
-    if (optimisticSync !== null && syncContacts === optimisticSync) {
-        setOptimisticSync(null);
-    }
+    // User g\u00fcncellendi\u011finde optimistic state'i temizle - useEffect ile do\u011fru pattern
+    useEffect(() => {
+        if (optimisticSync !== null && syncContacts === optimisticSync) {
+            setOptimisticSync(null);
+        }
+    }, [syncContacts, optimisticSync]);
 
     // Persist Helpers
     const toggleSetting = async (_key: keyof NonNullable<UserType['preferences']>, value: boolean, setter: (val: boolean) => void) => {
