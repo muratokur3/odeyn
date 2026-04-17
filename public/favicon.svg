@@ -1,0 +1,10 @@
+<!--
+  Odeyn Favicon — Küçük boyutta iyi okunur
+  Slate-900 zemin, beyaz ODEYN metni (kısa letter-spacing).
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="64" height="64" viewBox="0 0 64 64">
+  <rect width="64" height="64" rx="8" fill="#0F172A"/>
+  <text x="32" y="32" text-anchor="middle" dominant-baseline="central"
+        font-family="Arial Black, Helvetica, Inter, sans-serif"
+        font-weight="900" font-size="13" fill="#FFFFFF" letter-spacing="1.5">ODEYN</text>
+</svg>
