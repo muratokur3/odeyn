@@ -573,10 +573,25 @@ export const Dashboard = () => {
             {/* Header */}
             <div className="bg-white dark:bg-slate-800 px-4 pt-4 pb-2 flex justify-between items-center shadow-sm z-50 sticky top-0">
                 <div className="flex items-center gap-2">
-                    {/* Brand Logo / Text */}
-                    <div className="flex items-center gap-0.5">
-                        <img src="/logo.svg" alt="Odeyn" className="w-8 h-8 rounded-lg shadow-sm" />
-                        <span className="text-xl font-bold text-teal-600 dark:text-teal-400 tracking-tight leading-none">
+                    {/* Brand Logo / Text - Hexagon (o harfi) + deyn */}
+                    <div className="flex items-center gap-1.5">
+                        <svg
+                            xmlns="http://www.w3.org/2000/svg"
+                            width="32"
+                            height="32"
+                            viewBox="-50 -50 100 100"
+                            className="text-slate-900 dark:text-white"
+                            aria-label="Odeyn"
+                        >
+                            <polygon
+                                points="-22.5,-39 22.5,-39 45,0 22.5,39 -22.5,39 -45,0"
+                                fill="none"
+                                stroke="currentColor"
+                                strokeWidth="13"
+                                strokeLinejoin="miter"
+                            />
+                        </svg>
+                        <span className="text-xl font-extrabold text-slate-900 dark:text-white tracking-tight leading-none" style={{ letterSpacing: '-0.02em' }}>
                             deyn
                         </span>
                     </div>

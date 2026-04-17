@@ -1,0 +1,24 @@
+<!--
+  Odeyn Logo — Master SVG
+  · Flat-top hexagon (petek hücresi) "o" harfi yerine
+  · Arka planda ikinci altıgen %12 opaklık → petek dokusu çağrışımı
+  · "deyn" wordmark Inter 800, slate-900
+  · ViewBox 420×100 (wordmark tam boy); sadece sembol için 100×100 viewBox kullan
+-->
+<svg xmlns="http://www.w3.org/2000/svg" width="420" height="100" viewBox="0 0 420 100">
+  <!-- Arka plan ipucu hexagon (petek dokusu) -->
+  <g opacity="0.12" transform="translate(0,10)">
+    <svg width="80" height="80" viewBox="-50 -50 100 100" overflow="visible" x="0" y="0">
+      <polygon points="-22.5,-39 22.5,-39 45,0 22.5,39 -22.5,39 -45,0" fill="#0F172A"/>
+    </svg>
+  </g>
+  <!-- Ana hexagon outline (o harfi) -->
+  <svg width="80" height="80" viewBox="-50 -50 100 100" overflow="visible" x="0" y="10">
+    <polygon points="-22.5,-39 22.5,-39 45,0 22.5,39 -22.5,39 -45,0"
+             fill="none" stroke="#0F172A" stroke-width="13" stroke-linejoin="miter"/>
+  </svg>
+  <!-- Wordmark -->
+  <text x="88" y="50" dominant-baseline="central"
+        font-family="Inter, system-ui, -apple-system, 'Segoe UI', sans-serif"
+        font-weight="800" font-size="82" fill="#0F172A" letter-spacing="-3">deyn</text>
+</svg>
